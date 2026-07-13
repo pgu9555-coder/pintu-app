@@ -1,0 +1,3745 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>拼途 — App 原型 (商圈保底 5 个版)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans+SC:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<script type="text/javascript">
+  window._AMapSecurityConfig = {
+    securityJsCode: 'a1654f000cd6040fded825506d33193e',
+  }
+</script>
+<script src="https://webapi.amap.com/maps?v=2.0&key=3dd7e697ce356938d03b8fc72c91bf61&plugin=AMap.PlaceSearch,AMap.AutoComplete,AMap.Geocoder,AMap.Geolocation,AMap.DistrictSearch"></script>
+
+<style>
+  :root{
+    --ink:#1B2A2E;
+    --ink-soft:#4C5C5B;
+    --paper:#F6F3EA;
+    --paper-raised:#FFFDF6;
+    --green:#0F3D36;
+    --green-deep:#0A2B26;
+    --gold:#B8842A;
+    --gold-soft:#EADFC5;
+    --line:#DED8C6;
+    --coral:#C05B3C;
+    --coral-soft:#F4DED3;
+    --blue:#3E6E8E;
+    --blue-soft:#DCE7EC;
+    --pink:#A8506E;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{
+    background:#EAE6DA;
+    font-family:'IBM Plex Sans SC',sans-serif;
+    color:var(--ink);
+    display:flex;justify-content:center;
+    padding:40px 20px;min-height:100vh;
+  }
+  .mono{font-family:'IBM Plex Mono',monospace;}
+
+  .sys-icon { display: inline-flex; align-items: center; justify-content: center; line-height: 1; }
+  .sys-icon svg { width: 1.25em; height: 1.25em; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; fill: none; vertical-align: middle; }
+
+  .phone{
+    width:390px;background:var(--paper);border-radius:44px;
+    border:10px solid #16211F;
+    box-shadow:0 30px 60px rgba(15,25,22,0.35);
+    overflow:hidden;position:relative;
+  }
+  .notch{
+    position:absolute;top:0;left:50%;transform:translateX(-50%);
+    width:120px;height:26px;background:#16211F;border-radius:0 0 16px 16px;z-index:20;
+  }
+  .statusbar{
+    display:flex;justify-content:space-between;align-items:center;
+    padding:14px 22px 4px;font-size:13px;font-weight:600;
+  }
+  .screen{height:800px;overflow-y:auto;position:relative;}
+  .screen::-webkit-scrollbar{display:none;}
+
+  .view{display:none;}
+  .view.show{display:block;animation:fadeIn .22s ease;}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:none;}}
+
+  /* ================== HOME VIEW ================== */
+  .app-header{display:flex;align-items:center;justify-content:space-between;padding:6px 20px 14px;}
+  .brand{display:flex;align-items:center;gap:8px;}
+  .brand-mark{
+    width:26px;height:26px;border-radius:7px;background:var(--green);
+    display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  }
+  .brand-mark svg{width:14px;height:14px;}
+  .brand-name{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:17px;color:var(--green);}
+  .avatar-btn{
+    width:34px;height:34px;border-radius:50%;background:var(--paper-raised);
+    border:1px solid var(--line);display:flex;align-items:center;justify-content:center;cursor:pointer;
+  }
+  .avatar-btn .sys-icon{font-size:17px;color:var(--ink-soft);}
+
+  .home-content{padding:0 20px 100px;}
+  .hero-card{
+    position:relative;background:var(--green);border-radius:20px;
+    padding:22px 20px 20px;overflow:hidden;margin-bottom:22px;
+    box-shadow:0 12px 28px rgba(15,61,54,0.28);cursor:pointer;
+  }
+  .hero-card::before{
+    content:'';position:absolute;right:-30px;top:-30px;width:140px;height:140px;
+    border-radius:50%;background:rgba(255,255,255,0.05);
+  }
+  .hero-tag{
+    display:inline-flex;align-items:center;gap:6px;
+    background:rgba(234,223,197,0.16);color:var(--gold-soft);
+    font-size:11.5px;font-weight:500;padding:4px 10px;border-radius:100px;margin-bottom:12px;
+  }
+  .hero-tag .sys-icon{font-size:13px;}
+  .hero-title{
+    font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:19px;line-height:1.35;
+    color:var(--paper-raised);margin-bottom:8px;position:relative;z-index:1;
+  }
+  .hero-sub{font-size:13px;color:rgba(246,243,234,0.7);line-height:1.55;margin-bottom:18px;position:relative;z-index:1;}
+  .hero-btn{
+    display:flex;align-items:center;justify-content:space-between;
+    background:var(--paper-raised);color:var(--green);
+    padding:13px 16px;border-radius:12px;font-weight:600;font-size:14.5px;
+    font-family:'Space Grotesk',sans-serif;border:none;width:100%;cursor:pointer;
+    position:relative;z-index:1;
+  }
+  .hero-btn .sys-icon{font-size:17px;}
+  .hero-join-row{
+    display:flex;align-items:center;gap:8px;margin-top:10px;
+    position:relative;z-index:1;
+  }
+  .hero-join-label{font-size:12px;color:rgba(246,243,234,0.65);flex-shrink:0;}
+  .hero-join-input{
+    flex:1;min-width:0;background:rgba(246,243,234,0.12);border:1px solid rgba(246,243,234,0.25);
+    border-radius:9px;padding:8px 10px;font-size:13px;font-family:'IBM Plex Mono',monospace;
+    color:var(--paper-raised);text-transform:uppercase;letter-spacing:1px;
+  }
+  .hero-join-input::placeholder{color:rgba(246,243,234,0.45);font-family:inherit;letter-spacing:0;text-transform:none;}
+  .hero-join-btn{
+    flex-shrink:0;background:transparent;border:1px solid rgba(246,243,234,0.35);
+    color:var(--paper-raised);border-radius:9px;padding:8px 14px;font-size:12.5px;font-weight:600;cursor:pointer;
+  }
+
+  .section-label{font-size:12.5px;font-weight:600;color:var(--ink-soft);text-transform:uppercase;letter-spacing:0.06em;margin:0 0 12px;}
+  .tool-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:26px;}
+  .tool-card{
+    background:var(--paper-raised);border:1px solid var(--line);
+    border-radius:16px;padding:14px 10px 12px;text-align:center;
+    cursor:pointer;transition:transform .12s, border-color .12s;
+  }
+  .tool-card:active{transform:scale(0.97);}
+  .tool-icon{width:40px;height:40px;border-radius:11px;margin:0 auto 9px;display:flex;align-items:center;justify-content:center;}
+  .tool-icon.split{background:var(--gold-soft);}
+  .tool-icon.split .sys-icon{color:var(--gold);}
+  .tool-icon.midpoint{background:var(--blue-soft);}
+  .tool-icon.midpoint .sys-icon{color:var(--blue);}
+  .tool-icon.eat{background:var(--coral-soft);}
+  .tool-icon.eat .sys-icon{color:var(--coral);}
+  .tool-icon.ledger{background:#F0DCE3;}
+  .tool-icon.ledger .sys-icon{color:var(--pink);}
+  .tool-icon .sys-icon{font-size:19px;}
+  .tool-title{font-weight:600;font-size:13px;color:var(--ink);margin-bottom:3px;}
+  .tool-desc{font-size:10.5px;color:var(--ink-soft);line-height:1.4;}
+
+  .tabbar{
+    position:sticky;bottom:0;left:0;right:0;
+    background:var(--paper-raised);border-top:1px solid var(--line);
+    display:flex;justify-content:space-around;align-items:center;
+    padding:10px 0 22px;z-index:10;
+  }
+  .tab{display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--ink-soft);cursor:pointer;}
+  .tab.active{color:var(--green);}
+  .tab .sys-icon{font-size:21px;}
+  .tab span{font-size:10.5px;font-weight:500;}
+
+  /* ================== 通用页头 ================== */
+  .page-header{
+    display:flex;align-items:center;gap:12px;padding:8px 20px 12px;
+    position:sticky;top:0;background:var(--paper);z-index:5;
+  }
+  .back-btn{
+    width:34px;height:34px;border-radius:50%;background:var(--paper-raised);
+    border:1px solid var(--line);display:flex;align-items:center;justify-content:center;
+    cursor:pointer;flex-shrink:0;
+  }
+  .back-btn .sys-icon{font-size:17px;color:var(--ink-soft);}
+  .page-title{font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:17px;color:var(--green);}
+  .content{padding:0 20px 30px;}
+  
+  .btn-main{
+    display:flex;align-items:center;justify-content:center;gap:8px;
+    background:var(--green);color:var(--paper-raised);
+    padding:15px;border-radius:13px;font-size:15px;font-weight:600;
+    font-family:'Space Grotesk',sans-serif;border:none;cursor:pointer;width:100%;
+    transition:transform .1s;
+  }
+  .btn-main:active{transform:scale(0.98);}
+  .btn-main:disabled{opacity:0.6;cursor:wait;}
+  .btn-sub{
+    display:flex;align-items:center;justify-content:center;gap:8px;
+    background:var(--paper-raised);color:var(--green);
+    padding:14px;border-radius:13px;font-size:14px;font-weight:600;
+    border:1.5px solid var(--line);cursor:pointer;width:100%;
+  }
+
+  /* ================== MIDPOINT VIEW ================== */
+  .mp-card{background:var(--paper-raised);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:16px;}
+  .mp-title{font-size:13px;font-weight:600;margin-bottom:12px;display:flex;align-items:center;gap:6px;}
+  
+  /* 城市作用域栏 */
+  .city-scope-bar {
+    display: flex; align-items: center; gap: 6px; margin-bottom: 14px; 
+    background: var(--blue-soft); padding: 10px 12px; border-radius: 12px;
+  }
+  .city-scope-bar .sys-icon { color: var(--blue); font-size: 16px; flex-shrink:0; }
+  .city-select {
+    flex: 1; border: 1px solid var(--blue); background: var(--paper-raised); 
+    border-radius: 6px; padding: 6px 4px; font-size: 13px; color: var(--ink); font-weight: 600;
+    outline: none; min-width: 0; text-align: center; cursor:pointer;
+  }
+
+  .loc-list{display:flex;flex-direction:column;gap:12px;}
+  .loc-item{display:flex;align-items:center;gap:10px;}
+  .loc-avatar{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:600;flex-shrink:0;}
+  
+  .loc-field{flex:1;position:relative;min-width:0;}
+  .loc-input-wrap{
+    background:var(--paper);border:1.5px solid var(--line);border-radius:10px;
+    display:flex;padding:0 12px;align-items:center;transition:border-color .15s;
+  }
+  .loc-input-wrap:focus-within{border-color:var(--blue);}
+  .loc-input{flex:1;border:none;background:transparent;padding:11px 0;font-size:14px;outline:none;color:var(--ink);}
+  .loc-action-btn{
+    background:transparent;border:none;color:var(--blue);font-size:16px;
+    cursor:pointer;padding:6px;margin-right:-6px;display:flex;align-items:center;justify-content:center;
+    transition:color .15s, transform .15s;
+  }
+  .loc-action-btn:hover{color:var(--green);}
+
+  .loc-suggest{
+    display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:40;
+    background:var(--paper-raised);border:1.5px solid var(--line);border-radius:10px;
+    box-shadow:0 10px 24px rgba(27,42,46,0.25);max-height:190px;overflow-y:auto;
+  }
+  .loc-suggest-item{padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--line);}
+  .loc-suggest-item:last-child{border-bottom:none;}
+  .loc-suggest-item:hover{background:var(--blue-soft);}
+  .loc-suggest-item b{display:block;font-size:13px;color:var(--ink);font-weight:600;}
+  .loc-suggest-item span{display:block;font-size:11px;color:var(--ink-soft);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+
+  .loc-del{
+    width:22px;height:22px;border-radius:50%;border:1.5px solid var(--line);
+    background:var(--paper-raised);color:var(--ink-soft);cursor:pointer;flex-shrink:0;
+    font-size:13px;font-weight:700;line-height:1;display:flex;align-items:center;justify-content:center;
+  }
+  .loc-del:hover{border-color:var(--coral);color:var(--coral);background:var(--coral-soft);}
+  .add-loc-btn{
+    width:100%;margin-top:12px;padding:10px;border-radius:10px;
+    border:1.5px dashed var(--line);background:transparent;color:var(--ink-soft);
+    font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;
+  }
+  .add-loc-btn:hover{border-color:var(--blue);color:var(--blue);}
+
+  #realMap { height: 360px; width: 100%; border-radius: 16px; border: 1px solid var(--line); margin-bottom: 16px; z-index: 1;}
+  .amap-logo, .amap-copyright { display: none !important; }
+
+  .poi-list{display:flex;flex-direction:column;gap:10px;}
+  .poi-card{background:var(--paper-raised);border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:12px;}
+  .poi-icon{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;}
+  .poi-info{flex:1;min-width:0;}
+  .poi-name{font-size:14px;font-weight:600;color:var(--ink);margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .poi-sub{font-size:11.5px;color:var(--ink-soft);display:flex;align-items:center;gap:4px;}
+
+  .loading-box { text-align: center; padding: 24px 0; display: none; }
+  .spinner {
+    width: 24px; height: 24px; border: 3px solid var(--line); border-top-color: var(--blue);
+    border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 10px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-msg { font-size: 13px; color: var(--ink-soft); }
+
+  .list-divider {
+    font-size: 12px; color: var(--ink-soft); letter-spacing: 1px;
+    display: flex; align-items: center; margin: 12px 0 4px;
+  }
+  .list-divider::before, .list-divider::after {
+    content: ''; flex: 1; height: 1px; background: var(--line); margin: 0 10px;
+  }
+
+  .custom-marker {
+    color: #fff; padding: 4px 8px; border-radius: 8px; font-size: 11px; font-weight: bold;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3); border: 2px solid #fff; white-space: nowrap;
+    display: flex; align-items: center; gap: 4px;
+  }
+  /* ================== 闪电分账模块 CSS（新增类名，与原有样式零冲突） ================== */
+  .stepper{display:flex;align-items:center;justify-content:center;padding:6px 30px 18px;}
+  .step-node{display:flex;flex-direction:column;align-items:center;gap:5px;flex-shrink:0;}
+  .step-dot{
+    width:28px;height:28px;border-radius:50%;
+    border:1.5px solid var(--line);background:var(--paper-raised);
+    display:flex;align-items:center;justify-content:center;
+    font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;color:var(--ink-soft);
+    transition:all .2s;
+  }
+  .step-node.active .step-dot{background:var(--green);border-color:var(--green);color:var(--paper-raised);}
+  .step-node.done .step-dot{background:var(--gold-soft);border-color:var(--gold);color:var(--gold);}
+  .step-name{font-size:10.5px;color:var(--ink-soft);font-weight:500;}
+  .step-node.active .step-name{color:var(--green);font-weight:600;}
+  .step-link{width:44px;height:1.5px;background:var(--line);margin:0 4px 18px;}
+  .step-link.done{background:var(--gold);}
+
+  .pane{display:none;}
+  .pane.show{display:block;animation:fadeIn .25s ease;}
+
+  .camera-stage{
+    background:var(--green-deep);border-radius:20px;
+    height:310px;position:relative;overflow:hidden;
+    display:flex;align-items:center;justify-content:center;
+    margin-bottom:16px;
+  }
+  .receipt-ghost{
+    width:170px;background:var(--paper-raised);border-radius:6px;
+    padding:14px 12px;transform:rotate(-2deg);
+    font-family:'IBM Plex Mono',monospace;font-size:8.5px;color:var(--ink-soft);
+    line-height:1.9;box-shadow:0 8px 24px rgba(0,0,0,0.35);
+  }
+  .receipt-ghost .r-title{text-align:center;font-size:10px;font-weight:600;color:var(--ink);letter-spacing:0.05em;margin-bottom:4px;}
+  .receipt-ghost .r-line{display:flex;justify-content:space-between;}
+  .receipt-ghost .r-div{border-top:1px dashed var(--line);margin:5px 0;}
+  .scan-frame{position:absolute;inset:24px;pointer-events:none;}
+  .scan-frame::before,.scan-frame::after,.scan-frame .c3,.scan-frame .c4{
+    content:'';position:absolute;width:26px;height:26px;border:2.5px solid var(--gold);
+  }
+  .scan-frame::before{top:0;left:0;border-right:none;border-bottom:none;border-radius:8px 0 0 0;}
+  .scan-frame::after{top:0;right:0;border-left:none;border-bottom:none;border-radius:0 8px 0 0;}
+  .scan-frame .c3{bottom:0;left:0;border-right:none;border-top:none;border-radius:0 0 0 8px;}
+  .scan-frame .c4{bottom:0;right:0;border-left:none;border-top:none;border-radius:0 0 8px 0;}
+  .scan-beam{
+    position:absolute;left:28px;right:28px;height:2px;
+    background:var(--gold);opacity:0;border-radius:2px;
+    box-shadow:0 0 12px rgba(184,132,42,0.8);
+  }
+  .scanning .scan-beam{opacity:1;animation:beam 1.1s ease-in-out infinite alternate;}
+  @keyframes beam{from{top:36px;}to{top:266px;}}
+  .scan-hint{position:absolute;bottom:14px;left:0;right:0;text-align:center;color:rgba(246,243,234,0.75);font-size:12px;}
+  .scan-actions{display:flex;flex-direction:column;gap:10px;}
+  .ocr-note{
+    display:flex;gap:9px;background:var(--gold-soft);border-radius:12px;
+    padding:12px 14px;margin-top:14px;font-size:12px;color:#6B4E1A;line-height:1.55;
+  }
+  .ocr-note .sys-icon{font-size:16px;flex-shrink:0;margin-top:1px;color:var(--gold);}
+
+  .manual-card{background:var(--paper-raised);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:14px;}
+  .mc-title{font-size:13px;font-weight:600;margin-bottom:12px;display:flex;align-items:center;gap:6px;}
+  .mc-title .sys-icon{font-size:16px;color:var(--gold);}
+  .input-row{display:flex;gap:8px;}
+  .field{
+    flex:1;min-width:0;background:var(--paper);border:1.5px solid var(--line);border-radius:10px;
+    padding:11px 12px;font-size:14px;font-family:inherit;color:var(--ink);
+    outline:none;transition:border-color .15s;
+  }
+  .field:focus{border-color:var(--green);}
+  .field.price{flex:0 0 96px;font-family:'IBM Plex Mono',monospace;}
+  .add-btn{
+    flex-shrink:0;width:44px;border-radius:10px;border:none;
+    background:var(--green);color:var(--paper-raised);cursor:pointer;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .add-btn .sys-icon{font-size:20px;}
+  .manual-list{display:flex;flex-direction:column;gap:8px;margin-top:12px;}
+  .m-item{position:relative;display:flex;align-items:center;gap:10px;background:var(--paper);border-radius:10px;padding:10px 12px;}
+  .m-item .m-name{flex:1;font-size:13.5px;font-weight:500;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .m-item .m-price{font-family:'IBM Plex Mono',monospace;font-size:13.5px;font-weight:600;color:var(--green);flex-shrink:0;}
+  .m-empty{font-size:12.5px;color:#B9B3A2;text-align:center;padding:14px 0 6px;}
+
+  .tax-opts{display:flex;gap:8px;margin-bottom:12px;}
+  .tax-opt{
+    flex:1;text-align:center;padding:10px 4px;border-radius:10px;
+    border:1.5px solid var(--line);background:var(--paper);
+    font-size:13px;font-weight:600;color:var(--ink-soft);cursor:pointer;transition:all .15s;
+  }
+  .tax-opt.on{border-color:var(--green);background:var(--green);color:var(--paper-raised);}
+  .tax-input-wrap{display:none;align-items:center;gap:8px;}
+  .tax-input-wrap.show{display:flex;}
+  .tax-input-wrap .field{flex:0 0 110px;font-family:'IBM Plex Mono',monospace;}
+  .tax-unit{font-size:14px;font-weight:600;color:var(--ink-soft);}
+  .tax-eg{font-size:11.5px;color:#B9B3A2;flex:1;}
+
+  .diner-bar{display:flex;gap:8px;overflow-x:auto;padding:2px 0 14px;}
+  .diner-bar::-webkit-scrollbar{display:none;}
+  .diner-chip{
+    display:flex;align-items:center;gap:7px;flex-shrink:0;
+    padding:7px 13px 7px 8px;border-radius:100px;
+    background:var(--paper-raised);border:1.5px solid var(--line);
+    font-size:13px;font-weight:600;color:var(--ink-soft);cursor:pointer;transition:all .15s;
+  }
+  .diner-chip .d-ava{
+    width:24px;height:24px;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;
+    font-size:11px;font-weight:600;color:#fff;
+  }
+  .diner-chip.on{border-color:var(--green);background:var(--green);color:var(--paper-raised);}
+  .claim-tip{font-size:12px;color:var(--ink-soft);margin-bottom:12px;display:flex;align-items:center;gap:6px;}
+  .claim-tip .sys-icon{font-size:14px;color:var(--gold);}
+
+  .dish-list{display:flex;flex-direction:column;gap:12px;margin-bottom:16px;padding-top:6px;}
+  .dish{
+    background:var(--paper-raised);border:1.5px solid var(--line);
+    border-radius:14px;padding:13px 15px;cursor:pointer;
+    transition:border-color .15s, background .15s;position:relative;
+  }
+  .dish.mine{border-color:var(--green);background:#F0F4EE;}
+  .dish-top{display:flex;justify-content:space-between;align-items:baseline;gap:10px;}
+  .dish-name{font-weight:600;font-size:14.5px;flex:1;min-width:0;}
+  .dish-price{font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:14.5px;color:var(--green);flex-shrink:0;}
+
+  .dish-del, .m-del {
+    position: absolute; top: -8px; right: -8px;
+    width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--paper-raised);
+    background: var(--coral); color: #fff; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; font-weight: bold; line-height: 1; padding: 0; margin: 0;
+    box-shadow: 0 3px 6px rgba(192,91,60,0.3); transition: transform 0.1s; z-index: 10;
+  }
+  .dish-del:hover, .m-del:hover { transform: scale(1.1); background: #A94A2D; }
+
+  .dish-claims{display:flex;align-items:center;gap:5px;margin-top:8px;min-height:20px;flex-wrap:wrap;}
+  .claim-ava{
+    width:20px;height:20px;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;
+    font-size:9.5px;font-weight:600;color:#fff;
+    border:1.5px solid var(--paper-raised);
+  }
+  .claim-empty{font-size:11.5px;color:#B9B3A2;}
+  .split-note{font-size:11px;color:var(--ink-soft);margin-left:2px;}
+  .add-dish-inline{
+    display:flex;align-items:center;justify-content:center;gap:6px;
+    border:1.5px dashed var(--line);border-radius:14px;padding:12px;
+    font-size:13px;font-weight:600;color:var(--ink-soft);cursor:pointer;
+  }
+  .add-dish-inline:hover{border-color:var(--green);color:var(--green);}
+  .add-dish-inline .sys-icon{font-size:16px;}
+
+  .fees-card{background:var(--paper-raised);border:1px dashed var(--gold);border-radius:14px;padding:14px 16px;margin-bottom:16px;}
+  .fee-row{display:flex;justify-content:space-between;font-size:13px;padding:4px 0;}
+  .fee-row .lbl{color:var(--ink-soft);}
+  .fee-row .val{font-family:'IBM Plex Mono',monospace;font-weight:500;}
+  .fee-hint{font-size:11px;color:var(--gold);margin-top:6px;display:flex;gap:5px;align-items:center;}
+  .fee-hint .sys-icon{font-size:13px;flex-shrink:0;}
+  .fee-edit-link{font-size:11.5px;color:var(--blue);cursor:pointer;text-decoration:underline;text-underline-offset:2px;margin-left:6px;}
+  .unclaimed-warn{
+    display:none;background:var(--coral-soft);color:#7A3520;
+    border-radius:12px;padding:11px 14px;font-size:12.5px;margin-bottom:12px;
+    align-items:center;gap:8px;
+  }
+  .unclaimed-warn.show{display:flex;}
+  .unclaimed-warn .sys-icon{font-size:16px;flex-shrink:0;color:var(--coral);}
+
+  .total-banner{text-align:center;padding:8px 0 20px;}
+  .total-banner .tb-label{font-size:12px;color:var(--ink-soft);letter-spacing:0.06em;margin-bottom:4px;}
+  .total-banner .tb-amt{font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:36px;color:var(--green);}
+  .total-banner .tb-sub{font-size:12px;color:var(--ink-soft);margin-top:4px;}
+  .settle-list{display:flex;flex-direction:column;gap:10px;margin-bottom:18px;}
+  .settle-card{background:var(--paper-raised);border:1px solid var(--line);border-radius:16px;overflow:hidden;}
+  .settle-head{display:flex;align-items:center;gap:12px;padding:14px 16px;cursor:pointer;}
+  .settle-head .s-ava{
+    width:36px;height:36px;border-radius:50%;flex-shrink:0;
+    display:flex;align-items:center;justify-content:center;
+    font-size:14px;font-weight:600;color:#fff;
+  }
+  .settle-head .s-name{font-weight:600;font-size:15px;flex:1;}
+  .settle-head .s-amt{font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:17px;color:var(--green);}
+  .settle-head .s-chev{font-size:16px;color:var(--ink-soft);transition:transform .2s;}
+  .settle-card.open .s-chev{transform:rotate(180deg);}
+  .settle-detail{display:none;border-top:1px dashed var(--line);padding:10px 16px 13px;}
+  .settle-card.open .settle-detail{display:block;}
+  .sd-row{display:flex;justify-content:space-between;font-size:12.5px;padding:3.5px 0;color:var(--ink-soft);}
+  .sd-row .sd-val{font-family:'IBM Plex Mono',monospace;color:var(--ink);}
+  .sd-row.sd-fee .sd-val{color:var(--gold);}
+  .sd-row.sd-total{border-top:1px solid var(--line);margin-top:5px;padding-top:8px;font-weight:600;color:var(--ink);}
+  .sd-row.sd-total .sd-val{color:var(--green);font-weight:600;}
+  .verify-strip{display:flex;align-items:center;gap:8px;justify-content:center;font-size:12px;color:var(--ink-soft);padding:4px 0 16px;}
+  .verify-strip .sys-icon{font-size:15px;color:var(--green);}
+  .verify-strip .mono{color:var(--green);font-weight:600;}
+  .share-row{display:flex;gap:10px;}
+  .share-row .btn-main{flex:1;}
+  .share-row .btn-sub{flex:1;}
+  .nav-foot{display:flex;gap:10px;margin-top:6px;}
+  .nav-foot .btn-sub{flex:1;}
+  .nav-foot .btn-main{flex:2;}
+
+  /* ================== 美食盲盒模块 CSS（新增类名） ================== */
+  .fb-entry{margin-bottom:16px;}
+  .fb-entry-card{
+    display:flex;align-items:center;gap:12px;
+    background:linear-gradient(135deg, var(--coral), var(--gold));
+    border-radius:16px;padding:16px;color:#fff;cursor:grab;
+    touch-action:none;user-select:none;
+    box-shadow:0 10px 24px rgba(192,91,60,0.28);
+  }
+  .fb-entry-card:active{cursor:grabbing;}
+  .fb-entry-icon{font-size:30px;flex-shrink:0;}
+  .fb-entry-text{flex:1;min-width:0;}
+  .fb-entry-title{font-size:14px;font-weight:700;margin-bottom:2px;}
+  .fb-entry-sub{font-size:11.5px;opacity:0.85;}
+  .fb-entry-arrow{font-size:20px;font-weight:700;flex-shrink:0;animation:fbArrow 1.1s ease-in-out infinite;}
+  @keyframes fbArrow{0%,100%{transform:translateX(0);opacity:0.7;}50%{transform:translateX(6px);opacity:1;}}
+
+  .fb-progress{font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--ink-soft);font-weight:600;}
+
+  .swipe-stage{position:relative;height:430px;margin:6px 0 22px;}
+  .swipe-card{
+    position:absolute;inset:0;background:var(--paper-raised);
+    border:1px solid var(--line);border-radius:20px;
+    box-shadow:0 14px 30px rgba(27,42,46,0.18);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    padding:26px 22px;cursor:grab;touch-action:none;user-select:none;
+    transition:transform .25s ease, opacity .25s ease;
+  }
+  .swipe-card:active{cursor:grabbing;}
+  .swipe-card-icon{
+    width:76px;height:76px;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;font-size:36px;
+    margin-bottom:18px;
+  }
+  .swipe-card-body{text-align:center;}
+  .swipe-card-tag{
+    display:inline-block;font-size:12px;font-weight:600;padding:4px 12px;
+    border-radius:100px;margin-bottom:10px;
+  }
+  .swipe-card-name{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:20px;color:var(--ink);margin-bottom:8px;}
+  .swipe-card-dist{font-size:13px;color:var(--ink-soft);}
+  .stamp{
+    position:absolute;top:22px;font-size:22px;font-weight:800;
+    border:3px solid;border-radius:10px;padding:4px 14px;opacity:0;pointer-events:none;
+    letter-spacing:2px;
+  }
+  .stamp-like{left:20px;color:var(--green);border-color:var(--green);transform:rotate(-16deg);}
+  .stamp-pass{right:20px;color:var(--coral);border-color:var(--coral);transform:rotate(16deg);}
+
+  .swipe-actions{display:flex;justify-content:center;gap:28px;margin-bottom:20px;}
+  .swipe-btn{
+    width:58px;height:58px;border-radius:50%;border:1.5px solid var(--line);
+    background:var(--paper-raised);font-size:24px;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;
+    box-shadow:0 6px 16px rgba(27,42,46,0.12);transition:transform .1s;
+  }
+  .swipe-btn:active{transform:scale(0.92);}
+  .swipe-btn.pass{color:var(--coral);}
+  .swipe-btn.like{color:var(--green);}
+  /* —— 补回：地图自定义标记的配色（原版文件中存在，此份缺失，缺了标记会变成无底色白字） —— */
+  .custom-marker .sys-icon { font-size: 12px; }
+  .marker-mall { background: #3E6E8E; }
+  .marker-food { background: #C05B3C; }
+  .marker-drink { background: #A8506E; }
+
+  /* —— 翻转卡片（滑一滑 2.0）：只在同一张卡内翻面看详情，不再跳整页 —— */
+  .fc-card{
+    position:absolute;inset:0;perspective:1400px;
+    touch-action:none;user-select:none;cursor:grab;
+  }
+  .fc-card:active{cursor:grabbing;}
+  .fc-inner{
+    position:relative;width:100%;height:100%;
+    transition:transform .5s;transform-style:preserve-3d;
+  }
+  .fc-inner.flipped{transform:rotateY(180deg);}
+  .fc-face{
+    position:absolute;inset:0;backface-visibility:hidden;
+    background:var(--paper-raised);border:1px solid var(--line);border-radius:20px;
+    box-shadow:0 14px 30px rgba(27,42,46,0.18);
+    padding:26px 22px;overflow:hidden;
+  }
+  .fc-front{display:flex;flex-direction:column;align-items:center;justify-content:center;}
+  .fc-back{transform:rotateY(180deg);display:flex;flex-direction:column;overflow-y:auto;padding:22px 20px;touch-action:pan-y;}
+  .fc-back-tag{
+    display:inline-block;align-self:flex-start;font-size:11.5px;font-weight:600;
+    padding:4px 10px;border-radius:100px;margin-bottom:10px;
+  }
+  .fc-back-name{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:18px;color:var(--ink);margin-bottom:4px;}
+  .fc-back-dist{font-size:12px;color:var(--ink-soft);margin-bottom:14px;}
+  .fc-back-row{display:flex;gap:8px;font-size:13px;color:var(--ink);padding:8px 0;border-top:1px dashed var(--line);align-items:flex-start;}
+  .fc-back-row:first-of-type{border-top:none;}
+  .fc-back-row .fc-ico{flex-shrink:0;color:var(--ink-soft);margin-top:1px;}
+  .fc-meituan-btn{
+    display:flex;align-items:center;justify-content:center;gap:6px;
+    margin-top:auto;padding:12px;border-radius:12px;flex-shrink:0;
+    background:#FFC300;color:#3D2B00;font-weight:700;font-size:13.5px;
+    text-decoration:none;
+  }
+  .fc-flip-hint{text-align:center;font-size:11px;color:var(--ink-soft);margin-top:8px;flex-shrink:0;}
+  .fc-back-loading{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--ink-soft);font-size:12.5px;gap:10px;}
+  .fc-back-empty{font-size:12px;color:#B9B3A2;}
+
+  /* —— 心动清单点开：底部弹层展示同一套详情，而不是跳整页 —— */
+  .poi-modal-backdrop{
+    position:absolute;inset:0;background:rgba(15,25,22,0.45);
+    display:flex;align-items:flex-end;z-index:200;
+  }
+  .poi-modal-card{
+    width:100%;max-height:78%;background:var(--paper-raised);
+    border-radius:20px 20px 0 0;padding:20px;overflow-y:auto;
+    animation:fbModalUp .22s ease;
+  }
+  @keyframes fbModalUp{from{transform:translateY(30px);opacity:0;}to{transform:none;opacity:1;}}
+  .poi-modal-close{
+    width:30px;height:30px;border-radius:50%;border:1px solid var(--line);
+    background:var(--paper);color:var(--ink-soft);float:right;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;font-size:15px;line-height:1;
+  }
+
+  /* —— 详情页里"吃喝玩乐"分类小节 + 三个真实跳转按钮 —— */
+  .fc-highlights{margin-top:6px;}
+  .fc-highlights .list-divider{margin:14px 0 6px;}
+  .fc-highlights .poi-card{padding:9px 12px;margin-bottom:6px;}
+  .fc-highlights .poi-icon{width:32px;height:32px;font-size:15px;}
+  .fc-highlights .poi-name{font-size:13px;}
+  .fc-highlights .poi-sub{font-size:11px;}
+  .fc-link-row{display:flex;gap:8px;margin-top:16px;flex-shrink:0;}
+  .fc-link-btn{
+    flex:1;display:flex;align-items:center;justify-content:center;gap:4px;
+    padding:12px 4px;border-radius:11px;font-size:13.5px;font-weight:700;
+    text-decoration:none;text-align:center;
+  }
+  .fc-link-btn.amap{background:var(--blue-soft);color:var(--blue);}
+
+  /* —— 吃喝玩乐分类：原生 <details> 折叠，默认收起，点标题展开 —— */
+  .fc-highlights{margin-top:6px;}
+  .hl-section{
+    border:1px solid var(--line);border-radius:12px;margin-bottom:8px;
+    background:var(--paper-raised);overflow:hidden;
+  }
+  .hl-head{
+    list-style:none;cursor:pointer;user-select:none;
+    display:flex;align-items:center;gap:8px;padding:11px 12px;
+    font-size:13px;font-weight:600;color:var(--ink);
+  }
+  .hl-head::-webkit-details-marker{display:none;}
+  .hl-head-icon{font-size:15px;display:flex;flex-shrink:0;}
+  .hl-head-label{flex:1;}
+  .hl-head-count{font-size:11.5px;color:var(--ink-soft);font-weight:500;}
+  .hl-head-chevron{font-size:14px;color:var(--ink-soft);transition:transform .2s;flex-shrink:0;}
+  .hl-section[open] .hl-head-chevron{transform:rotate(90deg);}
+  .hl-section[open] .hl-head{border-bottom:1px dashed var(--line);}
+  .hl-body{padding:8px 10px 10px;}
+  .hl-body .poi-card{padding:8px 10px;margin-bottom:6px;cursor:pointer;position:relative;padding-right:26px;}
+  .hl-body .poi-card:last-child{margin-bottom:0;}
+  .hl-body .poi-card::after{
+    content:'›';position:absolute;right:8px;top:50%;
+    transform:translateY(-50%);font-size:15px;color:var(--ink-soft);
+    transition:transform .2s;
+  }
+  .hl-body .poi-card.expanded::after{transform:translateY(-50%) rotate(90deg);}
+  .hl-body .poi-icon{width:30px;height:30px;font-size:14px;}
+  .hl-body .poi-name{font-size:12.5px;}
+  .hl-body .poi-sub{font-size:11px;}
+  .poi-sub-detail{
+    background:var(--paper);border:1px solid var(--line);border-radius:10px;
+    padding:10px 12px;margin:-2px 0 8px;font-size:12px;animation:fadeIn .2s ease;
+  }
+  .poi-sub-detail .fc-back-row{padding:5px 0;font-size:12px;}
+  .poi-sub-detail .fc-link-row{margin-top:8px;}
+  .poi-sub-detail .fc-link-btn{padding:8px 4px;font-size:12px;}
+
+  /* —— 主结果列表（"为您推荐中心点附近的商圈/餐饮"）里的每一行现在也能点开，
+     直接在原地看到跟翻卡背面一样的详情，不用进滑一滑才能看 —— */
+  #poiList .poi-card{cursor:pointer;position:relative;padding-right:30px;}
+  #poiList .poi-card::after{
+    content:'›';position:absolute;right:12px;top:50%;
+    transform:translateY(-50%);font-size:17px;color:var(--ink-soft);
+    transition:transform .2s;
+  }
+  #poiList .poi-card.expanded::after{transform:translateY(-50%) rotate(90deg);}
+  .poi-expand-panel{
+    background:var(--paper-raised);border:1px solid var(--line);border-radius:12px;
+    padding:14px;animation:fadeIn .2s ease;
+  }
+
+  /* —— 复制按钮：出现在任何地点名称右边（商圈/餐厅/奶茶……通用） —— */
+  .copy-name-text{
+    flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
+  .copy-name-btn{
+    flex-shrink:0;width:22px;height:22px;border-radius:6px;
+    border:1px solid var(--line);background:var(--paper);color:var(--ink-soft);
+    font-size:12px;line-height:1;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;
+    transition:all .15s;
+  }
+  .copy-name-btn:hover{border-color:var(--blue);color:var(--blue);}
+  .copy-name-btn.copied{border-color:var(--green);color:var(--green);background:#F0F4EE;}
+  .fc-back-name, .poi-name{
+    display:flex;align-items:center;justify-content:space-between;gap:6px;
+  }
+
+  /* —— 行程账本：收支情况 + 转账方案 —— */
+  .gl-balance-row{
+    display:flex;align-items:center;gap:12px;background:var(--paper-raised);
+    border:1px solid var(--line);border-radius:14px;padding:12px 16px;
+  }
+  .gl-balance-row .s-ava{
+    width:32px;height:32px;border-radius:50%;flex-shrink:0;
+    display:flex;align-items:center;justify-content:center;
+    font-size:13px;font-weight:600;color:#fff;
+  }
+  .gl-balance-row .gl-name{flex:1;font-weight:600;font-size:14px;}
+  .gl-balance-row .gl-sub{font-size:11px;color:var(--ink-soft);margin-top:1px;}
+  .gl-balance-row .gl-net{font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:14.5px;}
+  .gl-balance-row .gl-net.owe{color:var(--coral);}
+  .gl-balance-row .gl-net.owed{color:var(--green);}
+  .gl-balance-row .gl-net.even{color:var(--ink-soft);}
+  .gl-transfer-row{
+    display:flex;align-items:center;gap:10px;background:var(--paper-raised);
+    border:1px solid var(--line);border-radius:14px;padding:13px 16px;font-size:14px;
+  }
+  .gl-transfer-row .gl-t-ava{
+    width:28px;height:28px;border-radius:50%;flex-shrink:0;
+    display:flex;align-items:center;justify-content:center;
+    font-size:11.5px;font-weight:600;color:#fff;
+  }
+  .gl-transfer-row .gl-arrow{color:var(--ink-soft);font-size:15px;flex-shrink:0;}
+  .gl-transfer-row .gl-t-name{font-weight:600;}
+  .gl-transfer-row .gl-amt{margin-left:auto;font-family:'IBM Plex Mono',monospace;font-weight:700;color:var(--green);flex-shrink:0;}
+
+  .gl-trip-card{
+    display:flex;align-items:center;gap:12px;background:var(--paper-raised);
+    border:1px solid var(--line);border-radius:14px;padding:14px 16px;
+    margin-bottom:10px;cursor:pointer;
+  }
+  .gl-trip-card .gl-trip-icon{
+    width:38px;height:38px;border-radius:12px;flex-shrink:0;background:#F0DCE3;color:var(--pink);
+    display:flex;align-items:center;justify-content:center;font-size:17px;
+  }
+  .gl-trip-card .gl-trip-info{flex:1;min-width:0;}
+  .gl-trip-card .gl-trip-name{font-weight:700;font-size:14.5px;color:var(--ink);}
+  .gl-trip-card .gl-trip-sub{font-size:11.5px;color:var(--ink-soft);margin-top:2px;}
+  .gl-trip-card .gl-trip-total{font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:14px;color:var(--green);flex-shrink:0;}
+  #glHomeTripsList{padding-bottom:16px;}
+
+  /* —— 协同组局房间 —— */
+  .rm-hero{
+    background:var(--green-deep);border-radius:14px;padding:11px 14px;
+    color:var(--paper-raised);margin-bottom:12px;
+    display:flex;align-items:center;gap:10px;
+  }
+  .rm-hero-name{
+    font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:15px;
+    flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
+  .rm-code-row{display:flex;align-items:center;gap:6px;flex-shrink:0;}
+  .rm-code{font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:13px;letter-spacing:2px;}
+  .rm-code-copy{padding:4px 10px;font-size:11px;border-color:rgba(246,243,234,0.35);color:var(--paper-raised);background:transparent;}
+  .rm-ava-row{display:flex;align-items:center;flex-shrink:0;}
+  .rm-ava-row .s-ava{
+    width:22px;height:22px;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;
+    font-size:10px;font-weight:600;color:#fff;
+    border:2px solid var(--green-deep);margin-left:-6px;
+  }
+  .rm-ava-row .s-ava:first-child{margin-left:0;}
+  .rm-ava-count{font-size:10.5px;opacity:0.75;margin-left:6px;}
+  .rm-tool-row{
+    display:flex;align-items:center;gap:12px;background:var(--paper-raised);
+    border:1px solid var(--line);border-radius:14px;padding:13px 15px;
+    margin-bottom:10px;cursor:pointer;
+  }
+  .rm-tool-row .tool-icon{width:40px;height:40px;border-radius:12px;margin:0;flex-shrink:0;}
+  .rm-tool-info{flex:1;min-width:0;}
+  .rm-tool-name{font-weight:700;font-size:14px;color:var(--ink);}
+  .rm-tool-desc{font-size:11.5px;color:var(--ink-soft);margin-top:2px;}
+  .rm-tool-arrow{font-size:18px;color:var(--ink-soft);flex-shrink:0;}
+
+  .rm-room-card{
+    display:flex;align-items:center;gap:12px;background:var(--paper-raised);
+    border:1px solid var(--line);border-radius:14px;padding:14px 16px;
+    margin-bottom:10px;cursor:pointer;
+  }
+  .rm-room-card .rm-room-icon{
+    width:38px;height:38px;border-radius:12px;flex-shrink:0;background:var(--green-deep);color:var(--paper-raised);
+    display:flex;align-items:center;justify-content:center;font-size:16px;
+  }
+  .rm-room-card .rm-room-info{flex:1;min-width:0;}
+  .rm-room-card .rm-room-name{font-weight:700;font-size:14.5px;color:var(--ink);}
+  .rm-room-card .rm-room-sub{font-size:11.5px;color:var(--ink-soft);margin-top:2px;}
+  .rm-room-card .rm-room-code{font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:12.5px;color:var(--ink-soft);flex-shrink:0;}
+</style>
+</head>
+<body>
+
+<div>
+<div class="phone">
+  <div class="notch"></div>
+  <div class="screen" id="screen">
+    <div class="statusbar"><span>9:41</span><span>●●●● 5G 🔋88%</span></div>
+
+    <div class="view" id="viewHome">
+      <div class="app-header">
+        <div class="brand">
+          <div class="brand-mark">
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M3 12L21 4L15 20L11 13L3 12Z" stroke="#F6F3EA" stroke-width="1.8" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <span class="brand-name">拼途</span>
+        </div>
+        <div class="avatar-btn"><i class="ti-user"></i></div>
+      </div>
+
+      <div class="home-content">
+        <div class="hero-card">
+          <div class="hero-tag"><i class="ti-map-2"></i>协同组局</div>
+          <div class="hero-title">发起多天长途旅行<br>或大型主题聚会</div>
+          <div class="hero-sub">邀请朋友加入，一站式搞定行程决策与全程账本，回来只要点一下结算。</div>
+          <button class="hero-btn" id="heroRoomBtn" onclick="openRoomEntry()"><span>开启协同组局房间</span><i class="ti-arrow-right"></i></button>
+          <div class="hero-join-row">
+            <span class="hero-join-label">有房间码？</span>
+            <input class="hero-join-input" id="heroJoinCode" type="text" placeholder="输入 6 位房间码" maxlength="6">
+            <button class="hero-join-btn" id="heroJoinBtn">进入</button>
+          </div>
+        </div>
+
+        <div class="section-label">用完即走</div>
+        <div class="tool-grid">
+          <div class="tool-card" onclick="openSplit()">
+            <div class="tool-icon split"><i class="ti-receipt-2"></i></div>
+            <div class="tool-title">闪电分账</div>
+            <div class="tool-desc">刚吃完？<br>直接算钱</div>
+          </div>
+          <div class="tool-card" onclick="openMidpoint()">
+            <div class="tool-icon midpoint"><i class="ti-map-pin-share"></i></div>
+            <div class="tool-title">公平碰面 · 盲盒吃喝</div>
+            <div class="tool-desc">测出最公平碰面点<br>顺手滑一滑选好去处</div>
+          </div>
+          <div class="tool-card" style="grid-column:1 / -1;" onclick="openGroupLedger()">
+            <div class="tool-icon ledger"><i class="ti-users"></i></div>
+            <div class="tool-title">行程账本</div>
+            <div class="tool-desc">出去玩几天，各付各的钱，最后一键算清谁该转给谁</div>
+          </div>
+        </div>
+
+        <div class="section-label" id="rmHomeRoomsLabel" style="display:none;">进行中的房间</div>
+        <div id="rmHomeRoomsList" style="display:none;"></div>
+
+        <div class="section-label" id="glHomeTripsLabel" style="display:none;">进行中的行程</div>
+        <div id="glHomeTripsList" style="display:none;"></div>
+      </div>
+
+      <div class="tabbar">
+        <div class="tab active"><i class="ti-home"></i><span>首页</span></div>
+        <div class="tab"><i class="ti-ticket"></i><span>行程</span></div>
+        <div class="tab"><i class="ti-user-circle"></i><span>我的</span></div>
+      </div>
+    </div>
+
+    <!-- ============ 闪电分账（独立模块，脚本在页面底部独立 script 块中） ============ -->
+    <div class="view" id="viewSplit">
+      <div class="page-header">
+        <div class="back-btn" onclick="goHome()"><i class="ti-chevron-left"></i></div>
+        <div class="page-title">闪电分账</div>
+      </div>
+
+      <div class="stepper">
+        <div class="step-node" id="sn1"><div class="step-dot">1</div><div class="step-name">录入账单</div></div>
+        <div class="step-link" id="sl1"></div>
+        <div class="step-node" id="sn2"><div class="step-dot">2</div><div class="step-name">认领菜品</div></div>
+        <div class="step-link" id="sl2"></div>
+        <div class="step-node" id="sn3"><div class="step-dot">3</div><div class="step-name">看结果</div></div>
+      </div>
+
+      <div class="content">
+
+        <div class="pane" id="pane1">
+          <div class="camera-stage" id="cameraStage">
+            <div class="receipt-ghost">
+              <div class="r-title">胖东来·川菜馆</div>
+              <div class="r-div"></div>
+              <div class="r-line"><span>水煮鱼</span><span>128.00</span></div>
+              <div class="r-line"><span>宫保鸡丁</span><span>58.00</span></div>
+              <div class="r-line"><span>麻婆豆腐</span><span>32.00</span></div>
+              <div class="r-line"><span>青岛啤酒 x4</span><span>48.00</span></div>
+              <div class="r-line"><span>杨枝甘露</span><span>26.00</span></div>
+              <div class="r-line"><span>米饭 x5</span><span>15.00</span></div>
+              <div class="r-div"></div>
+              <div class="r-line"><span>服务费 10%</span><span>30.70</span></div>
+              <div class="r-line"><span>合计</span><span>337.70</span></div>
+            </div>
+            <div class="scan-frame"><div class="c3"></div><div class="c4"></div></div>
+            <div class="scan-beam"></div>
+            <div class="scan-hint" id="scanHint">将小票对准取景框</div>
+          </div>
+          <div class="scan-actions">
+            <button class="btn-main" id="btnScan"><i class="ti-scan"></i>拍照识别小票</button>
+            <button class="btn-sub" id="btnManual"><i class="ti-pencil"></i>不拍了，手动输入</button>
+          </div>
+          <div class="ocr-note">
+            <i class="ti-sparkles"></i>
+            <div>OCR 会自动抓取菜名、价格，如果小票上印了服务费或税，也会一并识别。识别错了下一步可以改。</div>
+          </div>
+        </div>
+
+        <div class="pane" id="paneManual">
+          <div class="manual-card">
+            <div class="mc-title"><i class="ti-tools-kitchen-2"></i>添加菜品</div>
+            <div class="input-row">
+              <input class="field" id="inName" type="text" placeholder="菜名，如 水煮鱼" maxlength="20">
+              <input class="field price" id="inPrice" type="number" inputmode="decimal" placeholder="价格" min="0" step="0.01">
+              <button class="add-btn" id="btnAdd" aria-label="添加"><i class="ti-plus"></i></button>
+            </div>
+            <div class="manual-list" id="manualList">
+              <div class="m-empty">还没有菜品，从上面添加第一道菜</div>
+            </div>
+          </div>
+
+          <div class="manual-card">
+            <div class="mc-title"><i class="ti-percentage"></i>服务费 / 税</div>
+            <div class="tax-opts">
+              <div class="tax-opt on" data-tax="none">没有</div>
+              <div class="tax-opt" data-tax="percent">按比例 %</div>
+              <div class="tax-opt" data-tax="fixed">固定金额</div>
+            </div>
+            <div class="tax-input-wrap" id="taxPercentWrap">
+              <input class="field" id="inTaxPercent" type="number" inputmode="decimal" placeholder="10" min="0" max="100" step="0.1">
+              <span class="tax-unit">%</span>
+              <span class="tax-eg">常见：服务费 10%、消费税 6%</span>
+            </div>
+            <div class="tax-input-wrap" id="taxFixedWrap">
+              <span class="tax-unit">¥</span>
+              <input class="field" id="inTaxFixed" type="number" inputmode="decimal" placeholder="20" min="0" step="0.01">
+              <span class="tax-eg">如：包间费、开瓶费、茶位费</span>
+            </div>
+          </div>
+
+          <div class="nav-foot">
+            <button class="btn-sub" id="btnManualBack">返回</button>
+            <button class="btn-main" id="btnManualNext">下一步：认领菜品<i class="ti-arrow-right"></i></button>
+          </div>
+        </div>
+
+        <div class="pane" id="pane2">
+          <div class="claim-tip"><i class="ti-hand-click"></i>选中你自己，再点你吃过的菜。右上角红色 × 可删除。</div>
+          <div class="diner-bar" id="dinerBar"></div>
+          <div class="dish-list" id="dishList"></div>
+          <div class="fees-card">
+            <div class="fee-row"><span class="lbl">菜品小计</span><span class="val" id="subTotal">¥0.00</span></div>
+            <div class="fee-row" id="feeRow"><span class="lbl" id="feeLabel">服务费</span><span class="val" id="feeTotal">¥0.00</span></div>
+            <div class="fee-row" style="font-weight:600;"><span class="lbl" style="color:var(--ink);">账单合计</span><span class="val" id="grandTotal">¥0.00</span></div>
+            <div class="fee-hint" id="feeHint"><i class="ti-info-circle"></i><span id="feeHintText"></span><span class="fee-edit-link" id="feeEditLink">修改</span></div>
+          </div>
+          <div class="unclaimed-warn" id="unclaimedWarn">
+            <i class="ti-alert-triangle"></i><span id="unclaimedText"></span>
+          </div>
+          <div class="nav-foot">
+            <button class="btn-sub" id="btnBackTo1">上一步</button>
+            <button class="btn-main" id="btnSettle"><i class="ti-calculator"></i>算钱！</button>
+          </div>
+        </div>
+
+        <div class="pane" id="pane3">
+          <div class="total-banner">
+            <div class="tb-label">本单合计</div>
+            <div class="tb-amt" id="finalTotal">¥0.00</div>
+            <div class="tb-sub" id="finalSub"></div>
+          </div>
+          <div class="settle-list" id="settleList"></div>
+          <div class="verify-strip">
+            <i class="ti-shield-check"></i>
+            校验：所有人合计 <span class="mono" id="verifySum">¥0.00</span> ＝ 账单合计，一分不差
+          </div>
+          <div class="share-row">
+            <button class="btn-sub" id="btnEditClaims"><i class="ti-arrow-back-up"></i>改认领</button>
+            <button class="btn-main" id="btnShare"><i class="ti-share-2"></i>分享到群</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="view" id="viewMidpoint">
+      <div class="page-header">
+        <div class="back-btn" onclick="goHome()"><i class="ti-chevron-left"></i></div>
+        <div class="page-title">寻公平中点</div>
+      </div>
+
+      <div class="content" style="padding-bottom:80px;">
+        <div class="mp-card" id="mpInputArea">
+          
+          <div class="city-scope-bar">
+            <i class="ti-map-pin"></i>
+            <select id="selProvince" class="city-select"><option value="">所在省份</option></select>
+            <select id="selCity" class="city-select"><option value="">所在城市</option></select>
+          </div>
+
+          <div class="mp-title">
+            <i class="ti-user" style="color:var(--ink-soft)"></i>
+            大家的出发地址
+          </div>
+          <div class="loc-list" id="locList"></div>
+          <button class="add-loc-btn" id="btnAddLoc">＋ 添加一位出发的朋友</button>
+        </div>
+
+        <button class="btn-main" id="btnCalc" onclick="calculateRealMidpoint()" style="background:var(--blue); margin-bottom: 24px;">
+          计算中心点 & 搜索周边设施
+        </button>
+
+        <div id="mpResultArea" style="display: none;">
+          <button class="btn-sub" style="border-color:var(--blue); color:var(--blue); margin-bottom:14px;" onclick="resetMidpoint()">重新计算</button>
+          <div id="realMap"></div>
+
+          <!-- 美食盲盒入口卡：向右滑或点击进入 Tinder 式滑一滑 -->
+          <div class="fb-entry" id="foodSwipeEntry" style="display:none;">
+            <div class="fb-entry-card" id="foodSwipeEntryCard">
+              <div class="fb-entry-icon">🍜</div>
+              <div class="fb-entry-text">
+                <div class="fb-entry-title">附近 <span id="fbCount">0</span> 个选择，盲盒帮你选</div>
+                <div class="fb-entry-sub">向右滑这张卡，或直接点它</div>
+              </div>
+              <div class="fb-entry-arrow">→</div>
+            </div>
+          </div>
+
+          <div class="mp-card" id="poiCard">
+            <div class="mp-title"><i class="ti-building-store" style="color:var(--coral)"></i>为您推荐中心点附近的商圈/餐饮</div>
+            <div id="poiLoading" class="loading-box">
+              <div class="spinner"></div>
+              <div class="loading-msg">正在大范围扫描周边商圈与美食...</div>
+            </div>
+            <div class="poi-list" id="poiList"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== VIEW: 美食盲盒（Tinder 式滑一滑，复用中点搜索出的商圈+餐饮） ==================== -->
+    <div class="view" id="viewFoodSwipe">
+      <div class="page-header">
+        <div class="back-btn" onclick="closeFoodSwipe()"><i class="ti-chevron-left"></i></div>
+        <div class="page-title">美食盲盒</div>
+        <div class="fb-progress" id="swipeProgress" style="margin-left:auto;"></div>
+      </div>
+
+      <div class="content">
+        <div class="swipe-stage" id="swipeStage"></div>
+
+        <div class="swipe-actions" id="swipeActions">
+          <button class="swipe-btn pass" onclick="swipeAction(-1)" aria-label="跳过">✕</button>
+          <button class="swipe-btn like" onclick="swipeAction(1)" aria-label="心动">♥</button>
+        </div>
+
+        <div class="fb-summary" id="fbSummary" style="display:none;">
+          <div class="mp-title"><i class="ti-heart" style="color:var(--pink)"></i>这次你心动的地方</div>
+          <div class="poi-list" id="fbLikedList"></div>
+          <div class="nav-foot" style="margin-top:16px;">
+            <button class="btn-sub" onclick="restartFoodSwipe()">再滑一轮</button>
+            <button class="btn-main" onclick="closeFoodSwipe()">返回中点结果</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== VIEW: 行程账本（多人多笔支出，最后自动算出最少转账方案） ==================== -->
+    <div class="view" id="viewGroupLedger">
+      <div class="page-header">
+        <div class="back-btn" onclick="glGoHome()"><i class="ti-chevron-left"></i></div>
+        <div class="page-title">行程账本</div>
+      </div>
+
+      <div class="stepper">
+        <div class="step-node" id="glSn1"><div class="step-dot">1</div><div class="step-name">同行的人</div></div>
+        <div class="step-link" id="glSl1"></div>
+        <div class="step-node" id="glSn2"><div class="step-dot">2</div><div class="step-name">记支出</div></div>
+        <div class="step-link" id="glSl2"></div>
+        <div class="step-node" id="glSn3"><div class="step-dot">3</div><div class="step-name">谁转给谁</div></div>
+      </div>
+
+      <div class="content">
+
+        <div class="pane" id="glPane1">
+          <div class="manual-card">
+            <div class="mc-title"><i class="ti-ticket"></i>这趟行程叫什么</div>
+            <div class="input-row">
+              <input class="field" id="glTripName" type="text" placeholder="比如 波士顿之旅" maxlength="20">
+            </div>
+          </div>
+          <div class="manual-card">
+            <div class="mc-title"><i class="ti-users"></i>这趟一起出行的人</div>
+            <div class="input-row">
+              <input class="field" id="glMemberName" type="text" placeholder="名字，如 阿哲" maxlength="12">
+              <button class="add-btn" id="glBtnAddMember" aria-label="添加"><i class="ti-plus"></i></button>
+            </div>
+            <div class="manual-list" id="glMemberList">
+              <div class="m-empty">还没有人，从上面加第一个</div>
+            </div>
+          </div>
+          <div class="nav-foot">
+            <button class="btn-sub" onclick="glGoHome()">返回</button>
+            <button class="btn-main" id="glBtnToStep2">下一步：记支出<i class="ti-arrow-right"></i></button>
+          </div>
+        </div>
+
+        <div class="pane" id="glPane2">
+          <div class="manual-card">
+            <div class="mc-title"><i class="ti-receipt-2"></i>加一笔支出</div>
+            <div class="input-row" style="margin-bottom:10px;">
+              <input class="field" id="glExpDesc" type="text" placeholder="花在哪了，如 酒店/机票/晚餐" maxlength="20">
+            </div>
+            <div class="input-row">
+              <input class="field price" id="glExpAmount" type="number" inputmode="decimal" placeholder="金额" min="0" step="0.01">
+              <button class="add-btn" id="glBtnAddExpense" aria-label="添加"><i class="ti-plus"></i></button>
+            </div>
+            <div class="split-note" style="display:block;margin:10px 0 6px;">谁付的钱</div>
+            <div class="diner-bar" id="glPayerBar"></div>
+            <div class="split-note" style="display:block;margin:2px 0 6px;">谁要平摊这笔（默认全选，点掉不参与的人）</div>
+            <div class="diner-bar" id="glSplitBar"></div>
+          </div>
+
+          <div class="manual-list" id="glExpenseList" style="margin-bottom:14px;">
+            <div class="m-empty">还没有支出记录，从上面添加第一笔</div>
+          </div>
+
+          <div class="nav-foot">
+            <button class="btn-sub" id="glBtnBackTo1">上一步</button>
+            <button class="btn-main" id="glBtnSettle"><i class="ti-calculator"></i>算清楚！</button>
+          </div>
+        </div>
+
+        <div class="pane" id="glPane3">
+          <div class="total-banner">
+            <div class="tb-label">本趟总花费</div>
+            <div class="tb-amt" id="glFinalTotal">¥0.00</div>
+            <div class="tb-sub" id="glFinalSub"></div>
+          </div>
+
+          <div class="mp-title" style="margin-bottom:10px;"><i class="ti-scale" style="color:var(--gold)"></i>每人收支情况</div>
+          <div class="settle-list" id="glBalanceList" style="margin-bottom:20px;"></div>
+
+          <div class="mp-title" style="margin-bottom:10px;"><i class="ti-arrow-back-up" style="color:var(--green);transform:scaleX(-1);display:inline-block;"></i>最省事的转账方案</div>
+          <div class="settle-list" id="glTransferList"></div>
+          <div class="verify-strip" id="glVerifyStrip"></div>
+
+          <div class="share-row">
+            <button class="btn-sub" id="glBtnBackTo2"><i class="ti-arrow-back-up"></i>改支出</button>
+            <button class="btn-main" onclick="glGoHome()">完成</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ==================== VIEW: 协同组局房间 ==================== -->
+    <div class="view" id="viewRoom">
+      <div class="page-header">
+        <div class="back-btn" onclick="rmGoHome()"><i class="ti-chevron-left"></i></div>
+        <div class="page-title">协同组局房间</div>
+      </div>
+
+      <div class="content">
+
+        <!-- 创建房间 -->
+        <div class="pane" id="rmPaneCreate">
+          <div class="manual-card">
+            <div class="mc-title"><i class="ti-ticket"></i>这个局叫什么</div>
+            <div class="input-row">
+              <input class="field" id="rmName" type="text" placeholder="比如 波士顿五日游 / 老王生日局" maxlength="20">
+            </div>
+          </div>
+          <div class="manual-card">
+            <div class="mc-title"><i class="ti-users"></i>谁在这个局里（先把你自己加上）</div>
+            <div class="input-row">
+              <input class="field" id="rmMemberName" type="text" placeholder="名字，如 阿哲" maxlength="12">
+              <button class="add-btn" id="rmBtnAddMember" aria-label="添加"><i class="ti-plus"></i></button>
+            </div>
+            <div class="manual-list" id="rmMemberList">
+              <div class="m-empty">还没有人，从上面加第一个</div>
+            </div>
+          </div>
+          <div class="ocr-note">
+            <i class="ti-sparkles"></i>
+            <div>真实产品里，这一步是把邀请链接分享到微信群，朋友点开自动进房。现在是没有服务器的原型，所以先手动把大家的名字加进来，创建后会生成一个房间号用来演示"分享邀请"。</div>
+          </div>
+          <div class="nav-foot">
+            <button class="btn-sub" onclick="rmGoHome()">返回</button>
+            <button class="btn-main" id="rmBtnCreate"><i class="ti-arrow-right"></i>创建房间</button>
+          </div>
+        </div>
+
+        <!-- 房间主页 -->
+        <div class="pane" id="rmPaneDash">
+          <div class="rm-hero">
+            <div class="rm-hero-name" id="rmDashName"></div>
+            <div class="rm-code-row">
+              <span class="rm-code" id="rmDashCode"></span>
+              <button class="btn-sub rm-code-copy" id="rmBtnCopyCode">复制</button>
+            </div>
+            <div class="rm-ava-row" id="rmDashAvas"></div>
+          </div>
+
+          <button class="btn-main" id="rmBtnInvite" style="margin-bottom:20px;"><i class="ti-share-2"></i>复制邀请文案，发到群里</button>
+
+          <div class="section-label">这个局的工具</div>
+          <div class="rm-tool-row" onclick="rmOpenTool('midpoint')">
+            <div class="tool-icon midpoint"><i class="ti-map-pin-share"></i></div>
+            <div class="rm-tool-info">
+              <div class="rm-tool-name">公平碰面 · 盲盒吃喝</div>
+              <div class="rm-tool-desc">算出对所有人都公平的碰面点，滑一滑选好去处</div>
+            </div>
+            <span class="rm-tool-arrow">›</span>
+          </div>
+          <div class="rm-tool-row" onclick="rmOpenTool('ledger')">
+            <div class="tool-icon ledger"><i class="ti-users"></i></div>
+            <div class="rm-tool-info">
+              <div class="rm-tool-name">行程账本</div>
+              <div class="rm-tool-desc">成员已自动同步进来，直接开始记支出</div>
+            </div>
+            <span class="rm-tool-arrow">›</span>
+          </div>
+          <div class="rm-tool-row" onclick="rmOpenTool('split')">
+            <div class="tool-icon split"><i class="ti-receipt-2"></i></div>
+            <div class="rm-tool-info">
+              <div class="rm-tool-name">闪电分账</div>
+              <div class="rm-tool-desc">某一顿饭单独算：拍小票、认领菜品、马上出结果</div>
+            </div>
+            <span class="rm-tool-arrow">›</span>
+          </div>
+
+          <div class="section-label" style="margin-top:22px;">成员管理</div>
+          <div class="manual-card">
+            <div class="input-row">
+              <input class="field" id="rmDashMemberName" type="text" placeholder="又来了个朋友？加进来" maxlength="12">
+              <button class="add-btn" id="rmBtnDashAddMember" aria-label="添加"><i class="ti-plus"></i></button>
+            </div>
+            <div class="manual-list" id="rmDashMemberList"></div>
+          </div>
+
+          <button class="btn-sub" id="rmBtnDisband" style="border-color:var(--coral);color:var(--coral);margin-top:8px;">解散这个房间</button>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+</div>
+</div>
+
+<script>
+/* ================= SVG 图标系统 ================= */
+const SVG_PATHS = {
+  'user': 'M8 7a4 4 0 1 0 8 0a4 4 0 0 0 -8 0 M6 21v-2a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4v2',
+  'map-2': 'M12 18.5l-3 -1.5l-6 3v-13l6 -3l6 3l6 -3v7.5 M9 4v13 M15 7v5 M21.121 20.121a3 3 0 1 0 -4.242 0c.418 .419 1.125 1.045 2.121 1.879c1.051 -.89 1.759 -1.516 2.121 -1.879z M19 18v.01',
+  'arrow-right': 'M5 12h14 M13 18l6 -6 M13 6l6 6',
+  'receipt-2': 'M5 21v-16a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2v16l-3 -2l-2 2l-2 -2l-2 -2l-2 -2l-3 2 M14 8h-2.5a1.5 1.5 0 0 0 0 3h1a1.5 1.5 0 0 1 0 3h-2.5 M12 15v1 M12 8v-1',
+  'map-pin-share': 'M9 11a3 3 0 1 0 6 0a3 3 0 0 0 -6 0 M12 14l-3 3l-3 -3 M16 22l5 -5 M21 21.5V17h-4.5',
+  'toggle-right': 'M16 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0 M2 6m0 6a6 6 0 0 1 6 -6h8a6 6 0 0 1 6 6v0a6 6 0 0 1 -6 6h-8a6 6 0 0 1 -6 -6z',
+  'chevron-down': 'M6 9l6 6l6 -6',
+  'home': 'M5 12l-2 0l9 -9l9 9l-2 0 M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-7 M9 21v-6a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2v6',
+  'ticket': 'M15 5l0 2 M15 11l0 2 M15 17l0 2 M5 5h14a2 2 0 0 1 2 2v3a2 2 0 0 0 0 4v3a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2v-3a2 2 0 0 0 0 -4v-3a2 2 0 0 1 2 -2',
+  'user-circle': 'M12 12a3 3 0 1 0 0 -6a3 3 0 0 0 0 6 M12 3c7.2 0 9 1.8 9 9s-1.8 9 -9 9s-9 -1.8 -9 -9s1.8 -9 9 -9 M6.168 18.849a4 4 0 0 1 3.832 -2.849h4a4 4 0 0 1 3.834 2.855',
+  'chevron-left': 'M15 6l-6 6l6 6',
+  'tools-kitchen-2': 'M19 3v12h-5c-.023 -3.681 .184 -7.406 5 -12zm0 12v6h-1v-3m-10 -14v17m-3 -17v3a3 3 0 1 0 6 0v-3',
+  'map-pin': 'M9 11a3 3 0 1 0 6 0a3 3 0 0 0 -6 0 M17.657 16.657l-4.243 4.243a2 2 0 0 1 -2.827 0l-4.244 -4.243a8 8 0 1 1 11.314 0z',
+  'building-store': 'M3 21l18 0 M3 7v1a3 3 0 0 0 6 0v-1m0 1a3 3 0 0 0 6 0v-1m0 1a3 3 0 0 0 6 0v-1h-18l2 -4h14l2 4 M5 21v-10.15 M19 21v-10.15 M9 21v-4a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2v4',
+  'shopping-cart': 'M6 19m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0 M17 19m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0 M17 17h-11v-14h-2 M6 5l14 1l-1 7h-13',
+  'coffee': 'M3 14c.83 .642 2.077 1.017 3.5 1c1.423 .017 2.67 -.358 3.5 -1c.83 -.642 2.077 -1.017 3.5 -1c1.423 -.017 2.67 .358 3.5 1 M8 3a2.4 2.4 0 0 0 -1 2a2.4 2.4 0 0 0 1 2 M12 3a2.4 2.4 0 0 0 -1 2a2.4 2.4 0 0 0 1 2 M3 10h14v3c0 3.314 -2.239 6 -5 6s-5 -2.686 -5 -6v-3z',
+  'current-location': 'M12 12m-3 0a3 3 0 1 0 6 0a3 3 0 1 0 -6 0 M12 3l0 2 M12 19l0 2 M3 12l2 0 M19 12l2 0 M5.6 5.6l1.4 1.4 M17.0 17.0l1.4 1.4 M5.6 18.4l1.4 -1.4 M17.0 7.0l1.4 -1.4'
+};
+
+function getIconHtml(name) {
+  if(!SVG_PATHS[name]) return '';
+  return `<span class="sys-icon"><svg viewBox="0 0 24 24"><path d="${SVG_PATHS[name]}"/></svg></span>`;
+}
+document.addEventListener("DOMContentLoaded", () => {
+  document.querySelectorAll('i[class^="ti-"]').forEach(el => {
+    let iconName = el.className.split(' ').find(c => c.startsWith('ti-')).replace('ti-', '');
+    el.outerHTML = getIconHtml(iconName);
+  });
+});
+
+/* ================= view router ================= */
+function hideAllViews(){
+  document.getElementById('viewHome').classList.remove('show');
+  document.getElementById('viewMidpoint').classList.remove('show');
+}
+function goHome(){
+  hideAllViews();
+  document.getElementById('viewHome').classList.add('show');
+  document.getElementById('screen').scrollTop = 0;
+}
+function openMidpoint(){
+  hideAllViews();
+  document.getElementById('viewMidpoint').classList.add('show');
+  document.getElementById('screen').scrollTop = 0;
+}
+
+/* ============================================================
+   模块二：寻公平中点
+   ============================================================ */
+const LOC_COLORS = ['#0F3D36','#B8842A','#3E6E8E','#A8506E','#C05B3C','#4C5C5B'];
+
+// 初始化省市两级联动插件
+let districtSearch;
+function initDistrictSearch() {
+  AMap.plugin('AMap.DistrictSearch', function () {
+    districtSearch = new AMap.DistrictSearch({
+      level: 'country',
+      subdistrict: 1, 
+      showbiz: false
+    });
+    districtSearch.search('中国', function (status, result) {
+      if (status === 'complete' && result.districtList) {
+        populateSelect('selProvince', result.districtList[0].districtList);
+      }
+    });
+  });
+
+  document.getElementById('selProvince').addEventListener('change', function() {
+    const adcode = this.value;
+    document.getElementById('selCity').innerHTML = '<option value="">所在城市</option>';
+    if(adcode) searchSubDistrict(adcode, 'selCity', 'province');
+  });
+}
+
+function searchSubDistrict(adcode, selectId, level) {
+  districtSearch.setLevel(level);
+  districtSearch.search(adcode, function(status, result) {
+    if(status === 'complete' && result.districtList[0]) {
+      populateSelect(selectId, result.districtList[0].districtList);
+    }
+  });
+}
+
+function populateSelect(selectId, list) {
+  const sel = document.getElementById(selectId);
+  const defaultText = selectId === 'selCity' ? '所在城市' : '所在省份';
+  sel.innerHTML = `<option value="" data-name="">${defaultText}</option>`;
+  if(!list) return;
+  list.forEach(item => {
+    const opt = document.createElement('option');
+    opt.value = item.adcode;
+    opt.text = item.name;
+    opt.dataset.name = item.name;
+    sel.appendChild(opt);
+  });
+}
+
+function getCurrentSearchCityName() {
+  const selCity = document.getElementById('selCity');
+  const selProv = document.getElementById('selProvince');
+  if (selCity.selectedIndex > 0) return selCity.options[selCity.selectedIndex].dataset.name;
+  if (selProv.selectedIndex > 0) return selProv.options[selProv.selectedIndex].dataset.name;
+  return '全国';
+}
+
+
+function relabelLocRows(){
+  document.querySelectorAll('#locList .loc-item').forEach((row, i) => {
+    const ava = row.querySelector('.loc-avatar');
+    ava.textContent = String.fromCharCode(65 + i);
+    ava.style.background = LOC_COLORS[i % LOC_COLORS.length];
+  });
+}
+
+function addLocRow(preset){
+  const list = document.getElementById('locList');
+  if(list.querySelectorAll('.loc-item').length >= 6){ alert('最多支持 6 个出发点'); return; }
+  
+  const row = document.createElement('div');
+  row.className = 'loc-item';
+  row.innerHTML = `
+    <div class="loc-avatar"></div>
+    <div class="loc-field">
+      <div class="loc-input-wrap">
+        <input type="text" class="loc-input" placeholder="输入地址，或点右侧定位" autocomplete="off">
+        <button class="loc-action-btn" title="获取当前位置">${getIconHtml('current-location')}</button>
+      </div>
+      <div class="loc-suggest"></div>
+    </div>
+    <button class="loc-del" title="移除这个人">×</button>
+  `;
+  
+  const input = row.querySelector('.loc-input');
+  const suggestBox = row.querySelector('.loc-suggest');
+  if(preset) input.value = preset;
+  
+  row.querySelector('.loc-action-btn').addEventListener('click', () => geolocateMe(input));
+  row.querySelector('.loc-del').addEventListener('click', () => {
+    if(document.querySelectorAll('#locList .loc-item').length <= 2){ alert('至少保留 2 个出发点'); return; }
+    row.remove();
+    relabelLocRows();
+  });
+  
+  list.appendChild(row);
+  relabelLocRows();
+  bindAddressAutocompleteUI(input, suggestBox);
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  initDistrictSearch();
+  document.getElementById('btnAddLoc').addEventListener('click', () => addLocRow(''));
+  addLocRow('');
+  addLocRow('');
+});
+
+/* —— 高德地址联想输入 —— */
+function bindAddressAutocompleteUI(inputEl, boxEl) {
+  let timer = null;
+  inputEl.addEventListener('input', () => {
+    delete inputEl.dataset.lat; 
+    delete inputEl.dataset.lng;
+    const q = inputEl.value.trim();
+    clearTimeout(timer);
+    
+    if(q.length < 2) { boxEl.style.display = 'none'; return; }
+    
+    timer = setTimeout(() => {
+      AMap.plugin('AMap.AutoComplete', function(){
+        const scopeCity = getCurrentSearchCityName();
+        const autoComplete = new AMap.AutoComplete({ city: scopeCity });
+        
+        autoComplete.search(q, function(status, result) {
+          boxEl.innerHTML = '';
+          if(status === 'complete' && result.tips) {
+            const validTips = result.tips.filter(t => t.location); 
+            if(validTips.length === 0) { boxEl.style.display = 'none'; return; }
+            
+            validTips.forEach(tip => {
+              const div = document.createElement('div');
+              div.className = 'loc-suggest-item';
+              div.innerHTML = `<b>${tip.name}</b><span>${tip.district || ''} ${tip.address || ''}</span>`;
+              
+              div.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                inputEl.value = tip.name;
+                inputEl.dataset.lat = tip.location.lat;
+                inputEl.dataset.lng = tip.location.lng;
+                boxEl.style.display = 'none';
+              });
+              boxEl.appendChild(div);
+            });
+            boxEl.style.display = 'block';
+          } else {
+            boxEl.style.display = 'none';
+          }
+        });
+      });
+    }, 350);
+  });
+  
+  inputEl.addEventListener('blur', () => { 
+    setTimeout(() => { boxEl.style.display = 'none'; }, 150); 
+  });
+}
+
+function geolocateMe(inputEl) {
+  inputEl.value = "正在定位...";
+  const geolocation = new AMap.Geolocation({ enableHighAccuracy: true, timeout: 10000 });
+  geolocation.getCurrentPosition(function(status, result){
+    if(status === 'complete'){
+      inputEl.dataset.lat = result.position.lat;
+      inputEl.dataset.lng = result.position.lng;
+      inputEl.value = result.formattedAddress || "当前位置";
+    } else {
+      inputEl.value = ""; alert("定位失败，请允许浏览器定位权限。");
+    }
+  });
+}
+
+function getCoordinates(address) {
+  return new Promise((resolve) => {
+    AMap.plugin('AMap.Geocoder', function() {
+      const scopeCity = getCurrentSearchCityName();
+      const geocoder = new AMap.Geocoder({ city: scopeCity });
+      
+      geocoder.getLocation(address, function(status, result) {
+        if (status === 'complete' && result.geocodes.length) {
+          resolve({ lat: result.geocodes[0].location.lat, lng: result.geocodes[0].location.lng });
+        } else {
+          resolve(null); 
+        }
+      });
+    });
+  });
+}
+
+let amapInstance = null;
+let allMapMarkers = [];
+
+/* —— 增强版周边搜索 (商场和餐饮分离搜索) —— */
+function fetchPOIs(cLat, cLng, types, radius, pageSize) {
+  return new Promise((resolve) => {
+    const placeSearch = new AMap.PlaceSearch({
+      type: types, 
+      pageSize: pageSize,
+      pageIndex: 1,
+      autoFitView: false
+    });
+    const cpoint = [cLng, cLat]; 
+    placeSearch.searchNearBy('', cpoint, radius, function(status, result) {
+      if (status === 'complete' && result.info === 'OK') resolve(result.poiList.pois);
+      else resolve([]);
+    });
+  });
+}
+
+/* —— 核心计算主流程 —— */
+async function calculateRealMidpoint() {
+  const btn = document.getElementById('btnCalc');
+  
+  try {
+    const rows = Array.from(document.querySelectorAll('#locList .loc-item'));
+    const filled = rows.map(row => {
+      const input = row.querySelector('.loc-input');
+      return { input, text: input.value.trim() };
+    }).filter(r => r.text !== '' && !r.text.startsWith('正在'));
+
+    if (filled.length < 2) return alert("至少填写 2 个出发地址！");
+
+    btn.disabled = true; btn.textContent = "正在定位与分析...";
+
+    const coordsList = [];
+    for (const r of filled) {
+      let c = null;
+      if (r.input.dataset.lat && r.input.dataset.lng) {
+        c = { lat: parseFloat(r.input.dataset.lat), lng: parseFloat(r.input.dataset.lng) };
+      } else {
+        c = await getCoordinates(r.text);
+      }
+      
+      if (!c) {
+        alert(`地址「${r.text}」太模糊无法定位。请先在上方的选择器指定省/市，或者从下拉提示列表中选取精确地址。`);
+        btn.disabled = false; btn.textContent = "计算中心点 & 搜索周边设施";
+        return;
+      }
+      coordsList.push(c);
+    }
+
+    const cLat = coordsList.reduce((s, c) => s + c.lat, 0) / coordsList.length;
+    const cLng = coordsList.reduce((s, c) => s + c.lng, 0) / coordsList.length;
+
+    document.getElementById('mpInputArea').style.display = 'none';
+    btn.style.display = 'none';
+    document.getElementById('mpResultArea').style.display = 'block';
+
+    drawBaseMap(coordsList, {lat: cLat, lng: cLng});
+
+    document.getElementById('poiLoading').style.display = 'block';
+    document.getElementById('poiList').innerHTML = '';
+
+    // 双重搜索：强力保底找出周边 8 公里内的商场
+    const rawMalls = await fetchPOIs(cLat, cLng, '购物中心|综合商场', 8000, 20);
+    // 普通半径搜索附近美食
+    const rawFoods = await fetchPOIs(cLat, cLng, '餐饮服务|咖啡厅|茶艺馆|冷饮店', 3000, 40);
+
+    document.getElementById('poiLoading').style.display = 'none';
+
+    let malls = [], foods = [];
+
+    // 处理商场数据
+    rawMalls.forEach(poi => {
+      const dist = Math.round(AMap.GeometryUtil.distance([cLng, cLat], [poi.location.lng, poi.location.lat]));
+      const name = poi.name || '';
+      // 强力过滤：踢掉“伪商圈”
+      const isSmallShop = /百果园|便利|超市|水果|生鲜|菜市场|药店|小卖部|五金/i.test(name);
+      
+      if (!isSmallShop) {
+        malls.push({
+          isMall: true, isDrink: false,
+          name: name, lat: poi.location.lat, lng: poi.location.lng, dist,
+          iconName: 'shopping-cart', typeStr: '大型综合商圈', markerClass: 'marker-mall'
+        });
+      }
+    });
+
+    // 处理餐饮数据
+    rawFoods.forEach(poi => {
+      const dist = Math.round(AMap.GeometryUtil.distance([cLng, cLat], [poi.location.lng, poi.location.lat]));
+      const typeStr = poi.type || '';
+      const name = poi.name || '';
+      const isSmallShop = /百果园|便利|超市|水果|生鲜|菜市场|药店|小卖部|五金/i.test(name);
+      
+      if (!isSmallShop) {
+        const isDrink = typeStr.includes('冷饮') || typeStr.includes('咖啡') || typeStr.includes('茶') || name.includes('奶茶') || name.includes('咖啡');
+        foods.push({
+          isMall: false, isDrink,
+          name: name, lat: poi.location.lat, lng: poi.location.lng, dist,
+          iconName: isDrink ? 'coffee' : 'tools-kitchen-2',
+          typeStr: isDrink ? '热门奶茶/咖啡' : '热门餐厅', markerClass: isDrink ? 'marker-drink' : 'marker-food'
+        });
+      }
+    });
+
+    malls.sort((a, b) => a.dist - b.dist);
+    foods.sort((a, b) => a.dist - b.dist);
+
+    // 强行拿最近的 3 个商场 + 8 个餐饮（美食盲盒模块共用这批数据）
+    let finalPois = malls.slice(0, 3);
+    const topFoods = foods.slice(0, 8);
+    
+    if(topFoods.length > 0) {
+      finalPois.push({ isDivider: true, text: '周边美食与茶饮' });
+      finalPois = finalPois.concat(topFoods);
+    }
+
+    // —— 美食盲盒：把这 3 个商圈 + 8 个餐饮拼成滑一滑的牌堆 ——
+    window.foodSwipeDeck = malls.slice(0, 3).concat(foods.slice(0, 8));
+    const fbEntry = document.getElementById('foodSwipeEntry');
+    if (fbEntry && window.foodSwipeDeck.length > 0) {
+      document.getElementById('fbCount').textContent = window.foodSwipeDeck.length;
+      fbEntry.style.display = 'block';
+      if (typeof bindFoodEntryDrag === 'function') bindFoodEntryDrag();
+    } else if (fbEntry) {
+      fbEntry.style.display = 'none';
+    }
+
+    if(finalPois.length === 0) {
+      document.getElementById('poiList').innerHTML = '<div style="text-align:center;font-size:13px;color:#888;">附近空旷，没有找到推荐地点。</div>';
+    } else {
+      const listEl = document.getElementById('poiList');
+      finalPois.forEach(p => {
+        if(p.isDivider) {
+          const div = document.createElement('div'); div.className = 'list-divider'; div.textContent = p.text;
+          listEl.appendChild(div); return;
+        }
+
+        const card = document.createElement('div'); card.className = 'poi-card';
+        const iconStyle = p.isMall ? 'background:var(--blue-soft);color:var(--blue);' : (p.isDrink ? 'background:var(--coral-soft);color:var(--pink);' : 'background:#FDECE8;color:#C05B3C;');
+        
+        card.innerHTML = `
+          <div class="poi-icon" style="${iconStyle}">${getIconHtml(p.iconName)}</div>
+          <div class="poi-info">
+            <div class="poi-name" style="${p.isMall ? 'color:var(--blue);' : ''}">${p.name}</div>
+            <div class="poi-sub">${p.typeStr} · 距中点约 ${p.dist} 米</div>
+          </div>
+        `;
+        listEl.appendChild(card);
+
+        const poiMarker = new AMap.Marker({
+          position: [p.lng, p.lat],
+          map: amapInstance,
+          content: `<div class="custom-marker ${p.markerClass}">${getIconHtml(p.iconName)}<span>${p.name}</span></div>`,
+          offset: new AMap.Pixel(-10, -30),
+          zIndex: p.isMall ? 100 : 50
+        });
+        allMapMarkers.push(poiMarker);
+      });
+      amapInstance.setFitView(allMapMarkers);
+    }
+  } catch (err) {
+    console.error(err);
+    alert("网络或地图服务出现异常，请稍后再试！");
+    btn.disabled = false; btn.textContent = "计算中心点 & 搜索周边设施";
+  }
+}
+
+function drawBaseMap(points, center) {
+  if (!amapInstance) {
+    amapInstance = new AMap.Map('realMap', { zoom: 14, center: [center.lng, center.lat], mapStyle: "amap://styles/normal" });
+  } else amapInstance.clearMap();
+  
+  allMapMarkers = [];
+
+  points.forEach((pt, idx) => {
+    const m = new AMap.Marker({
+      position: [pt.lng, pt.lat], map: amapInstance, label: { content: `出发点 ${String.fromCharCode(65 + idx)}`, direction: 'top' }
+    });
+    allMapMarkers.push(m);
+  });
+
+  const cm = new AMap.Marker({
+    position: [center.lng, center.lat], map: amapInstance,
+    icon: '//a.amap.com/jsapi_demos/static/demo-center/icons/poi-marker-red.png',
+    label: { content: '📍绝对公平中点', direction: 'bottom' }, zIndex: 999
+  });
+  allMapMarkers.push(cm);
+}
+
+function resetMidpoint() {
+  document.getElementById('mpResultArea').style.display = 'none';
+  document.getElementById('mpInputArea').style.display = 'block';
+  const fbEntry = document.getElementById('foodSwipeEntry');
+  if (fbEntry) fbEntry.style.display = 'none';
+  window.foodSwipeDeck = [];
+  const btn = document.getElementById('btnCalc');
+  btn.style.display = 'flex'; btn.disabled = false; btn.textContent = "计算中心点 & 搜索周边设施";
+}
+
+/* boot */
+goHome();
+</script>
+
+<script>
+/* ============================================================
+   闪电分账模块 —— 独立 script 块
+   与上方原有脚本完全隔离：任何一方报错都不影响另一方。
+   原有的寻公平中点代码（上方 script）一个字未改。
+   ============================================================ */
+
+/* 1. 给全局图标库补充分账 + 美食盲盒用到的图标（Object.assign 只增不改） */
+Object.assign(SVG_PATHS, {
+  'scan': 'M4 7v-1a2 2 0 0 1 2 -2h2 M4 17v1a2 2 0 0 0 2 2h2 M16 4h2a2 2 0 0 1 2 2v1 M16 20h2a2 2 0 0 0 2 -2v-1 M5 12l14 0',
+  'pencil': 'M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4 M13.5 6.5l4 4',
+  'sparkles': 'M16 18a2 2 0 0 1 2 2a2 2 0 0 1 2 -2a2 2 0 0 1 -2 -2a2 2 0 0 1 -2 2zm0 -12a2 2 0 0 1 2 2a2 2 0 0 1 2 -2a2 2 0 0 1 -2 -2a2 2 0 0 1 -2 2zm-7 12a6 6 0 0 1 6 -6a6 6 0 0 1 -6 -6a6 6 0 0 1 -6 6a6 6 0 0 1 6 6z',
+  'plus': 'M12 5l0 14 M5 12l14 0',
+  'percentage': 'M17 17m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0 M7 7m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0 M6 18l12 -12',
+  'hand-click': 'M8 13v-8.5a1.5 1.5 0 0 1 3 0v7.5 M11 11.5v-2a1.5 1.5 0 0 1 3 0v2.5 M14 10.5v-1.5a1.5 1.5 0 0 1 3 0v1.5 M17 11.5v-1.5a1.5 1.5 0 0 1 3 0v4.5a6 6 0 0 1 -6 6h-2h.208a6 6 0 0 1 -5.012 -2.7l-.196 -.3c-.312 -.479 -1.407 -2.388 -3.286 -5.728a1.5 1.5 0 0 1 .536 -2.022a1.867 1.867 0 0 1 2.28 .28l1.47 1.47 M5 3l-1 -1 M4 7h-2 M14 3l1 -1 M15 6h2',
+  'info-circle': 'M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0 M12 9h.01 M11 12h1v4h1',
+  'alert-triangle': 'M12 9v4 M10.363 3.591l-8.106 13.534a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 1.914 0 0 0 1.636 -2.87l-8.106 -13.536a1.914 1.914 0 0 0 -3.274 0z M12 16h.01',
+  'calculator': 'M4 5m0 2a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v14a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2z M8 8m0 1a1 1 0 0 1 1 -1h6a1 1 0 0 1 1 1v1a1 1 0 0 1 -1 1h-6a1 1 0 0 1 -1 -1z M8 14l0 .01 M12 14l0 .01 M16 14l0 .01 M8 17l0 .01 M12 17l0 .01 M16 17l0 .01',
+  'shield-check': 'M11.46 20.846a12 12 0 0 1 -7.96 -14.846a12 12 0 0 0 8.5 -3a12 12 0 0 0 8.5 3a12 12 0 0 1 -.09 7.06 M15 19l2 2l4 -4',
+  'arrow-back-up': 'M9 14l-4 -4l4 -4 M5 10h11a4 4 0 1 1 0 8h-1',
+  'share-2': 'M8 9h-1a2 2 0 0 0 -2 2v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-8a2 2 0 0 0 -2 -2h-1 M12 14v-11 M9 6l3 -3l3 3',
+  'heart': 'M19.5 12.572l-7.5 7.428l-7.5 -7.428a5 5 0 1 1 7.5 -6.566a5 5 0 1 1 7.5 6.572'
+});
+
+/* 2. 覆盖 hideAllViews：多隐藏分账页 + 美食盲盒页。
+      原有 goHome / openMidpoint 内部调用的是全局 hideAllViews，
+      点击时自动解析到这里的新版本，因此无需改动原有函数。 */
+function hideAllViews(){
+  document.getElementById('viewHome').classList.remove('show');
+  document.getElementById('viewMidpoint').classList.remove('show');
+  document.getElementById('viewSplit').classList.remove('show');
+  document.getElementById('viewFoodSwipe').classList.remove('show');
+}
+function openSplit(){
+  hideAllViews();
+  document.getElementById('viewSplit').classList.add('show');
+  splitEntryMode = 'scan';
+  goSplitStep(1);
+  document.getElementById('screen').scrollTop = 0;
+}
+
+/* 3. 分账数据与逻辑（变量名均不与原脚本冲突） */
+var DINERS = [
+  {id:'a', name:'阿哲', color:'#0F3D36'},
+  {id:'b', name:'小雨', color:'#B8842A'},
+  {id:'c', name:'Ken',  color:'#3E6E8E'},
+  {id:'d', name:'露露', color:'#A8506E'},
+  {id:'e', name:'胖虎', color:'#C05B3C'}
+];
+var DISHES = [];
+var nextDishId = 1;
+var FEE = { type:'none', value:0, label:'服务费' };
+
+var OCR_DISHES = [
+  {name:'水煮鱼',      price:128.00},
+  {name:'宫保鸡丁',    price:58.00},
+  {name:'麻婆豆腐',    price:32.00},
+  {name:'青岛啤酒 ×4', price:48.00},
+  {name:'杨枝甘露',    price:26.00},
+  {name:'米饭 ×5',     price:15.00}
+];
+var OCR_PRECLAIMS = [
+  ['a','b','c','d','e'], ['a','c'], ['b','d'], ['a','c','e'], [], ['a','b','c','d','e']
+];
+
+var activeDiner = 'a';
+var splitEntryMode = 'scan';
+
+function goSplitStep(n){
+  document.getElementById('pane1').classList.toggle('show', n===1 && splitEntryMode==='scan');
+  document.getElementById('paneManual').classList.toggle('show', n===1 && splitEntryMode==='manual');
+  document.getElementById('pane2').classList.toggle('show', n===2);
+  document.getElementById('pane3').classList.toggle('show', n===3);
+  for(var i=1;i<=3;i++){
+    var node = document.getElementById('sn'+i);
+    node.classList.toggle('active', i===n);
+    node.classList.toggle('done', i<n);
+  }
+  document.getElementById('sl1').classList.toggle('done', n>1);
+  document.getElementById('sl2').classList.toggle('done', n>2);
+  document.getElementById('screen').scrollTop = 0;
+}
+
+function splitEscapeHtml(s){
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function feeCentsOf(subCents){
+  if(FEE.type==='percent') return Math.round(subCents * FEE.value / 100);
+  if(FEE.type==='fixed')   return FEE.value;
+  return 0;
+}
+
+function renderDiners(){
+  var bar = document.getElementById('dinerBar');
+  bar.innerHTML = '';
+  DINERS.forEach(function(d){
+    var chip = document.createElement('div');
+    chip.className = 'diner-chip' + (d.id===activeDiner ? ' on' : '');
+    chip.innerHTML = '<span class="d-ava" style="background:'+d.color+'">'+d.name[0]+'</span>'+d.name;
+    chip.onclick = function(){ activeDiner = d.id; renderDiners(); renderDishes(); };
+    bar.appendChild(chip);
+  });
+}
+function toggleClaim(dishId){
+  var dish = DISHES.find(function(x){return x.id===dishId;});
+  var idx = dish.claims.indexOf(activeDiner);
+  if(idx>-1){ dish.claims.splice(idx,1); } else { dish.claims.push(activeDiner); }
+  renderDishes();
+}
+function deleteDish(dishId){
+  var dish = DISHES.find(function(x){return x.id===dishId;});
+  if(!confirm('删除「'+dish.name+' ¥'+dish.price.toFixed(2)+'」？\n（比如 OCR 识别错了、或者这道菜退了）')) return;
+  DISHES = DISHES.filter(function(x){return x.id!==dishId;});
+  renderDishes();
+}
+function renderDishes(){
+  var list = document.getElementById('dishList');
+  list.innerHTML = '';
+  var subC = 0;
+  DISHES.forEach(function(dish){
+    subC += Math.round(dish.price*100);
+    var mine = dish.claims.indexOf(activeDiner) > -1;
+    var el = document.createElement('div');
+    el.className = 'dish' + (mine ? ' mine' : '');
+    var avas = dish.claims.map(function(id){
+      var d = DINERS.find(function(x){return x.id===id;});
+      return '<span class="claim-ava" style="background:'+d.color+'">'+d.name[0]+'</span>';
+    }).join('');
+    var note = dish.claims.length>1
+      ? '<span class="split-note">'+dish.claims.length+' 人平摊，每人 ¥'+(dish.price/dish.claims.length).toFixed(2)+'</span>'
+      : (dish.claims.length===0 ? '<span class="claim-empty">还没人认领 — 点一下算你的</span>' : '');
+    el.innerHTML =
+      '<div class="dish-top">'+
+        '<span class="dish-name">'+splitEscapeHtml(dish.name)+'</span>'+
+        '<span class="dish-price">¥'+dish.price.toFixed(2)+'</span>'+
+      '</div>'+
+      '<div class="dish-claims">'+avas+note+'</div>'+
+      '<button class="dish-del" aria-label="删除这道菜">×</button>';
+    el.onclick = function(){ toggleClaim(dish.id); };
+    el.querySelector('.dish-del').addEventListener('click', function(e){
+      e.stopPropagation();
+      deleteDish(dish.id);
+    });
+    list.appendChild(el);
+  });
+
+  var addRow = document.createElement('div');
+  addRow.className = 'add-dish-inline';
+  addRow.innerHTML = getIconHtml('plus') + '补一道菜（漏算或加菜）';
+  addRow.onclick = function(){
+    var name = prompt('菜名：');
+    if(!name || !name.trim()) return;
+    var priceStr = prompt('价格（元）：');
+    var price = parseFloat(priceStr);
+    if(!(price>0)){ alert('价格要是大于 0 的数字'); return; }
+    DISHES.push({id:nextDishId++, name:name.trim(), price:Math.round(price*100)/100, claims:[]});
+    renderDishes();
+  };
+  list.appendChild(addRow);
+
+  var feeC = feeCentsOf(subC);
+  document.getElementById('subTotal').textContent   = '¥' + (subC/100).toFixed(2);
+  document.getElementById('grandTotal').textContent = '¥' + ((subC+feeC)/100).toFixed(2);
+
+  var feeRow = document.getElementById('feeRow');
+  if(FEE.type==='none'){
+    feeRow.style.display = 'none';
+    document.getElementById('feeHintText').textContent = '这一单没有服务费和税';
+  } else {
+    feeRow.style.display = 'flex';
+    document.getElementById('feeLabel').textContent = FEE.label;
+    document.getElementById('feeTotal').textContent = '¥' + (feeC/100).toFixed(2);
+    document.getElementById('feeHintText').textContent =
+      FEE.type==='percent' ? '按每人消费比例摊派，不是简单平分' : '固定费用按每人消费比例摊派';
+  }
+
+  var un = DISHES.filter(function(d){return d.claims.length===0;});
+  var warn = document.getElementById('unclaimedWarn');
+  if(un.length>0 && DISHES.length>0){
+    warn.classList.add('show');
+    document.getElementById('unclaimedText').textContent =
+      '还有 '+un.length+' 道菜没人认领（'+un.map(function(d){return d.name;}).join('、')+'）。直接算钱的话，这些将由全员平摊。';
+  } else {
+    warn.classList.remove('show');
+  }
+}
+
+function renderManualList(){
+  var list = document.getElementById('manualList');
+  list.innerHTML = '';
+  if(DISHES.length===0){
+    list.innerHTML = '<div class="m-empty">还没有菜品，从上面添加第一道菜</div>';
+    return;
+  }
+  var sub = 0;
+  DISHES.forEach(function(dish){
+    sub += dish.price;
+    var el = document.createElement('div');
+    el.className = 'm-item';
+    el.innerHTML =
+      '<span class="m-name">'+splitEscapeHtml(dish.name)+'</span>'+
+      '<span class="m-price">¥'+dish.price.toFixed(2)+'</span>'+
+      '<button class="m-del" aria-label="删除">×</button>';
+    el.querySelector('.m-del').addEventListener('click', function(){
+      DISHES = DISHES.filter(function(x){return x.id!==dish.id;});
+      renderManualList();
+    });
+    list.appendChild(el);
+  });
+  var totalRow = document.createElement('div');
+  totalRow.className = 'm-item';
+  totalRow.style.background = 'transparent';
+  totalRow.style.paddingTop = '2px';
+  totalRow.innerHTML = '<span class="m-name" style="color:var(--ink-soft);font-size:12px;">共 '+DISHES.length+' 道</span>'+
+    '<span class="m-price">¥'+sub.toFixed(2)+'</span><span style="width:26px;flex-shrink:0;"></span>';
+  list.appendChild(totalRow);
+}
+
+function settleBill(){
+  if(DISHES.length===0){ alert('没有菜品可以结算，先回上一步添加。'); return; }
+  var owedCents = {};
+  var dishDetail = {};
+  DINERS.forEach(function(d){ owedCents[d.id]=0; dishDetail[d.id]=[]; });
+
+  DISHES.forEach(function(dish){
+    var claimers = dish.claims.length>0 ? dish.claims.slice() : DINERS.map(function(d){return d.id;});
+    var totalC = Math.round(dish.price*100);
+    var base = Math.floor(totalC / claimers.length);
+    var remainder = totalC - base*claimers.length;
+    claimers.forEach(function(id, i){
+      var share = base + (i < remainder ? 1 : 0);
+      owedCents[id] += share;
+      dishDetail[id].push({name:dish.name, cents:share, shared:claimers.length>1, isDefault:dish.claims.length===0});
+    });
+  });
+
+  var subC = 0; DINERS.forEach(function(d){ subC += owedCents[d.id]; });
+  var feeTotalC = feeCentsOf(subC);
+
+  var feeCents = {};
+  var assigned = 0;
+  var order = DINERS.map(function(d){return d.id;}).sort(function(a,b){return owedCents[b]-owedCents[a];});
+  order.forEach(function(id, i){
+    var f;
+    if(feeTotalC===0){ f = 0; }
+    else if(i === order.length-1){ f = feeTotalC - assigned; }
+    else if(subC===0){ f = Math.round(feeTotalC / order.length); assigned += f; }
+    else { f = Math.round(feeTotalC * owedCents[id] / subC); assigned += f; }
+    feeCents[id] = f;
+  });
+
+  var list = document.getElementById('settleList');
+  list.innerHTML = '';
+  var grandC = 0;
+  DINERS.forEach(function(d){
+    var personTotalC = owedCents[d.id] + feeCents[d.id];
+    grandC += personTotalC;
+    var rows = dishDetail[d.id].map(function(r){
+      var tag = r.isDefault ? '（未认领·平摊）' : (r.shared ? '（平摊）' : '');
+      return '<div class="sd-row"><span>'+splitEscapeHtml(r.name)+tag+'</span><span class="sd-val">¥'+(r.cents/100).toFixed(2)+'</span></div>';
+    }).join('');
+    var feeRowHtml = FEE.type==='none' ? '' :
+      '<div class="sd-row sd-fee"><span>'+FEE.label+'（按消费比例）</span><span class="sd-val">¥'+(feeCents[d.id]/100).toFixed(2)+'</span></div>';
+    var card = document.createElement('div');
+    card.className = 'settle-card';
+    card.innerHTML =
+      '<div class="settle-head">'+
+        '<span class="s-ava" style="background:'+d.color+'">'+d.name[0]+'</span>'+
+        '<span class="s-name">'+d.name+'</span>'+
+        '<span class="s-amt">¥'+(personTotalC/100).toFixed(2)+'</span>'+
+        '<span class="s-chev">'+getIconHtml('chevron-down')+'</span>'+
+      '</div>'+
+      '<div class="settle-detail">'+
+        rows + feeRowHtml +
+        '<div class="sd-row sd-total"><span>应付合计</span><span class="sd-val">¥'+(personTotalC/100).toFixed(2)+'</span></div>'+
+      '</div>';
+    card.querySelector('.settle-head').onclick = function(){ card.classList.toggle('open'); };
+    list.appendChild(card);
+  });
+
+  var feeDesc = FEE.type==='none' ? '无服务费' :
+    (FEE.type==='percent' ? '含服务费 '+FEE.value+'%' : '含固定费用 ¥'+(FEE.value/100).toFixed(2));
+  document.getElementById('finalTotal').textContent = '¥' + (grandC/100).toFixed(2);
+  document.getElementById('finalSub').textContent = DINERS.length + ' 人 · ' + DISHES.length + ' 道菜 · ' + feeDesc;
+  document.getElementById('verifySum').textContent = '¥' + (grandC/100).toFixed(2);
+  goSplitStep(3);
+}
+
+/* 4. 所有事件绑定（本块底部执行，元素此时已存在） */
+var splitTaxType = 'none';
+
+document.getElementById('btnScan').addEventListener('click', function(){
+  var stage = document.getElementById('cameraStage');
+  var hint = document.getElementById('scanHint');
+  var btn = this;
+  stage.classList.add('scanning');
+  btn.disabled = true;
+  hint.textContent = '正在识别小票文字…';
+  setTimeout(function(){
+    hint.textContent = '识别到 6 道菜 · 服务费 10% ✓';
+    setTimeout(function(){
+      stage.classList.remove('scanning');
+      btn.disabled = false;
+      DISHES = OCR_DISHES.map(function(d, i){
+        return {id:nextDishId++, name:d.name, price:d.price, claims:OCR_PRECLAIMS[i].slice()};
+      });
+      FEE = { type:'percent', value:10, label:'服务费（小票识别）' };
+      splitEntryMode = 'scan';
+      renderDiners();
+      renderDishes();
+      goSplitStep(2);
+    }, 700);
+  }, 1800);
+});
+
+document.getElementById('btnManual').addEventListener('click', function(){
+  splitEntryMode = 'manual';
+  renderManualList();
+  goSplitStep(1);
+});
+document.getElementById('btnManualBack').addEventListener('click', function(){
+  splitEntryMode = 'scan';
+  goSplitStep(1);
+});
+
+function addDishFromInputs(){
+  var nameEl = document.getElementById('inName');
+  var priceEl = document.getElementById('inPrice');
+  var name = nameEl.value.trim();
+  var price = parseFloat(priceEl.value);
+  if(!name){ nameEl.focus(); return; }
+  if(!(price > 0)){ priceEl.focus(); return; }
+  DISHES.push({id:nextDishId++, name:name, price:Math.round(price*100)/100, claims:[]});
+  nameEl.value = ''; priceEl.value = '';
+  nameEl.focus();
+  renderManualList();
+}
+document.getElementById('btnAdd').addEventListener('click', addDishFromInputs);
+document.getElementById('inPrice').addEventListener('keydown', function(e){ if(e.key==='Enter') addDishFromInputs(); });
+document.getElementById('inName').addEventListener('keydown', function(e){ if(e.key==='Enter') document.getElementById('inPrice').focus(); });
+
+document.querySelectorAll('.tax-opt').forEach(function(opt){
+  opt.addEventListener('click', function(){
+    document.querySelectorAll('.tax-opt').forEach(function(o){o.classList.remove('on');});
+    opt.classList.add('on');
+    splitTaxType = opt.getAttribute('data-tax');
+    document.getElementById('taxPercentWrap').classList.toggle('show', splitTaxType==='percent');
+    document.getElementById('taxFixedWrap').classList.toggle('show', splitTaxType==='fixed');
+  });
+});
+
+document.getElementById('btnManualNext').addEventListener('click', function(){
+  if(DISHES.length===0){ alert('先添加至少一道菜品'); return; }
+  if(splitTaxType==='none'){
+    FEE = { type:'none', value:0, label:'服务费' };
+  } else if(splitTaxType==='percent'){
+    var p = parseFloat(document.getElementById('inTaxPercent').value);
+    if(!(p>0)){ alert('填一下比例，比如 10 表示 10%'); return; }
+    FEE = { type:'percent', value:p, label:'服务费 '+p+'%' };
+  } else {
+    var f = parseFloat(document.getElementById('inTaxFixed').value);
+    if(!(f>0)){ alert('填一下固定金额，比如 20'); return; }
+    FEE = { type:'fixed', value:Math.round(f*100), label:'固定费用' };
+  }
+  renderDiners();
+  renderDishes();
+  goSplitStep(2);
+});
+
+document.getElementById('feeEditLink').addEventListener('click', function(e){
+  e.stopPropagation();
+  splitEntryMode = 'manual';
+  document.querySelectorAll('.tax-opt').forEach(function(o){o.classList.remove('on');});
+  if(FEE.type==='percent'){
+    splitTaxType='percent';
+    document.querySelector('[data-tax="percent"]').classList.add('on');
+    document.getElementById('inTaxPercent').value = FEE.value;
+  } else if(FEE.type==='fixed'){
+    splitTaxType='fixed';
+    document.querySelector('[data-tax="fixed"]').classList.add('on');
+    document.getElementById('inTaxFixed').value = (FEE.value/100).toFixed(2);
+  } else {
+    splitTaxType='none';
+    document.querySelector('[data-tax="none"]').classList.add('on');
+  }
+  document.getElementById('taxPercentWrap').classList.toggle('show', splitTaxType==='percent');
+  document.getElementById('taxFixedWrap').classList.toggle('show', splitTaxType==='fixed');
+  renderManualList();
+  goSplitStep(1);
+});
+
+document.getElementById('btnBackTo1').addEventListener('click', function(){
+  if(splitEntryMode==='manual') renderManualList();
+  goSplitStep(1);
+});
+
+document.getElementById('btnSettle').addEventListener('click', settleBill);
+document.getElementById('btnEditClaims').addEventListener('click', function(){ goSplitStep(2); });
+document.getElementById('btnShare').addEventListener('click', function(){
+  alert('这里会生成一张结算图片，可直接发到微信群 —— 下一个可做的小功能。');
+});
+
+/* ============================================================
+   模块三：美食盲盒（Tinder 式滑一滑）
+   复用寻公平中点搜索出的 3 个商圈 + 8 个餐饮（window.foodSwipeDeck）
+   ============================================================ */
+window.foodSwipeDeck = window.foodSwipeDeck || [];
+var swipeDeck = [];
+var swipeIndex = 0;
+var likedPois = [];
+var swipeDragX = 0;
+
+/* 首页直接点"美食盲盒"时：如果还没算过中点，提示先去算 */
+function tryOpenFoodSwipeFromHome(){
+  if (!window.foodSwipeDeck || window.foodSwipeDeck.length === 0) {
+    alert('先用「寻公平中点」搜一次附近的商圈和餐饮，找齐候选之后就能来这里滑一滑啦～');
+    openMidpoint();
+    return;
+  }
+  openFoodSwipe();
+}
+
+function openFoodSwipe(){
+  if (!window.foodSwipeDeck || window.foodSwipeDeck.length === 0) {
+    alert('先计算中心点，找到附近地点后才能开始盲盒挑选～');
+    return;
+  }
+  swipeDeck = window.foodSwipeDeck.slice();
+  swipeIndex = 0;
+  likedPois = [];
+  hideAllViews();
+  document.getElementById('viewFoodSwipe').classList.add('show');
+  document.getElementById('screen').scrollTop = 0;
+  document.getElementById('fbSummary').style.display = 'none';
+  document.getElementById('swipeStage').style.display = 'block';
+  document.getElementById('swipeActions').style.display = 'flex';
+  renderSwipeStack();
+}
+
+function closeFoodSwipe(){
+  hideAllViews();
+  document.getElementById('viewMidpoint').classList.add('show');
+  document.getElementById('screen').scrollTop = 0;
+}
+
+function restartFoodSwipe(){
+  swipeIndex = 0;
+  likedPois = [];
+  document.getElementById('fbSummary').style.display = 'none';
+  document.getElementById('swipeStage').style.display = 'block';
+  document.getElementById('swipeActions').style.display = 'flex';
+  renderSwipeStack();
+}
+
+function poiCatMeta(poi){
+  if (poi.isMall) return { color: 'var(--blue)', bg: 'var(--blue-soft)', label: '大型综合商圈' };
+  if (poi.isDrink) return { color: 'var(--pink)', bg: 'var(--coral-soft)', label: '热门奶茶/咖啡' };
+  return { color: 'var(--coral)', bg: '#FDECE8', label: '热门餐厅' };
+}
+
+function renderSwipeStack(){
+  var stage = document.getElementById('swipeStage');
+  stage.innerHTML = '';
+  document.getElementById('swipeProgress').textContent =
+    Math.min(swipeIndex + 1, swipeDeck.length) + ' / ' + swipeDeck.length;
+
+  if (swipeIndex >= swipeDeck.length){ finishSwipe(); return; }
+
+  var visible = swipeDeck.slice(swipeIndex, swipeIndex + 3).reverse();
+  visible.forEach(function(poi, revIdx){
+    var stackPos = visible.length - 1 - revIdx; // 0 = 最上面那张
+    var meta = poiCatMeta(poi);
+    var card = document.createElement('div');
+    card.className = 'swipe-card';
+    card.style.zIndex = 10 - stackPos;
+    card.style.transform = 'translateY(' + (stackPos * 10) + 'px) scale(' + (1 - stackPos * 0.04) + ')';
+    card.innerHTML =
+      '<div class="stamp stamp-like">心动</div>' +
+      '<div class="stamp stamp-pass">跳过</div>' +
+      '<div class="swipe-card-icon" style="background:' + meta.bg + ';color:' + meta.color + ';">' + getIconHtml(poi.iconName) + '</div>' +
+      '<div class="swipe-card-body">' +
+        '<div class="swipe-card-tag" style="color:' + meta.color + ';background:' + meta.bg + ';">' + meta.label + '</div>' +
+        '<div class="swipe-card-name">' + splitEscapeHtml(poi.name) + '</div>' +
+        '<div class="swipe-card-dist">距中点约 ' + poi.dist + ' 米</div>' +
+      '</div>';
+    if (stackPos === 0) bindSwipeCardDrag(card);
+    stage.appendChild(card);
+  });
+}
+
+function bindSwipeCardDrag(card){
+  var startX = 0, curX = 0, dragging = false;
+  var likeStamp = card.querySelector('.stamp-like');
+  var passStamp = card.querySelector('.stamp-pass');
+
+  function onDown(e){
+    dragging = true;
+    curX = 0;
+    card.style.transition = 'none';
+    startX = e.clientX;
+  }
+  function onMove(e){
+    if (!dragging) return;
+    curX = e.clientX - startX;
+    swipeDragX = curX;
+    var rot = curX / 12;
+    card.style.transform = 'translate(' + curX + 'px, 0) rotate(' + rot + 'deg)';
+    var ratio = Math.min(Math.abs(curX) / 120, 1);
+    if (curX > 0){ likeStamp.style.opacity = ratio; passStamp.style.opacity = 0; }
+    else { passStamp.style.opacity = ratio; likeStamp.style.opacity = 0; }
+  }
+  function onUp(){
+    if (!dragging) return;
+    dragging = false;
+    card.style.transition = 'transform .3s ease, opacity .3s ease';
+    if (curX > 110) flyOutTopCard(1);
+    else if (curX < -110) flyOutTopCard(-1);
+    else { card.style.transform = ''; likeStamp.style.opacity = 0; passStamp.style.opacity = 0; }
+  }
+
+  card.addEventListener('pointerdown', function(e){ card.setPointerCapture(e.pointerId); onDown(e); });
+  card.addEventListener('pointermove', onMove);
+  card.addEventListener('pointerup', onUp);
+  card.addEventListener('pointercancel', onUp);
+}
+
+/* 底部 ✕ / ♥ 按钮：直接对当前最上面那张卡触发同样的飞出动画 */
+function swipeAction(dir){
+  if (swipeIndex >= swipeDeck.length) return;
+  var topCard = document.querySelector('#swipeStage .swipe-card:last-child');
+  if (!topCard) return;
+  topCard.style.transition = 'transform .3s ease, opacity .3s ease';
+  flyOutCardEl(topCard, dir);
+}
+
+function flyOutTopCard(dir){
+  var topCard = document.querySelector('#swipeStage .swipe-card:last-child');
+  if (!topCard) return;
+  flyOutCardEl(topCard, dir);
+}
+
+function flyOutCardEl(card, dir){
+  var poi = swipeDeck[swipeIndex];
+  card.style.transform = 'translate(' + (dir * 520) + 'px, 0) rotate(' + (dir * 28) + 'deg)';
+  card.style.opacity = '0';
+  if (dir > 0 && poi) likedPois.push(poi);
+  swipeIndex++;
+  setTimeout(renderSwipeStack, 260);
+}
+
+function finishSwipe(){
+  document.getElementById('swipeStage').style.display = 'none';
+  document.getElementById('swipeActions').style.display = 'none';
+  document.getElementById('swipeProgress').textContent = '';
+  document.getElementById('fbSummary').style.display = 'block';
+
+  var listEl = document.getElementById('fbLikedList');
+  listEl.innerHTML = '';
+  if (likedPois.length === 0){
+    listEl.innerHTML = '<div class="m-empty">这轮都划走了，点"再滑一轮"重新试试～</div>';
+    return;
+  }
+  likedPois.forEach(function(p){
+    var meta = poiCatMeta(p);
+    var row = document.createElement('div');
+    row.className = 'poi-card';
+    row.innerHTML =
+      '<div class="poi-icon" style="background:' + meta.bg + ';color:' + meta.color + ';">' + getIconHtml(p.iconName) + '</div>' +
+      '<div class="poi-info">' +
+        '<div class="poi-name" style="color:' + meta.color + ';">' + splitEscapeHtml(p.name) + '</div>' +
+        '<div class="poi-sub">' + meta.label + ' · 距中点约 ' + p.dist + ' 米</div>' +
+      '</div>';
+    listEl.appendChild(row);
+  });
+}
+
+/* 结果页里的"美食盲盒"入口卡：向右拖动过阈值 = 直接进入滑一滑；轻点也可以 */
+function bindFoodEntryDrag(){
+  var card = document.getElementById('foodSwipeEntryCard');
+  if (!card || card.dataset.bound) return;
+  card.dataset.bound = '1';
+
+  var startX = 0, curX = 0, dragging = false;
+
+  card.addEventListener('pointerdown', function(e){
+    dragging = true; curX = 0;
+    card.setPointerCapture(e.pointerId);
+    card.style.transition = 'none';
+    startX = e.clientX;
+  });
+  card.addEventListener('pointermove', function(e){
+    if (!dragging) return;
+    curX = e.clientX - startX;
+    if (curX < 0) curX = 0; // 只响应向右滑
+    card.style.transform = 'translateX(' + curX + 'px) rotate(' + (curX / 20) + 'deg)';
+    card.style.opacity = String(1 - Math.min(curX / 300, 0.6));
+  });
+  function endDrag(){
+    if (!dragging) return;
+    dragging = false;
+    card.style.transition = 'transform .25s ease, opacity .25s ease';
+    if (curX > 90){
+      card.style.transform = 'translateX(420px) rotate(18deg)';
+      card.style.opacity = '0';
+      setTimeout(function(){
+        openFoodSwipe();
+        card.style.transition = 'none';
+        card.style.transform = '';
+        card.style.opacity = '1';
+      }, 220);
+    } else {
+      card.style.transform = '';
+      card.style.opacity = '1';
+    }
+  }
+  card.addEventListener('pointerup', endDrag);
+  card.addEventListener('pointercancel', endDrag);
+  /* 轻点（几乎没有拖动距离）也直接进入，方便鼠标用户 */
+  card.addEventListener('click', function(){
+    if (Math.abs(curX) < 5) openFoodSwipe();
+  });
+}
+</script>
+
+
+<script>
+/* ============================================================
+   保险丝（独立脚本块，纯增量，不影响上方任何代码）
+   —— 若高德脚本没加载成功，原初始化第一行 initDistrictSearch() 会抛错，
+      导致「添加朋友」按钮没绑上、初始两行没建出来，且页面毫无提示。
+   —— 本块注册在最后、最后触发：检测到中断就兜底恢复；
+      检测到 AMap 缺失就显示红色警告，把静默失败变成看得见的原因。
+   ============================================================ */
+document.addEventListener("DOMContentLoaded", function(){
+  var list = document.getElementById('locList');
+  var btn  = document.getElementById('btnAddLoc');
+  if (list && btn && list.children.length === 0) {
+    try { addLocRow(''); addLocRow(''); } catch(e){ console.error('保险丝建行失败:', e); }
+    /* 初始化在绑按钮前就中断了，此处补绑不会重复 */
+    btn.addEventListener('click', function(){
+      try { addLocRow(''); } catch(e){ alert('添加失败：' + e.message); }
+    });
+    console.warn('[拼途保险丝] 检测到原有初始化中断，已兜底恢复按钮与输入行。');
+  }
+  if (typeof AMap === 'undefined') {
+    var inputArea = document.getElementById('mpInputArea');
+    if (inputArea && !document.getElementById('amapWarn')) {
+      var warn = document.createElement('div');
+      warn.id = 'amapWarn';
+      warn.style.cssText = 'background:#F4DED3;color:#7A3520;border:1.5px solid #C05B3C;border-radius:12px;padding:11px 14px;font-size:12.5px;line-height:1.6;margin-bottom:14px;';
+      warn.innerHTML = '<b>⚠ 高德地图脚本没有加载成功。</b><br>地址联想、定位、中点搜索将不可用。常见原因：<br>1. 当前网络访问不到 webapi.amap.com；<br>2. 高德 Key 的域名白名单不包含你现在打开页面的地址；<br>3. Key 当日配额用完。<br>请检查后刷新页面重试。';
+      inputArea.insertBefore(warn, inputArea.firstChild);
+    }
+  }
+});
+</script>
+
+<script>
+/* ============================================================
+   美食盲盒 2.0 —— 翻转卡片版（独立第四段 script，纯新增）
+   —— 彻底移除上一版"点开跳整页详情"的设计（那是 hideAllViews 漏掉
+      隐藏新页面导致两页叠在一起的 bug 根源），改成：
+      · 滑卡阶段：只有卡片本身。轻点（非拖动）卡片 = 原地翻面看详情；
+        拖动过阈值 = 正常判定喜欢/跳过，与之前手感一致。
+      · 心动清单点开：底部弹层展示同一套详情，不再跳整页/不再有多视图。
+   —— 详情内容尽量拉满：地址、电话、评分、人均、图片（如果高德有），
+      外加一个跳转美团搜索的按钮。
+   —— 复用已有全局函数：fetchPOIs / poiCatMeta / getIconHtml /
+      splitEscapeHtml / DINERS 等丝毫不动；本块只是"重新声明"
+      renderSwipeStack / bindSwipeCardDrag / flyOutTopCard / flyOutCardEl /
+      swipeAction 这几个函数 —— JS 里后声明的同名函数会覆盖之前的绑定，
+      onclick 在点击那一刻才解析函数名，所以自动生效，之前的版本
+      仍然原样躺在文件里，只是不再被调用。
+   ============================================================ */
+
+/* ---------- 详情数据：按需查询、每个 poi 只查一次并缓存 ---------- */
+function fetchPoiFullDetail(poi){
+  if (poi._detailCache) return Promise.resolve(poi._detailCache);
+  return new Promise(function(resolve){
+    try {
+      var placeSearch = new AMap.PlaceSearch({ pageSize: 5, pageIndex: 1 });
+      placeSearch.searchNearBy(poi.name, [poi.lng, poi.lat], 60, function(status, result){
+        var detail = null;
+        if (status === 'complete' && result.info === 'OK' && result.poiList && result.poiList.pois.length){
+          var exact = result.poiList.pois.find(function(p){ return p.name === poi.name; });
+          detail = exact || result.poiList.pois[0];
+        }
+        poi._detailCache = detail || {};
+        resolve(poi._detailCache);
+      });
+    } catch(e){
+      poi._detailCache = {};
+      resolve({});
+    }
+  });
+}
+
+/* ---------- 真实跳转链接：只留高德 ----------
+   美团、大众点评都只能做"搜索跳转"，不是官方承诺的精确接口
+   （大众点评的搜索地址甚至强制要求一个我们数据里没有的"城市 ID"），
+   用户反馈这两个留着也没用，直接删掉，只留验证过 100% 可靠的高德路线规划。
+   搜不到店的场景，靠名字右边的复制按钮兜底，用户自己去美团/点评贴上搜。 */
+function buildPlatformLinksHtml(poi){
+  var amapUrl = 'https://uri.amap.com/navigation?to=' + poi.lng + ',' + poi.lat + ',' + encodeURIComponent(poi.name) + '&mode=car';
+  return (
+    '<div class="fc-link-row">' +
+      '<a class="fc-link-btn amap" href="' + amapUrl + '" target="_blank" rel="noopener">高德搜路线 →</a>' +
+    '</div>'
+  );
+}
+
+/* ---------- 吃喝玩乐分类：这里要拿到"全部商铺"，不是只拿几个，
+   所以没有用共享的 fetchPOIs（它只查第 1 页、最多几十条），
+   而是单独写了一个会自动翻页的版本，直到把这一类查完或碰到安全上限为止。 ---------- */
+function fetchAllPoisForHighlights(cLat, cLng, types, radius){
+  return new Promise(function(resolve){
+    var all = [];
+    var maxPages = 4; /* 每页最多 50 条，4 页 = 200 条安全上限，避免极端情况下无限翻页 */
+    function fetchPage(pageIndex, isRetry){
+      var placeSearch = new AMap.PlaceSearch({ type: types, pageSize: 50, pageIndex: pageIndex, autoFitView: false });
+      placeSearch.searchNearBy('', [cLng, cLat], radius, function(status, result){
+        if (status === 'complete' && result.info === 'OK' && result.poiList && result.poiList.pois){
+          all = all.concat(result.poiList.pois);
+          var total = result.poiList.count || all.length;
+          if (all.length < total && pageIndex < maxPages && result.poiList.pois.length > 0){
+            fetchPage(pageIndex + 1, false);
+          } else {
+            resolve(all);
+          }
+        } else if (!isRetry){
+          /* 第一次失败先别急着认输——高德接口偶尔会因为瞬时并发被限流，
+             隔 400ms 重试一次，多数情况下第二次就能成功 */
+          console.warn('[吃喝玩乐分类] 第 ' + pageIndex + ' 页查询失败，status=' + status + '，result.info=' + (result && result.info) + '，300ms 后重试一次');
+          setTimeout(function(){ fetchPage(pageIndex, true); }, 400);
+        } else {
+          console.warn('[吃喝玩乐分类] 重试后仍然失败，type=' + types + '，放弃这一类，本次返回已拿到的 ' + all.length + ' 条');
+          resolve(all);
+        }
+      });
+    }
+    fetchPage(1, false);
+  });
+}
+
+/* ---------- 吃喝玩乐分类：以这个地点自己的坐标为圆心搜索。
+   商场给四类，单点餐厅/饮品只给一类"附近同类"。
+   —— 关键修复迭代二：改成"错峰并发"而不是"排队等待"。
+      最早四类是 Promise.all 同时发起，瞬间并发量太高，容易撞上高德接口
+      限流，个别分类被静默限流成空结果；改成完全排队（一类查完再查下一类）
+      虽然稳了，但四类叠加起来的等待时间明显变长，用户反馈"查太久了"。
+      现在改成：四类依然是并发跑的（不用等上一类查完整、翻完所有页才开始
+      下一类），只是各自的*起始时间*错开 150ms——既避免了瞬间同时炸出去
+      的并发洪峰（大幅降低撞限流的概率），又比完全排队快得多，因为大部分
+      时间里其实有 2~4 类是同时在跑的，只是先后差了几百毫秒起步。 ---------- */
+function fetchCategoryHighlights(poi){
+  if (poi._highlightsCache) return Promise.resolve(poi._highlightsCache);
+  var cats = poi.isMall
+    ? [
+        { label:'美食',     icon:'tools-kitchen-2', types:'餐饮服务' },
+        { label:'饮料咖啡', icon:'coffee',          types:'咖啡厅|茶艺馆|冷饮店' },
+        { label:'休闲玩乐', icon:'heart',           types:'休闲娱乐服务' },
+        { label:'购物',     icon:'shopping-cart',   types:'购物服务' }
+      ]
+    : [
+        { label:'附近同类推荐', icon: poi.iconName, types: poi.isDrink ? '咖啡厅|茶艺馆|冷饮店' : '餐饮服务' }
+      ];
+  var radius = poi.isMall ? 400 : 500;
+  var STAGGER_MS = 150; /* 每一类的起始时间依次错开这么多毫秒，不是完全同时、也不是排队等待 */
+
+  var promises = cats.map(function(c, i){
+    return new Promise(function(resolve){
+      setTimeout(function(){
+        resolve(fetchAllPoisForHighlights(poi.lat, poi.lng, c.types, radius));
+      }, i * STAGGER_MS);
+    });
+  });
+
+  return Promise.all(promises).then(function(results){
+    var out = cats.map(function(c, i){
+      var list = (results[i] || [])
+        .filter(function(p){ return p.name && p.name !== poi.name; })
+        .map(function(p){
+          /* 把高德原始返回的地址/电话/评分/坐标都留着，不再只挑
+             name/typeStr/dist 三个字段——二次展开要用到这些。
+             地址如果本来就在商场里，高德通常会把"XX层"写进 address
+             里（比如"...优越时代广场B2层"），原样展示即可，不用额外解析楼层。 */
+          return {
+            name: p.name,
+            typeStr: p.type || c.label,
+            dist: Math.round(AMap.GeometryUtil.distance([poi.lng, poi.lat], [p.location.lng, p.location.lat])),
+            lat: p.location.lat,
+            lng: p.location.lng,
+            address: p.address || '',
+            tel: p.tel || '',
+            biz_ext: p.biz_ext || null
+          };
+        })
+        .sort(function(a, b){ return a.dist - b.dist; });
+      return { label: c.label, icon: c.icon, list: list };
+    });
+    poi._highlightsCache = out;
+    return out;
+  }).catch(function(){
+    return [];
+  });
+}
+
+/* ---------- 二次展开：某个分类小店行本身的简单详情 + 高德导航 ---------- */
+function buildSubDetailContent(p){
+  var rows = '';
+  if (p.address){
+    rows += '<div class="fc-back-row"><span class="fc-ico">📍</span><span>' + splitEscapeHtml(p.address) + '</span></div>';
+  }
+  if (p.tel){
+    rows += '<div class="fc-back-row"><span class="fc-ico">📞</span><span>' + splitEscapeHtml(p.tel) + '</span></div>';
+  }
+  if (p.biz_ext && p.biz_ext.rating){
+    rows += '<div class="fc-back-row"><span class="fc-ico">⭐</span><span>评分 ' + p.biz_ext.rating + '</span></div>';
+  }
+  if (p.biz_ext && p.biz_ext.cost){
+    rows += '<div class="fc-back-row"><span class="fc-ico">💰</span><span>人均 ¥' + p.biz_ext.cost + '</span></div>';
+  }
+  if (!rows){
+    rows = '<div class="fc-back-empty">高德暂时没有这家店更多的资料。</div>';
+  }
+  return rows + buildPlatformLinksHtml(p); /* p 自带 lat/lng/name，直接就能拼高德导航链接 */
+}
+function toggleHlSubDetail(row, p){
+  var panel = row.nextElementSibling;
+  if (panel && panel.classList.contains('poi-sub-detail')){
+    var opening = panel.style.display === 'none';
+    panel.style.display = opening ? 'block' : 'none';
+    row.classList.toggle('expanded', opening);
+    return;
+  }
+  panel = document.createElement('div');
+  panel.className = 'poi-sub-detail';
+  panel.innerHTML = buildSubDetailContent(p);
+  row.classList.add('expanded');
+  row.insertAdjacentElement('afterend', panel);
+}
+
+/* 用原生 <details>/<summary> 做分类折叠；每一行小店自己也能二次展开。
+   关键修复：不再拼 HTML 字符串再整块塞进去，而是直接创建 DOM 节点、
+   把每个 p 对象通过闭包绑定在它自己的行上——这样无论外层嵌套了多少层
+   展开面板，点哪一行永远对应哪一个 poi，不会像"数第几个"那样
+   被其他已展开的面板干扰（这正是"点第二个商场变成别的商场"的病根：
+   之前用 querySelectorAll('.poi-card') 数索引，一旦页面上有别的
+   已展开面板插入了额外的 .poi-card，索引就全乱了）。
+   每一行都 stopPropagation，点击不会冒泡去触发外层卡片的翻面/展开。 */
+function buildHighlightsEl(poi, cats){
+  var container = document.createElement('div');
+  container.className = 'fc-highlights';
+  var meta = poiCatMeta(poi);
+  var any = false;
+
+  cats.forEach(function(c){
+    if (!c.list || c.list.length === 0) return;
+    any = true;
+
+    var section = document.createElement('details');
+    section.className = 'hl-section';
+
+    var summary = document.createElement('summary');
+    summary.className = 'hl-head';
+    summary.innerHTML =
+      '<span class="hl-head-icon" style="color:' + meta.color + ';">' + getIconHtml(c.icon) + '</span>' +
+      '<span class="hl-head-label">' + c.label + '</span>' +
+      '<span class="hl-head-count">' + c.list.length + '</span>' +
+      '<span class="hl-head-chevron">›</span>';
+    section.appendChild(summary);
+
+    var body = document.createElement('div');
+    body.className = 'hl-body';
+    c.list.forEach(function(p){
+      var row = document.createElement('div');
+      row.className = 'poi-card';
+      row.innerHTML =
+        '<div class="poi-icon" style="background:' + meta.bg + ';color:' + meta.color + ';">' + getIconHtml(c.icon) + '</div>' +
+        '<div class="poi-info">' +
+          '<div class="poi-name">' + splitEscapeHtml(p.name) + '</div>' +
+          '<div class="poi-sub">' + p.typeStr + ' · 距这里约 ' + p.dist + ' 米</div>' +
+        '</div>';
+      row.addEventListener('click', function(e){
+        e.stopPropagation();
+        toggleHlSubDetail(row, p);
+      });
+      body.appendChild(row);
+    });
+    section.appendChild(body);
+    container.appendChild(section);
+  });
+
+  if (!any){
+    container.innerHTML = '<div class="fc-back-empty">附近暂时没搜到更细的分类信息，去了现场逛逛说不定有惊喜～</div>';
+  }
+  return container;
+}
+
+/* ---------- 详情内容的 HTML（基础信息部分：地址/电话/评分/人均） ---------- */
+function buildPoiDetailHtml(poi, detail){
+  var meta = poiCatMeta(poi);
+  var rows = '';
+
+  if (detail && detail.address){
+    rows += '<div class="fc-back-row"><span class="fc-ico">📍</span><span>' + splitEscapeHtml(detail.address) + '</span></div>';
+  }
+  if (detail && detail.tel){
+    rows += '<div class="fc-back-row"><span class="fc-ico">📞</span><span>' + splitEscapeHtml(detail.tel) + '</span></div>';
+  }
+  if (detail && detail.biz_ext){
+    if (detail.biz_ext.rating){
+      rows += '<div class="fc-back-row"><span class="fc-ico">⭐</span><span>评分 ' + detail.biz_ext.rating + '</span></div>';
+    }
+    if (detail.biz_ext.cost){
+      rows += '<div class="fc-back-row"><span class="fc-ico">💰</span><span>人均 ¥' + detail.biz_ext.cost + '</span></div>';
+    }
+  }
+  if (detail && detail.type){
+    rows += '<div class="fc-back-row"><span class="fc-ico">🏷</span><span>' + splitEscapeHtml(detail.type) + '</span></div>';
+  }
+  if (!rows){
+    rows = '<div class="fc-back-empty">高德地图暂时没有收录这里的基础资料，下面的吃喝玩乐推荐仍然可用。</div>';
+  }
+
+  return (
+    '<span class="fc-back-tag" style="color:' + meta.color + ';background:' + meta.bg + ';">' + meta.label + '</span>' +
+    '<div class="fc-back-name">' + splitEscapeHtml(poi.name) + '</div>' +
+    '<div class="fc-back-dist">距中点约 ' + poi.dist + ' 米</div>' +
+    rows
+  );
+}
+
+/* ---------- 组装完整背面内容：基础信息 + 吃喝玩乐（DOM 节点）+ 高德导航按钮 ---------- */
+function renderPoiFullBack(poi, targetEl){
+  targetEl.innerHTML = '<div class="fc-back-loading"><div class="spinner"></div>正在查这里都有什么…</div>';
+  Promise.all([fetchPoiFullDetail(poi), fetchCategoryHighlights(poi)]).then(function(res){
+    var detail = res[0], cats = res[1];
+    targetEl.innerHTML = '';
+    var infoWrap = document.createElement('div');
+    infoWrap.style.flex = '1';
+    infoWrap.style.overflowY = 'auto';
+    infoWrap.innerHTML = buildPoiDetailHtml(poi, detail);
+    infoWrap.appendChild(buildHighlightsEl(poi, cats));
+    targetEl.appendChild(infoWrap);
+    var linkWrap = document.createElement('div');
+    linkWrap.innerHTML = buildPlatformLinksHtml(poi);
+    targetEl.appendChild(linkWrap.firstElementChild);
+  }).catch(function(){
+    targetEl.innerHTML = '';
+    var infoWrap = document.createElement('div');
+    infoWrap.style.flex = '1';
+    infoWrap.style.overflowY = 'auto';
+    infoWrap.innerHTML = buildPoiDetailHtml(poi, {});
+    targetEl.appendChild(infoWrap);
+    var linkWrap = document.createElement('div');
+    linkWrap.innerHTML = buildPlatformLinksHtml(poi);
+    targetEl.appendChild(linkWrap.firstElementChild);
+  });
+}
+
+/* ---------- 覆盖：滑卡渲染，改成翻转卡结构 ---------- */
+function renderSwipeStack(){
+  var stage = document.getElementById('swipeStage');
+  stage.innerHTML = '';
+  document.getElementById('swipeProgress').textContent =
+    Math.min(swipeIndex + 1, swipeDeck.length) + ' / ' + swipeDeck.length;
+
+  if (swipeIndex >= swipeDeck.length){ finishSwipe(); return; }
+
+  var visible = swipeDeck.slice(swipeIndex, swipeIndex + 3).reverse();
+  visible.forEach(function(poi, revIdx){
+    var stackPos = visible.length - 1 - revIdx;
+    var meta = poiCatMeta(poi);
+    var card = document.createElement('div');
+    card.className = 'fc-card';
+    card.style.zIndex = 10 - stackPos;
+    card.style.transform = 'translateY(' + (stackPos * 10) + 'px) scale(' + (1 - stackPos * 0.04) + ')';
+    card.innerHTML =
+      '<div class="fc-inner">' +
+        '<div class="fc-face fc-front">' +
+          '<div class="stamp stamp-like">心动</div>' +
+          '<div class="stamp stamp-pass">跳过</div>' +
+          '<div class="swipe-card-icon" style="background:' + meta.bg + ';color:' + meta.color + ';">' + getIconHtml(poi.iconName) + '</div>' +
+          '<div class="swipe-card-body">' +
+            '<div class="swipe-card-tag" style="color:' + meta.color + ';background:' + meta.bg + ';">' + meta.label + '</div>' +
+            '<div class="swipe-card-name">' + splitEscapeHtml(poi.name) + '</div>' +
+            '<div class="swipe-card-dist">距中点约 ' + poi.dist + ' 米</div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="fc-face fc-back"><div class="fc-back-loading"><div class="spinner"></div>正在查详情…</div></div>' +
+      '</div>';
+    if (stackPos === 0) bindFlipCard(card, poi);
+    stage.appendChild(card);
+  });
+}
+
+/* ---------- 覆盖：顶部卡片的手势 —— 轻点=翻面，拖动过阈值=喜欢/跳过 ---------- */
+function bindFlipCard(card, poi){
+  var inner = card.querySelector('.fc-inner');
+  var backFace = card.querySelector('.fc-back');
+  var startX = 0, startY = 0, curX = 0, curY = 0, dragging = false, moved = false;
+  var detailLoaded = false;
+
+  function onDown(e){
+    dragging = true; moved = false; curX = 0; curY = 0;
+    card.style.transition = 'none';
+    startX = e.clientX; startY = e.clientY;
+  }
+  function onMove(e){
+    if (!dragging) return;
+    curX = e.clientX - startX;
+    curY = e.clientY - startY;
+    if (Math.abs(curX) > 6 || Math.abs(curY) > 6) moved = true;
+    var rot = curX / 12;
+    card.style.transform = 'translate(' + curX + 'px, ' + curY + 'px) rotate(' + rot + 'deg)';
+    var ratio = Math.min(Math.abs(curX) / 120, 1);
+    var likeStamp = card.querySelector('.stamp-like');
+    var passStamp = card.querySelector('.stamp-pass');
+    if (likeStamp && passStamp){
+      if (curX > 0){ likeStamp.style.opacity = ratio; passStamp.style.opacity = 0; }
+      else { passStamp.style.opacity = ratio; likeStamp.style.opacity = 0; }
+    }
+  }
+  function onUp(){
+    if (!dragging) return;
+    dragging = false;
+    card.style.transition = 'transform .3s ease, opacity .3s ease';
+    if (curX > 110){ flyOutCardEl(card, 1); return; }
+    if (curX < -110){ flyOutCardEl(card, -1); return; }
+    card.style.transform = '';
+    var likeStamp = card.querySelector('.stamp-like');
+    var passStamp = card.querySelector('.stamp-pass');
+    if (likeStamp) likeStamp.style.opacity = 0;
+    if (passStamp) passStamp.style.opacity = 0;
+    /* 翻面统一交给下面的 click 监听处理，这里只管拖拽/飞出 ——
+       之前把翻面也放在这里，会跟 click 监听同一次点击各触发一遍，
+       变成"刚翻过去又被翻回来"，看起来就像翻不动。 */
+  }
+
+  card.addEventListener('pointerdown', function(e){
+    /* 复制按钮、平台链接、分类折叠标题等交互元素上按下时，完全不启动卡片手势，
+       否则 setPointerCapture 会把后续事件（含 click）劫持到卡片上。 */
+    if (e.target.closest && e.target.closest('.copy-name-btn, .fc-link-btn, a, button, summary, .hl-section')) return;
+    /* 背面只负责滚动和点按钮，不再启用拖拽手势 */
+    if (inner.classList.contains('flipped')) return;
+    card.setPointerCapture(e.pointerId);
+    onDown(e);
+  });
+  card.addEventListener('pointermove', onMove);
+  card.addEventListener('pointerup', onUp);
+  card.addEventListener('pointercancel', onUp);
+
+  /* 唯一负责翻面的地方：正面轻点 = 翻到背面；背面点空白 = 翻回正面。
+     用 moved 兜底——只有"按下几乎没移动"的轻点才会触发，
+     真正的拖拽飞出不会误触发翻面。
+     分类折叠标题（<summary>）点击后事件会冒泡到这里，之前漏排除，
+     导致"点展开箭头"被误判成"点空白翻回正面"——这里补上排除。 */
+  card.addEventListener('click', function(e){
+    if (e.target.closest && e.target.closest('.copy-name-btn, .fc-link-btn, a, button, summary, .hl-section')) return;
+    if (moved) return;
+    inner.classList.toggle('flipped');
+    if (inner.classList.contains('flipped') && !detailLoaded){
+      detailLoaded = true;
+      renderPoiFullBack(poi, backFace);
+    }
+  });
+}
+
+/* ---------- 覆盖：底部 ✕ / ♥ 按钮 与 飞出逻辑，改成认 .fc-card ---------- */
+function swipeAction(dir){
+  if (swipeIndex >= swipeDeck.length) return;
+  var topCard = document.querySelector('#swipeStage .fc-card:last-child');
+  if (!topCard) return;
+  topCard.style.transition = 'transform .3s ease, opacity .3s ease';
+  flyOutCardEl(topCard, dir);
+}
+function flyOutTopCard(dir){
+  var topCard = document.querySelector('#swipeStage .fc-card:last-child');
+  if (!topCard) return;
+  flyOutCardEl(topCard, dir);
+}
+function flyOutCardEl(card, dir){
+  var poi = swipeDeck[swipeIndex];
+  card.style.transform = 'translate(' + (dir * 520) + 'px, 0) rotate(' + (dir * 28) + 'deg)';
+  card.style.opacity = '0';
+  if (dir > 0 && poi) likedPois.push(poi);
+  swipeIndex++;
+  setTimeout(renderSwipeStack, 260);
+}
+
+/* ---------- 心动清单点开：底部弹层看详情，不再是整页跳转 ---------- */
+function openPoiModal(poi){
+  closePoiModal();
+  var host = document.querySelector('.view.show .content') || document.getElementById('screen');
+  var backdrop = document.createElement('div');
+  backdrop.className = 'poi-modal-backdrop';
+  backdrop.id = 'poiModalBackdrop';
+  backdrop.addEventListener('click', function(e){ if (e.target === backdrop) closePoiModal(); });
+
+  var card = document.createElement('div');
+  card.className = 'poi-modal-card';
+  card.innerHTML =
+    '<button class="poi-modal-close" id="poiModalCloseBtn">×</button>' +
+    '<div style="clear:both;"></div>' +
+    '<div id="poiModalBody"><div class="fc-back-loading"><div class="spinner"></div>正在查详情…</div></div>';
+
+  backdrop.appendChild(card);
+  host.style.position = host.style.position || 'relative';
+  host.appendChild(backdrop);
+
+  document.getElementById('poiModalCloseBtn').addEventListener('click', closePoiModal);
+
+  var body = document.getElementById('poiModalBody');
+  body.style.display = 'flex';
+  body.style.flexDirection = 'column';
+  renderPoiFullBack(poi, body);
+}
+function closePoiModal(){
+  var el = document.getElementById('poiModalBackdrop');
+  if (el) el.remove();
+}
+
+/* 给"心动清单"里的每张卡补点击 —— 用 MutationObserver 监听，
+   不改动生成这些卡片的 finishSwipe 函数本身 */
+(function(){
+  var likedListEl = document.getElementById('fbLikedList');
+  if (!likedListEl) return;
+  function bindCards(){
+    var cards = likedListEl.querySelectorAll('.poi-card');
+    cards.forEach(function(card, i){
+      if (card.dataset.pdBound) return;
+      card.dataset.pdBound = '1';
+      card.style.cursor = 'pointer';
+      card.addEventListener('click', function(){
+        var poi = (typeof likedPois !== 'undefined' ? likedPois : [])[i];
+        if (poi) openPoiModal(poi);
+      });
+    });
+  }
+  new MutationObserver(bindCards).observe(likedListEl, { childList: true });
+  bindCards();
+})();
+
+/* ============================================================
+   复制按钮：出现在任何地点名称右边 —— 商圈、餐厅、奶茶……不管是
+   主结果列表(.poi-name)还是翻面详情标题(.fc-back-name)统统覆盖。
+   用 MutationObserver 监听整个 #screen，谁冒出来就给谁装上按钮，
+   不需要一个个页面单独接线；已经装过的元素用 dataset 标记跳过，
+   避免重复包裹或死循环。
+   ============================================================ */
+function copyTextToClipboard(text){
+  if (navigator.clipboard && navigator.clipboard.writeText){
+    return navigator.clipboard.writeText(text).catch(function(){ return legacyCopy(text); });
+  }
+  return legacyCopy(text);
+}
+function legacyCopy(text){
+  return new Promise(function(resolve){
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.focus(); ta.select();
+    try { document.execCommand('copy'); } catch(e){}
+    document.body.removeChild(ta);
+    resolve();
+  });
+}
+
+function injectCopyButtons(){
+  document.querySelectorAll('.poi-name, .fc-back-name').forEach(function(nameEl){
+    if (nameEl.dataset.copyBound) return;
+    nameEl.dataset.copyBound = '1';
+
+    var fullText = nameEl.textContent.trim();
+    if (!fullText) return;
+
+    nameEl.textContent = '';
+    var textSpan = document.createElement('span');
+    textSpan.className = 'copy-name-text';
+    textSpan.textContent = fullText;
+
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'copy-name-btn';
+    btn.title = '复制名称';
+    btn.setAttribute('aria-label', '复制名称');
+    btn.textContent = '⧉';
+    btn.addEventListener('click', function(e){
+      e.stopPropagation(); /* 别把点击冒泡到卡片翻面 / 打开弹层等逻辑上 */
+      copyTextToClipboard(fullText).then(function(){
+        btn.textContent = '✓';
+        btn.classList.add('copied');
+        setTimeout(function(){
+          btn.textContent = '⧉';
+          btn.classList.remove('copied');
+        }, 1200);
+      });
+    });
+
+    nameEl.appendChild(textSpan);
+    nameEl.appendChild(btn);
+  });
+}
+new MutationObserver(injectCopyButtons).observe(document.getElementById('screen'), { childList: true, subtree: true });
+injectCopyButtons();
+
+/* ============================================================
+   主结果列表（"为您推荐中心点附近的商圈/餐饮"）也能直接展开看详情，
+   不用进滑一滑才能看到 —— 复用同一套 renderPoiFullBack 渲染。
+   ---- 怎么找到每一行对应的 poi 对象 ----
+   #poiList 里的行是块一自己的 calculateRealMidpoint 生成的，
+   finalPois 是它内部的局部变量，本块拿不到；但它同时把同样这批
+   （3 个商圈 + 8 个餐饮，顺序一致，只是没有分隔线）赋给了全局的
+   window.foodSwipeDeck 给美食盲盒用 —— 两边用的是同一批、同一顺序
+   的数据，所以按"第几个 .poi-card"对应"foodSwipeDeck 里第几个"
+   即可精确匹配，不需要改动块一的任何代码。
+   ---- 之前的 bug ----
+   算"第几个"时用的是 querySelectorAll('.poi-card')，这个会扫描
+   整个子树——一旦某个商场的展开面板里已经有"美食/饮料咖啡"这些
+   分类小店（它们也是 .poi-card），就会被一起数进去，导致后面
+   商场的索引全部错位：要么对不上号（展开成了别的商场），要么
+   算出的索引超出范围（第二个商场怎么点都展开不了）。
+   现在只数 #poiList 的"直接子元素"，展开面板/分类小店都嵌套在
+   更深的层级里，不会被数进来，索引永远准确。 ============================================================ */
+(function(){
+  var poiListEl = document.getElementById('poiList');
+  if (!poiListEl) return;
+
+  poiListEl.addEventListener('click', function(e){
+    if (e.target.closest && e.target.closest('.copy-name-btn, a, button')) return;
+    var card = e.target.closest('.poi-card');
+    if (!card) return;
+    /* 只处理主列表的直接行；分类小店嵌套在展开面板深处，
+       且它们自己的点击已经 stopPropagation，理论上到不了这里，
+       这行只是多一层保险 */
+    if (card.parentElement !== poiListEl) return;
+
+    var topCards = Array.prototype.filter.call(poiListEl.children, function(el){
+      return el.classList && el.classList.contains('poi-card');
+    });
+    var idx = topCards.indexOf(card);
+    var poi = (window.foodSwipeDeck || [])[idx];
+    if (!poi) return;
+
+    var panel = card.nextElementSibling;
+    if (panel && panel.classList.contains('poi-expand-panel')){
+      var opening = panel.style.display === 'none';
+      panel.style.display = opening ? 'block' : 'none';
+      card.classList.toggle('expanded', opening);
+      return;
+    }
+
+    panel = document.createElement('div');
+    panel.className = 'poi-expand-panel';
+    card.classList.add('expanded');
+    card.insertAdjacentElement('afterend', panel);
+    renderPoiFullBack(poi, panel);
+  });
+})();
+
+</script>
+
+<script>
+/* ============================================================
+   行程账本 —— 多人多笔支出，自动算出最少转账方案（独立第五段 script）
+   —— 和"闪电分账"（一顿饭的菜品认领）是两码事：这个是一趟行程里
+      好几笔支出、好几个人轮流付钱，最后要算出"谁转给谁"最省事。
+   —— 支持多个行程同时存在：每个行程自己的名字/成员/支出互不干扰，
+      首页最下面"进行中的行程"列出所有行程，点一个直接跳进它的
+      "记支出"那一步（不用重新走一遍加人流程）；点首页的"行程账本"
+      大卡片则是新建一趟行程，从"同行的人"这一步开始。
+   —— 只再扩展一次 hideAllViews（多隐藏这一个新页面），
+      不改动前面任何函数。
+   ============================================================ */
+
+Object.assign(SVG_PATHS, {
+  'users': 'M9 7m-4 0a4 4 0 1 0 8 0a4 4 0 1 0 -8 0 M3 21v-2a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4v2 M16 3.13a4 4 0 0 1 0 7.75 M21 21v-2a4 4 0 0 0 -3 -3.85',
+  'scale': 'M7 20l10 0 M6 6l6 -1l6 1 M3 6l3 -1l3 1 M15 6l3 -1l3 1 M12 3l0 17 M20 6c0 2 -1.5 3 -3 3s-3 -1 -3 -3c1.667 -1.333 3 -2 4 -3c1 1 1.667 1.667 3 3z M10 6c0 2 -1.5 3 -3 3s-3 -1 -3 -3c1.667 -1.333 3 -2 4 -3c1 1 1.667 1.667 3 3z'
+});
+
+function hideAllViews(){
+  document.getElementById('viewHome').classList.remove('show');
+  document.getElementById('viewMidpoint').classList.remove('show');
+  document.getElementById('viewSplit').classList.remove('show');
+  document.getElementById('viewFoodSwipe').classList.remove('show');
+  document.getElementById('viewGroupLedger').classList.remove('show');
+}
+
+var GL_COLORS = ['#0F3D36','#B8842A','#3E6E8E','#A8506E','#C05B3C','#4C5C5B'];
+var GL_TRIPS = [];          /* {id, name, members:[], expenses:[], nextMemberId, nextExpenseId} */
+var glNextTripId = 1;
+var glCurrentTripId = null;
+var glSelectedPayerId = null;
+var glSelectedSplitIds = [];
+
+function glCurrentTrip(){
+  return GL_TRIPS.find(function(t){ return t.id === glCurrentTripId; }) || null;
+}
+
+/* ---------- 首页：进行中的行程列表 ---------- */
+function glRenderHomeTripList(){
+  /* 修复"刚打开就有 0人·0笔支出"的幽灵行程：
+     点"行程账本"卡片会先建一个空行程，如果用户什么都没填就退出来，
+     这个空壳会留在列表里。渲染前先把"没名字、没人、没支出"的
+     完全空白行程清理掉，只展示真正开始记录了的行程。 */
+  GL_TRIPS = GL_TRIPS.filter(function(t){
+    return (t.name && t.name.trim() !== '') || t.members.length > 0 || t.expenses.length > 0;
+  });
+  var label = document.getElementById('glHomeTripsLabel');
+  var list = document.getElementById('glHomeTripsList');
+  if (!label || !list) return;
+  if (GL_TRIPS.length === 0){
+    label.style.display = 'none';
+    list.style.display = 'none';
+    return;
+  }
+  label.style.display = 'block';
+  list.style.display = 'block';
+  list.innerHTML = '';
+  GL_TRIPS.forEach(function(trip){
+    var totalCents = trip.expenses.reduce(function(s, e){ return s + e.amountCents; }, 0);
+    var card = document.createElement('div');
+    card.className = 'gl-trip-card';
+    card.innerHTML =
+      '<div class="gl-trip-icon">' + getIconHtml('ticket') + '</div>' +
+      '<div class="gl-trip-info">' +
+        '<div class="gl-trip-name">' + splitEscapeHtml(trip.name) + '</div>' +
+        '<div class="gl-trip-sub">' + trip.members.length + ' 人 · ' + trip.expenses.length + ' 笔支出</div>' +
+      '</div>' +
+      '<div class="gl-trip-total">¥' + (totalCents / 100).toFixed(2) + '</div>';
+    card.addEventListener('click', function(){ openGroupLedgerTrip(trip.id); });
+    list.appendChild(card);
+  });
+}
+
+/* ---------- 页面导航 ---------- */
+function glGoHome(){
+  hideAllViews();
+  document.getElementById('viewHome').classList.add('show');
+  document.getElementById('screen').scrollTop = 0;
+  glRenderHomeTripList();
+}
+function glGoStep(n){
+  document.getElementById('glPane1').classList.toggle('show', n === 1);
+  document.getElementById('glPane2').classList.toggle('show', n === 2);
+  document.getElementById('glPane3').classList.toggle('show', n === 3);
+  for (var i = 1; i <= 3; i++){
+    var node = document.getElementById('glSn' + i);
+    node.classList.toggle('active', i === n);
+    node.classList.toggle('done', i < n);
+  }
+  document.getElementById('glSl1').classList.toggle('done', n > 1);
+  document.getElementById('glSl2').classList.toggle('done', n > 2);
+  document.getElementById('screen').scrollTop = 0;
+}
+
+/* 首页大卡片"行程账本" = 新建一趟行程，从第一步开始 */
+function openGroupLedger(){
+  var trip = { id: glNextTripId++, name: '', members: [], expenses: [], nextMemberId: 1, nextExpenseId: 1 };
+  GL_TRIPS.push(trip);
+  glCurrentTripId = trip.id;
+  hideAllViews();
+  document.getElementById('viewGroupLedger').classList.add('show');
+  document.getElementById('screen').scrollTop = 0;
+  document.getElementById('glTripName').value = '';
+  glSelectedPayerId = null;
+  glSelectedSplitIds = [];
+  glGoStep(1);
+  glRenderMemberList();
+}
+/* 首页"进行中的行程"点某一条 = 直接跳进这趟行程的"记支出" */
+function openGroupLedgerTrip(tripId){
+  glCurrentTripId = tripId;
+  var trip = glCurrentTrip();
+  if (!trip) return;
+  hideAllViews();
+  document.getElementById('viewGroupLedger').classList.add('show');
+  document.getElementById('screen').scrollTop = 0;
+  document.getElementById('glTripName').value = trip.name;
+  if (glSelectedPayerId === null || !trip.members.some(function(m){ return m.id === glSelectedPayerId; })){
+    glSelectedPayerId = trip.members.length ? trip.members[0].id : null;
+  }
+  glSelectedSplitIds = trip.members.map(function(m){ return m.id; });
+  glRenderPayerBar();
+  glRenderSplitBar();
+  glRenderExpenseList();
+  glGoStep(2);
+}
+
+/* ---------- Step 1：行程名字 + 同行的人 ---------- */
+document.getElementById('glTripName').addEventListener('input', function(){
+  var trip = glCurrentTrip();
+  if (trip) trip.name = this.value.trim();
+});
+
+function glAddMember(){
+  var trip = glCurrentTrip();
+  if (!trip) return;
+  var input = document.getElementById('glMemberName');
+  var name = input.value.trim();
+  if (!name){ input.focus(); return; }
+  if (trip.members.some(function(m){ return m.name === name; })){
+    alert('已经有一个叫「' + name + '」的人了，换个名字区分一下吧（比如加个姓）。');
+    return;
+  }
+  trip.members.push({ id: trip.nextMemberId++, name: name, color: GL_COLORS[trip.members.length % GL_COLORS.length] });
+  input.value = '';
+  input.focus();
+  glRenderMemberList();
+}
+function glDeleteMember(id){
+  var trip = glCurrentTrip();
+  if (!trip) return;
+  var usedAsPayer = trip.expenses.some(function(e){ return e.payerId === id; });
+  var usedInSplit = trip.expenses.some(function(e){ return e.splitIds.indexOf(id) > -1; });
+  if (usedAsPayer || usedInSplit){
+    alert('这个人已经在支出记录里了，先去"记支出"那一步把相关支出删掉或改掉，再来移除。');
+    return;
+  }
+  trip.members = trip.members.filter(function(m){ return m.id !== id; });
+  glRenderMemberList();
+}
+function glRenderMemberList(){
+  var trip = glCurrentTrip();
+  var list = document.getElementById('glMemberList');
+  list.innerHTML = '';
+  if (!trip || trip.members.length === 0){
+    list.innerHTML = '<div class="m-empty">还没有人，从上面加第一个</div>';
+    return;
+  }
+  trip.members.forEach(function(m){
+    var el = document.createElement('div');
+    el.className = 'm-item';
+    el.innerHTML =
+      '<span class="d-ava" style="width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:#fff;background:' + m.color + ';flex-shrink:0;">' + m.name[0] + '</span>' +
+      '<span class="m-name">' + splitEscapeHtml(m.name) + '</span>' +
+      '<button class="m-del" aria-label="移除">×</button>';
+    el.querySelector('.m-del').addEventListener('click', function(){ glDeleteMember(m.id); });
+    list.appendChild(el);
+  });
+}
+document.getElementById('glBtnAddMember').addEventListener('click', glAddMember);
+document.getElementById('glMemberName').addEventListener('keydown', function(e){ if (e.key === 'Enter') glAddMember(); });
+
+document.getElementById('glBtnToStep2').addEventListener('click', function(){
+  var trip = glCurrentTrip();
+  if (!trip) return;
+  if (!trip.name){ trip.name = '未命名行程 ' + trip.id; }
+  if (trip.members.length < 2){ alert('至少要有 2 个人才能算谁转给谁～'); return; }
+  if (glSelectedPayerId === null || !trip.members.some(function(m){ return m.id === glSelectedPayerId; })){
+    glSelectedPayerId = trip.members[0].id;
+  }
+  glSelectedSplitIds = trip.members.map(function(m){ return m.id; }); /* 默认全员平摊 */
+  glRenderPayerBar();
+  glRenderSplitBar();
+  glRenderExpenseList();
+  glGoStep(2);
+});
+document.getElementById('glBtnBackTo1').addEventListener('click', function(){ glGoStep(1); });
+
+/* ---------- Step 2：记支出 ---------- */
+function glRenderPayerBar(){
+  var trip = glCurrentTrip();
+  var bar = document.getElementById('glPayerBar');
+  bar.innerHTML = '';
+  if (!trip) return;
+  trip.members.forEach(function(m){
+    var chip = document.createElement('div');
+    chip.className = 'diner-chip' + (m.id === glSelectedPayerId ? ' on' : '');
+    chip.innerHTML = '<span class="d-ava" style="background:' + m.color + '">' + m.name[0] + '</span>' + splitEscapeHtml(m.name);
+    chip.onclick = function(){ glSelectedPayerId = m.id; glRenderPayerBar(); };
+    bar.appendChild(chip);
+  });
+}
+function glRenderSplitBar(){
+  var trip = glCurrentTrip();
+  var bar = document.getElementById('glSplitBar');
+  bar.innerHTML = '';
+  if (!trip) return;
+  trip.members.forEach(function(m){
+    var on = glSelectedSplitIds.indexOf(m.id) > -1;
+    var chip = document.createElement('div');
+    chip.className = 'diner-chip' + (on ? ' on' : '');
+    chip.innerHTML = '<span class="d-ava" style="background:' + m.color + '">' + m.name[0] + '</span>' + splitEscapeHtml(m.name);
+    chip.onclick = function(){
+      var idx = glSelectedSplitIds.indexOf(m.id);
+      if (idx > -1) glSelectedSplitIds.splice(idx, 1);
+      else glSelectedSplitIds.push(m.id);
+      glRenderSplitBar();
+    };
+    bar.appendChild(chip);
+  });
+}
+function glAddExpense(){
+  var trip = glCurrentTrip();
+  if (!trip) return;
+  var descEl = document.getElementById('glExpDesc');
+  var amountEl = document.getElementById('glExpAmount');
+  var desc = descEl.value.trim();
+  var amount = parseFloat(amountEl.value);
+  if (!desc){ descEl.focus(); return; }
+  if (!(amount > 0)){ amountEl.focus(); return; }
+  if (glSelectedPayerId === null){ alert('选一下这笔是谁付的钱'); return; }
+  if (glSelectedSplitIds.length === 0){ alert('至少要有一个人参与平摊这笔支出'); return; }
+  trip.expenses.push({
+    id: trip.nextExpenseId++,
+    desc: desc,
+    amountCents: Math.round(amount * 100),
+    payerId: glSelectedPayerId,
+    splitIds: glSelectedSplitIds.slice()
+  });
+  descEl.value = '';
+  amountEl.value = '';
+  descEl.focus();
+  glRenderExpenseList();
+}
+document.getElementById('glBtnAddExpense').addEventListener('click', glAddExpense);
+document.getElementById('glExpAmount').addEventListener('keydown', function(e){ if (e.key === 'Enter') glAddExpense(); });
+document.getElementById('glExpDesc').addEventListener('keydown', function(e){ if (e.key === 'Enter') document.getElementById('glExpAmount').focus(); });
+
+function glMemberById(id){
+  var trip = glCurrentTrip();
+  if (!trip) return null;
+  return trip.members.find(function(m){ return m.id === id; });
+}
+function glRenderExpenseList(){
+  var trip = glCurrentTrip();
+  var list = document.getElementById('glExpenseList');
+  list.innerHTML = '';
+  if (!trip || trip.expenses.length === 0){
+    list.innerHTML = '<div class="m-empty">还没有支出记录，从上面添加第一笔</div>';
+    return;
+  }
+  trip.expenses.forEach(function(e){
+    var payer = glMemberById(e.payerId);
+    var splitNames = e.splitIds.map(function(id){ var m = glMemberById(id); return m ? m.name : '?'; }).join('、');
+    var el = document.createElement('div');
+    el.className = 'm-item';
+    el.style.alignItems = 'flex-start';
+    el.innerHTML =
+      '<span class="d-ava" style="width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:#fff;background:' + (payer ? payer.color : '#999') + ';flex-shrink:0;margin-top:2px;">' + (payer ? payer.name[0] : '?') + '</span>' +
+      '<span class="m-name" style="white-space:normal;overflow:visible;">' +
+        splitEscapeHtml(e.desc) +
+        '<br><span style="font-size:11px;color:var(--ink-soft);font-weight:400;">' + (payer ? splitEscapeHtml(payer.name) : '?') + ' 付 · ' + splitEscapeHtml(splitNames) + ' 平摊</span>' +
+      '</span>' +
+      '<span class="m-price">¥' + (e.amountCents / 100).toFixed(2) + '</span>' +
+      '<button class="m-del" aria-label="删除">×</button>';
+    el.querySelector('.m-del').addEventListener('click', function(){
+      trip.expenses = trip.expenses.filter(function(x){ return x.id !== e.id; });
+      glRenderExpenseList();
+    });
+    list.appendChild(el);
+  });
+}
+
+/* ---------- Step 3：算清楚 —— 净额 + 贪心债务简化，得到最少转账笔数 ---------- */
+function glComputeSettlement(trip){
+  var balance = {};
+  trip.members.forEach(function(m){ balance[m.id] = 0; });
+  trip.expenses.forEach(function(e){
+    balance[e.payerId] = (balance[e.payerId] || 0) + e.amountCents;
+    var n = e.splitIds.length;
+    if (n === 0) return;
+    var base = Math.floor(e.amountCents / n);
+    var remainder = e.amountCents - base * n;
+    e.splitIds.forEach(function(id, i){
+      var share = base + (i < remainder ? 1 : 0);
+      balance[id] = (balance[id] || 0) - share;
+    });
+  });
+
+  var creditors = [], debtors = [];
+  Object.keys(balance).forEach(function(id){
+    var v = balance[id];
+    if (v > 0) creditors.push({ id: Number(id), amt: v });
+    else if (v < 0) debtors.push({ id: Number(id), amt: -v });
+  });
+  creditors.sort(function(a, b){ return b.amt - a.amt; });
+  debtors.sort(function(a, b){ return b.amt - a.amt; });
+
+  var transfers = [];
+  var ci = 0, di = 0;
+  while (ci < creditors.length && di < debtors.length){
+    var c = creditors[ci], d = debtors[di];
+    var amt = Math.min(c.amt, d.amt);
+    if (amt > 0) transfers.push({ from: d.id, to: c.id, amountCents: amt });
+    c.amt -= amt; d.amt -= amt;
+    if (c.amt <= 0) ci++;
+    if (d.amt <= 0) di++;
+  }
+  return { balance: balance, transfers: transfers };
+}
+
+document.getElementById('glBtnSettle').addEventListener('click', function(){
+  var trip = glCurrentTrip();
+  if (!trip) return;
+  if (trip.expenses.length === 0){ alert('还没有任何支出记录，先去加一笔。'); return; }
+  var result = glComputeSettlement(trip);
+
+  var totalCents = trip.expenses.reduce(function(s, e){ return s + e.amountCents; }, 0);
+  document.getElementById('glFinalTotal').textContent = '¥' + (totalCents / 100).toFixed(2);
+  document.getElementById('glFinalSub').textContent = trip.members.length + ' 人 · ' + trip.expenses.length + ' 笔支出';
+
+  var balanceList = document.getElementById('glBalanceList');
+  balanceList.innerHTML = '';
+  trip.members.forEach(function(m){
+    var net = result.balance[m.id] || 0;
+    var netClass = net > 0 ? 'owed' : (net < 0 ? 'owe' : 'even');
+    var netText = net > 0 ? '应收 ¥' + (net / 100).toFixed(2) : (net < 0 ? '应付 ¥' + (-net / 100).toFixed(2) : '刚好打平');
+    var row = document.createElement('div');
+    row.className = 'gl-balance-row';
+    row.innerHTML =
+      '<span class="s-ava" style="background:' + m.color + '">' + m.name[0] + '</span>' +
+      '<span class="gl-name">' + splitEscapeHtml(m.name) + '</span>' +
+      '<span class="gl-net ' + netClass + '">' + netText + '</span>';
+    balanceList.appendChild(row);
+  });
+
+  var transferList = document.getElementById('glTransferList');
+  transferList.innerHTML = '';
+  if (result.transfers.length === 0){
+    transferList.innerHTML = '<div class="m-empty">大家花的钱刚好一样多，不用转账～</div>';
+  } else {
+    result.transfers.forEach(function(t){
+      var from = glMemberById(t.from), to = glMemberById(t.to);
+      var row = document.createElement('div');
+      row.className = 'gl-transfer-row';
+      row.innerHTML =
+        '<span class="gl-t-ava" style="background:' + (from ? from.color : '#999') + '">' + (from ? from.name[0] : '?') + '</span>' +
+        '<span class="gl-t-name">' + (from ? splitEscapeHtml(from.name) : '?') + '</span>' +
+        '<span class="gl-arrow">' + getIconHtml('arrow-right') + '</span>' +
+        '<span class="gl-t-ava" style="background:' + (to ? to.color : '#999') + '">' + (to ? to.name[0] : '?') + '</span>' +
+        '<span class="gl-t-name">' + (to ? splitEscapeHtml(to.name) : '?') + '</span>' +
+        '<span class="gl-amt">¥' + (t.amountCents / 100).toFixed(2) + '</span>';
+      transferList.appendChild(row);
+    });
+  }
+
+  document.getElementById('glVerifyStrip').innerHTML =
+    getIconHtml('shield-check') + '共 ' + result.transfers.length + ' 笔转账，转完大家就都两清了';
+
+  glGoStep(3);
+});
+document.getElementById('glBtnBackTo2').addEventListener('click', function(){ glGoStep(2); });
+
+/* 首页初次加载时（此时还没有任何行程），先把区域隐藏好 */
+glRenderHomeTripList();
+</script>
+
+<script>
+/* ============================================================
+   协同组局房间（独立第六段 script，可同时存在多个房间）
+   —— 上一版把房间做成了"全局唯一一个"，用户反馈得对：
+      一个人完全可能同时在好几个组局房间里（朋友的婚礼局、
+      公司团建局……），首页大卡不该写死显示某一个房间的名字，
+      "进行中的房间"也该是独立的一个列表，跟"进行中的行程"分开——
+      房间和行程本来就是两个概念：房间是"一群人 + 一堆工具入口"，
+      行程账本只是房间里可能会用到的其中一个工具而已。
+   —— 这版把 ROOM（单例）改成 ROOMS（数组），每个房间自己的名字/
+      房间号/成员/绑定的行程互不干扰，跟"行程账本"支持多行程是
+      同一套思路（rmCurrentRoomId 对应 glCurrentTripId）。
+   ============================================================ */
+
+function hideAllViews(){
+  document.getElementById('viewHome').classList.remove('show');
+  document.getElementById('viewMidpoint').classList.remove('show');
+  document.getElementById('viewSplit').classList.remove('show');
+  document.getElementById('viewFoodSwipe').classList.remove('show');
+  document.getElementById('viewGroupLedger').classList.remove('show');
+  document.getElementById('viewRoom').classList.remove('show');
+}
+
+var ROOMS = [];             /* [{id, name, code, members:[], nextMemberId, tripId}] */
+var rmNextRoomId = 1;
+var rmCurrentRoomId = null;
+
+function rmCurrentRoom(){
+  return ROOMS.find(function(r){ return r.id === rmCurrentRoomId; }) || null;
+}
+
+/* —— 首页：进行中的房间列表 ——
+   房间卡片直接合并显示绑定账本的信息（几笔支出、总金额），
+   这个行程不再在下面"进行中的行程"里重复出现一张卡。 */
+function rmRenderHomeRoomList(){
+  var label = document.getElementById('rmHomeRoomsLabel');
+  var list = document.getElementById('rmHomeRoomsList');
+  if (!label || !list) return;
+  if (ROOMS.length === 0){
+    label.style.display = 'none';
+    list.style.display = 'none';
+    return;
+  }
+  label.style.display = 'block';
+  list.style.display = 'block';
+  list.innerHTML = '';
+  ROOMS.forEach(function(room){
+    var trip = room.tripId !== null
+      ? GL_TRIPS.find(function(t){ return t.id === room.tripId; })
+      : null;
+    var sub = room.members.length + ' 人在局 · 房号 ' + room.code;
+    var right = '';
+    if (trip && trip.expenses.length > 0){
+      var totalCents = trip.expenses.reduce(function(s, e){ return s + e.amountCents; }, 0);
+      sub = room.members.length + ' 人在局 · ' + trip.expenses.length + ' 笔支出 · 房号 ' + room.code;
+      right = '<div class="gl-trip-total">¥' + (totalCents / 100).toFixed(2) + '</div>';
+    }
+    var card = document.createElement('div');
+    card.className = 'rm-room-card';
+    card.innerHTML =
+      '<div class="rm-room-icon">' + getIconHtml('users') + '</div>' +
+      '<div class="rm-room-info">' +
+        '<div class="rm-room-name">' + splitEscapeHtml(room.name) + '</div>' +
+        '<div class="rm-room-sub">' + sub + '</div>' +
+      '</div>' + right;
+    card.addEventListener('click', function(){
+      rmCurrentRoomId = room.id;
+      hideAllViews();
+      document.getElementById('viewRoom').classList.add('show');
+      document.getElementById('screen').scrollTop = 0;
+      rmShowDash();
+    });
+    list.appendChild(card);
+  });
+}
+
+/* —— 覆盖行程账本的首页列表渲染：绑定了房间的行程不再单独展示，
+   避免同一个东西在"房间"和"行程"两栏各出现一张卡。
+   （后声明的同名函数覆盖全局绑定，和 hideAllViews 是同一套机制；
+   第五块底部启动时那次调用用的是老版本，无妨——那时两个列表都是空的） */
+function glRenderHomeTripList(){
+  /* 清掉"没名字、没人、没支出"的幽灵空行程 */
+  GL_TRIPS = GL_TRIPS.filter(function(t){
+    return (t.name && t.name.trim() !== '') || t.members.length > 0 || t.expenses.length > 0;
+  });
+  var label = document.getElementById('glHomeTripsLabel');
+  var list = document.getElementById('glHomeTripsList');
+  if (!label || !list) return;
+  /* 只展示不归属任何房间的独立行程 */
+  var standalone = GL_TRIPS.filter(function(t){
+    return !ROOMS.some(function(r){ return r.tripId === t.id; });
+  });
+  if (standalone.length === 0){
+    label.style.display = 'none';
+    list.style.display = 'none';
+    return;
+  }
+  label.style.display = 'block';
+  list.style.display = 'block';
+  list.innerHTML = '';
+  standalone.forEach(function(trip){
+    var totalCents = trip.expenses.reduce(function(s, e){ return s + e.amountCents; }, 0);
+    var card = document.createElement('div');
+    card.className = 'gl-trip-card';
+    card.innerHTML =
+      '<div class="gl-trip-icon">' + getIconHtml('ticket') + '</div>' +
+      '<div class="gl-trip-info">' +
+        '<div class="gl-trip-name">' + splitEscapeHtml(trip.name) + '</div>' +
+        '<div class="gl-trip-sub">' + trip.members.length + ' 人 · ' + trip.expenses.length + ' 笔支出</div>' +
+      '</div>' +
+      '<div class="gl-trip-total">¥' + (totalCents / 100).toFixed(2) + '</div>';
+    card.addEventListener('click', function(){ openGroupLedgerTrip(trip.id); });
+    list.appendChild(card);
+  });
+}
+
+function rmGoHome(){
+  rmReturnToRoom = false; /* 从房间的返回键回首页 = 明确离开房间上下文 */
+  hideAllViews();
+  document.getElementById('viewHome').classList.add('show');
+  document.getElementById('screen').scrollTop = 0;
+  if (typeof glRenderHomeTripList === 'function') glRenderHomeTripList();
+  rmRenderHomeRoomList();
+}
+
+/* ============================================================
+   上下文导航：从房间里进入某个工具（分账/中点/账本），
+   工具里的"返回"应该回到房间主页，而不是一竿子回到初始首页。
+   —— rmReturnToRoom 标记"当前工具是从房间打开的"；
+   —— 覆盖全局 goHome（分账、中点等所有返回键都调它）：
+      标记在且房间还存在 → 回房间主页；否则照常回首页
+      （顺带刷新首页的两个列表，这在原版 goHome 里是没有的）；
+   —— 标记的清除时机：房间自己的返回键（rmGoHome）、
+      新建房间（openRoomEntry）。从首页工具卡进入时不会设置标记，
+      所以不影响"首页 → 工具 → 返回首页"的原有路径。
+   ============================================================ */
+var rmReturnToRoom = false;
+
+function rmOpenTool(which){
+  rmReturnToRoom = true;
+  if (which === 'midpoint') openMidpoint();
+  else if (which === 'split') openSplit();
+  else if (which === 'ledger') rmOpenLedger();
+}
+
+function rmBackToRoomDash(){
+  hideAllViews();
+  document.getElementById('viewRoom').classList.add('show');
+  document.getElementById('screen').scrollTop = 0;
+  rmShowDash();
+}
+
+/* 覆盖全局 goHome：工具页的返回键点击时解析到这里 */
+function goHome(){
+  if (rmReturnToRoom && rmCurrentRoom()){
+    rmBackToRoomDash();
+    return;
+  }
+  rmReturnToRoom = false;
+  hideAllViews();
+  document.getElementById('viewHome').classList.add('show');
+  document.getElementById('screen').scrollTop = 0;
+  if (typeof glRenderHomeTripList === 'function') glRenderHomeTripList();
+  rmRenderHomeRoomList();
+}
+
+/* 覆盖行程账本的返回：从房间进的账本，返回/完成时也回房间 */
+function glGoHome(){
+  if (rmReturnToRoom && rmCurrentRoom()){
+    rmBackToRoomDash();
+    return;
+  }
+  rmGoHome();
+}
+
+/* 首页大卡"开启协同组局房间"：永远是"新建一个房间"，
+   不管你已经在几个房间里了，创建流程都从头开始，不预设任何名字 */
+function openRoomEntry(){
+  rmReturnToRoom = false;
+  rmCurrentRoomId = null;
+  hideAllViews();
+  document.getElementById('viewRoom').classList.add('show');
+  document.getElementById('screen').scrollTop = 0;
+  rmShowCreate();
+}
+function rmShowCreate(){
+  document.getElementById('rmPaneCreate').classList.add('show');
+  document.getElementById('rmPaneDash').classList.remove('show');
+  rmRenderCreateMemberList();
+}
+function rmShowDash(){
+  document.getElementById('rmPaneCreate').classList.remove('show');
+  document.getElementById('rmPaneDash').classList.add('show');
+  rmRenderDash();
+}
+
+/* —— 创建阶段的临时成员表（创建成功前先存这里） —— */
+var rmDraftMembers = [];
+var rmDraftNextId = 1;
+
+function rmAddDraftMember(){
+  var input = document.getElementById('rmMemberName');
+  var name = input.value.trim();
+  if (!name){ input.focus(); return; }
+  if (rmDraftMembers.some(function(m){ return m.name === name; })){
+    alert('已经有一个叫「' + name + '」的人了，加个姓区分一下吧。');
+    return;
+  }
+  rmDraftMembers.push({ id: rmDraftNextId++, name: name, color: GL_COLORS[rmDraftMembers.length % GL_COLORS.length] });
+  input.value = '';
+  input.focus();
+  rmRenderCreateMemberList();
+}
+function rmRenderCreateMemberList(){
+  var list = document.getElementById('rmMemberList');
+  list.innerHTML = '';
+  if (rmDraftMembers.length === 0){
+    list.innerHTML = '<div class="m-empty">还没有人，从上面加第一个</div>';
+    return;
+  }
+  rmDraftMembers.forEach(function(m){
+    var el = document.createElement('div');
+    el.className = 'm-item';
+    el.innerHTML =
+      '<span class="d-ava" style="width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:#fff;background:' + m.color + ';flex-shrink:0;">' + m.name[0] + '</span>' +
+      '<span class="m-name">' + splitEscapeHtml(m.name) + '</span>' +
+      '<button class="m-del" aria-label="移除">×</button>';
+    el.querySelector('.m-del').addEventListener('click', function(){
+      rmDraftMembers = rmDraftMembers.filter(function(x){ return x.id !== m.id; });
+      rmRenderCreateMemberList();
+    });
+    list.appendChild(el);
+  });
+}
+document.getElementById('rmBtnAddMember').addEventListener('click', rmAddDraftMember);
+document.getElementById('rmMemberName').addEventListener('keydown', function(e){ if (e.key === 'Enter') rmAddDraftMember(); });
+
+function rmGenCode(){
+  var chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; /* 去掉了易混淆的 I/O/0/1 */
+  var code = '';
+  for (var i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
+  return code;
+}
+
+/* —— 首页"有房间码？"入口 ——
+   诚实说明：这是纯前端静态原型，房间数据只存在当前浏览器的内存里，
+   没有后端/数据库同步。所以这里只能在"同一个浏览器"里找到房间号
+   （比如你自己创建后刷新页面重进、或者同一台设备上用同一个浏览器
+   打开），不同设备/不同人是找不到彼此房间的——真正跨设备加入
+   需要接一个真实后端（比如 Firebase / Supabase 这类），把 ROOMS
+   这份数据存到服务器上，而不是留在某一个人的浏览器里。
+   这套前端交互先做好，以后接真实后端时，这部分代码基本不用改，
+   把 rmJoinByCode 里"在本地 ROOMS 数组里查"换成"去后端查"就行。 */
+function rmJoinByCode(){
+  var input = document.getElementById('heroJoinCode');
+  var code = input.value.trim().toUpperCase();
+  if (!code){ input.focus(); return; }
+  var room = ROOMS.find(function(r){ return r.code === code; });
+  if (!room){
+    alert(
+      '没找到房间号「' + code + '」。\n\n' +
+      '提醒一下：这是没有后端的静态原型，房间数据只存在创建者自己的浏览器里，\n' +
+      '不同设备/不同人之间目前查不到彼此的房间——这里只能找到"这台设备、这个浏览器" \n' +
+      '自己创建过的房间号。真正跨设备加入需要接一个真实后端来同步数据。'
+    );
+    return;
+  }
+  input.value = '';
+  rmCurrentRoomId = room.id;
+  rmReturnToRoom = false;
+  hideAllViews();
+  document.getElementById('viewRoom').classList.add('show');
+  document.getElementById('screen').scrollTop = 0;
+  rmShowDash();
+}
+document.getElementById('heroJoinBtn').addEventListener('click', rmJoinByCode);
+document.getElementById('heroJoinCode').addEventListener('keydown', function(e){ if (e.key === 'Enter') rmJoinByCode(); });
+document.getElementById('heroJoinCode').addEventListener('input', function(){
+  this.value = this.value.toUpperCase();
+});
+
+document.getElementById('rmBtnCreate').addEventListener('click', function(){
+  var name = document.getElementById('rmName').value.trim();
+  if (!name){ alert('给这个局起个名字吧，比如"波士顿五日游"。'); document.getElementById('rmName').focus(); return; }
+  if (rmDraftMembers.length < 2){ alert('至少加 2 个人（包括你自己），组局才有意义～'); return; }
+  var room = {
+    id: rmNextRoomId++,
+    name: name,
+    code: rmGenCode(),
+    members: rmDraftMembers.slice(),
+    nextMemberId: rmDraftNextId,
+    tripId: null
+  };
+  ROOMS.push(room);
+  rmCurrentRoomId = room.id;
+  rmDraftMembers = [];
+  rmDraftNextId = 1;
+  document.getElementById('rmName').value = '';
+  rmShowDash();
+});
+
+/* —— 房间主页 —— */
+function rmRenderDash(){
+  var room = rmCurrentRoom();
+  if (!room) return;
+  document.getElementById('rmDashName').textContent = room.name;
+  document.getElementById('rmDashCode').textContent = room.code;
+
+  var avas = document.getElementById('rmDashAvas');
+  avas.innerHTML = '';
+  room.members.slice(0, 3).forEach(function(m){
+    var a = document.createElement('span');
+    a.className = 's-ava';
+    a.style.background = m.color;
+    a.textContent = m.name[0];
+    avas.appendChild(a);
+  });
+  var count = document.createElement('span');
+  count.className = 'rm-ava-count';
+  count.textContent = room.members.length + ' 人';
+  avas.appendChild(count);
+
+  var list = document.getElementById('rmDashMemberList');
+  list.innerHTML = '';
+  room.members.forEach(function(m){
+    var el = document.createElement('div');
+    el.className = 'm-item';
+    el.innerHTML =
+      '<span class="d-ava" style="width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:#fff;background:' + m.color + ';flex-shrink:0;">' + m.name[0] + '</span>' +
+      '<span class="m-name">' + splitEscapeHtml(m.name) + '</span>' +
+      '<button class="m-del" aria-label="移除">×</button>';
+    el.querySelector('.m-del').addEventListener('click', function(){
+      if (room.members.length <= 2){ alert('至少保留 2 个人。'); return; }
+      room.members = room.members.filter(function(x){ return x.id !== m.id; });
+      rmRenderDash();
+    });
+    list.appendChild(el);
+  });
+}
+function rmAddDashMember(){
+  var room = rmCurrentRoom();
+  if (!room) return;
+  var input = document.getElementById('rmDashMemberName');
+  var name = input.value.trim();
+  if (!name){ input.focus(); return; }
+  if (room.members.some(function(m){ return m.name === name; })){
+    alert('已经有一个叫「' + name + '」的人了。');
+    return;
+  }
+  room.members.push({ id: room.nextMemberId++, name: name, color: GL_COLORS[room.members.length % GL_COLORS.length] });
+  input.value = '';
+  input.focus();
+  rmRenderDash();
+}
+document.getElementById('rmBtnDashAddMember').addEventListener('click', rmAddDashMember);
+document.getElementById('rmDashMemberName').addEventListener('keydown', function(e){ if (e.key === 'Enter') rmAddDashMember(); });
+
+/* —— 复制房间号 / 邀请文案（复用第三块里定义的 copyTextToClipboard） —— */
+document.getElementById('rmBtnCopyCode').addEventListener('click', function(){
+  var room = rmCurrentRoom();
+  if (!room) return;
+  var btn = this;
+  copyTextToClipboard(room.code).then(function(){
+    btn.textContent = '✓ 已复制';
+    setTimeout(function(){ btn.textContent = '复制'; }, 1200);
+  });
+});
+document.getElementById('rmBtnInvite').addEventListener('click', function(){
+  var room = rmCurrentRoom();
+  if (!room) return;
+  var btn = this;
+  var text = '【拼途】邀请你加入「' + room.name + '」组局房间！\n房间号：' + room.code + '\n一起定碰面点、选餐厅、记账本，回来一键算清谁给谁转钱～';
+  copyTextToClipboard(text).then(function(){
+    btn.innerHTML = getIconHtml('shield-check') + '已复制，去群里粘贴吧';
+    setTimeout(function(){
+      btn.innerHTML = getIconHtml('share-2') + '复制邀请文案，发到群里';
+    }, 1600);
+  });
+});
+
+/* —— 行程账本联动：用房间的名字和成员建一个绑定行程，直接跳去记支出 —— */
+function rmOpenLedger(){
+  var room = rmCurrentRoom();
+  if (!room) return;
+  var trip = null;
+  if (room.tripId !== null){
+    trip = GL_TRIPS.find(function(t){ return t.id === room.tripId; }) || null;
+  }
+  if (!trip){
+    trip = { id: glNextTripId++, name: room.name, members: [], expenses: [], nextMemberId: 1, nextExpenseId: 1 };
+    GL_TRIPS.push(trip);
+    room.tripId = trip.id;
+  }
+  /* 成员同步：房间里新加的人，按名字补进绑定的行程（已有的不动，
+     不删行程里已经参与过支出的人） */
+  room.members.forEach(function(rm){
+    if (!trip.members.some(function(tm){ return tm.name === rm.name; })){
+      trip.members.push({ id: trip.nextMemberId++, name: rm.name, color: rm.color });
+    }
+  });
+  openGroupLedgerTrip(trip.id);
+}
+
+/* —— 解散房间 —— */
+document.getElementById('rmBtnDisband').addEventListener('click', function(){
+  var room = rmCurrentRoom();
+  if (!room) return;
+  var hasLedger = room.tripId !== null;
+  var msg = '确定解散「' + room.name + '」？';
+  if (hasLedger) msg += '\n（绑定的行程账本会保留在首页"进行中的行程"里，钱的记录不会丢）';
+  if (!confirm(msg)) return;
+  ROOMS = ROOMS.filter(function(r){ return r.id !== room.id; });
+  rmCurrentRoomId = null;
+  rmGoHome();
+});
+</script>
+
+</body>
+</html>
