@@ -8,6 +8,9 @@
 <meta name="color-scheme" content="light">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <meta name="format-detection" content="telephone=no">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>拼途 — 聚会与旅行协作工具</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%230F3D36'/%3E%3Cpath d='M12 32 52 14 39 52 30 35Z' fill='none' stroke='%23F6F3EA' stroke-width='5' stroke-linejoin='round'/%3E%3C/svg%3E">
 
@@ -233,6 +236,29 @@
   }
   .mp-mine.editing .mp-mine-cancel{display:block;}
   .mp-mine.editing{border-top-color:var(--blue);}
+  .tool-room-card{
+    background:var(--paper-raised);border:1px solid var(--line);border-radius:16px;
+    padding:14px;margin-bottom:14px;box-shadow:0 5px 16px rgba(15,61,54,.06);
+  }
+  .tool-room-head{display:flex;align-items:flex-start;gap:10px;margin-bottom:11px;}
+  .tool-room-icon{width:34px;height:34px;border-radius:10px;background:var(--blue-soft);color:var(--blue);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .tool-room-card[data-room-type="ledger"] .tool-room-icon{background:#F0DCE3;color:var(--pink);}
+  .tool-room-title{font-size:14px;font-weight:700;color:var(--ink);}
+  .tool-room-sub{font-size:11.5px;color:var(--ink-soft);line-height:1.45;margin-top:2px;}
+  .tool-room-entry{display:flex;flex-direction:column;gap:8px;}
+  .tool-room-row{display:flex;gap:8px;align-items:stretch;}
+  .tool-room-input{flex:1;min-width:0;border:1.5px solid var(--line);border-radius:10px;background:var(--paper);padding:10px 11px;font-family:inherit;font-size:13px;color:var(--ink);outline:none;}
+  .tool-room-input:focus{border-color:var(--blue);}
+  .tool-room-code-input{text-transform:uppercase;letter-spacing:1.5px;font-family:'IBM Plex Mono',monospace;}
+  .tool-room-btn{border:none;border-radius:10px;padding:10px 13px;background:var(--green);color:#fff;font-family:inherit;font-size:12.5px;font-weight:700;cursor:pointer;white-space:nowrap;}
+  .tool-room-btn.secondary{background:var(--paper);color:var(--green);border:1.5px solid var(--green);}
+  .tool-room-btn:disabled{opacity:.55;cursor:wait;}
+  .tool-room-active{display:none;align-items:center;gap:10px;background:var(--blue-soft);border:1px solid rgba(62,110,142,.28);border-radius:11px;padding:10px 11px;}
+  .tool-room-active-main{flex:1;min-width:0;}
+  .tool-room-active-label{font-size:11px;color:var(--ink-soft);}
+  .tool-room-active-code{font-family:'IBM Plex Mono',monospace;font-weight:700;color:var(--blue);letter-spacing:1.4px;font-size:15px;}
+  .tool-room-link{border:none;background:transparent;color:var(--blue);font-family:inherit;font-size:12px;font-weight:700;padding:7px 5px;cursor:pointer;}
+  .tool-room-error{display:none;color:var(--coral);font-size:11.5px;line-height:1.45;}
   .tool-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:26px;}
   .tool-card{
     background:var(--paper-raised);border:1px solid var(--line);
@@ -948,7 +974,8 @@
 
 <div class="screen" id="screen">
 
-    <div class="view" id="viewHome">
+    <!-- 首页直接带 show：即使地图/云后端脚本加载失败，也不会整页白屏。 -->
+    <div class="view show" id="viewHome">
       <div class="app-header">
         <div class="brand">
           <div class="brand-mark">
@@ -961,18 +988,6 @@
       </div>
 
       <div class="home-content">
-        <div class="hero-card">
-          <div class="hero-tag"><i class="ti-map-2"></i>协同组局</div>
-          <div class="hero-title">发起多天长途旅行<br>或大型主题聚会</div>
-          <div class="hero-sub">邀请朋友加入，一站式搞定行程决策与全程账本，回来只要点一下结算。</div>
-          <button class="hero-btn" id="heroRoomBtn" onclick="openRoomEntry()"><span>开启协同组局房间</span><i class="ti-arrow-right"></i></button>
-          <div class="hero-join-row">
-            <span class="hero-join-label">有房间码？</span>
-            <input class="hero-join-input" id="heroJoinCode" type="text" placeholder="输入 6 位房间码" maxlength="6">
-            <button class="hero-join-btn" id="heroJoinBtn">进入</button>
-          </div>
-        </div>
-
         <div class="section-label">用完即走</div>
         <div class="tool-grid">
           <div class="tool-card" onclick="openMidpoint()">
@@ -1190,6 +1205,26 @@
       </div>
 
       <div class="content" style="padding-bottom:80px;">
+        <div class="tool-room-card" data-room-type="midpoint">
+          <div class="tool-room-head">
+            <div class="tool-room-icon"><i class="ti-users"></i></div>
+            <div><div class="tool-room-title">多人实时碰面</div><div class="tool-room-sub">创建独立碰面码，朋友输入同一个码后各自填写名字和出发点。</div></div>
+          </div>
+          <div class="tool-room-entry" id="mpCollabEntry">
+            <input class="tool-room-input" id="mpEntryName" maxlength="20" autocomplete="nickname" placeholder="先填写你自己的名字">
+            <div class="tool-room-row">
+              <button class="tool-room-btn" id="mpCreateRoomBtn" type="button">创建碰面码</button>
+              <input class="tool-room-input tool-room-code-input" id="mpJoinCode" maxlength="6" placeholder="输入碰面码">
+              <button class="tool-room-btn secondary" id="mpJoinRoomBtn" type="button">加入</button>
+            </div>
+            <div class="tool-room-error" id="mpRoomError"></div>
+          </div>
+          <div class="tool-room-active" id="mpCollabActive">
+            <div class="tool-room-active-main"><div class="tool-room-active-label">正在共享碰面位置 · 房间码</div><div class="tool-room-active-code" id="mpActiveCode">------</div></div>
+            <button class="tool-room-link" id="mpCopyCodeBtn" type="button">复制</button>
+            <button class="tool-room-link" id="mpLeaveRoomBtn" type="button">退出</button>
+          </div>
+        </div>
         <div class="mp-card" id="mpInputArea">
           
           <div class="city-scope-bar">
@@ -1300,6 +1335,29 @@
         <div class="back-btn" onclick="glGoHome()"><i class="ti-chevron-left"></i></div>
         <div class="page-title">行程账本</div>
         <div class="gl-sync-badge" id="glSyncBadge" style="display:none;">● 云端实时同步</div>
+      </div>
+
+      <div class="content" style="padding-bottom:0;">
+        <div class="tool-room-card" data-room-type="ledger">
+          <div class="tool-room-head">
+            <div class="tool-room-icon"><i class="ti-receipt"></i></div>
+            <div><div class="tool-room-title">多人共享账本</div><div class="tool-room-sub">账本码与碰面码互不通用；每个人加入时只填写自己的名字。</div></div>
+          </div>
+          <div class="tool-room-entry" id="glCollabEntry">
+            <input class="tool-room-input" id="glEntryName" maxlength="20" autocomplete="nickname" placeholder="先填写你自己的名字">
+            <div class="tool-room-row">
+              <button class="tool-room-btn" id="glCreateRoomBtn" type="button">创建账本码</button>
+              <input class="tool-room-input tool-room-code-input" id="glJoinCode" maxlength="6" placeholder="输入账本码">
+              <button class="tool-room-btn secondary" id="glJoinRoomBtn" type="button">加入</button>
+            </div>
+            <div class="tool-room-error" id="glRoomError"></div>
+          </div>
+          <div class="tool-room-active" id="glCollabActive">
+            <div class="tool-room-active-main"><div class="tool-room-active-label">正在共享行程花费 · 房间码</div><div class="tool-room-active-code" id="glActiveCode">------</div></div>
+            <button class="tool-room-link" id="glCopyCodeBtn" type="button">复制</button>
+            <button class="tool-room-link" id="glLeaveRoomBtn" type="button">退出</button>
+          </div>
+        </div>
       </div>
 
       <div class="stepper">
@@ -1526,9 +1584,9 @@ var mpRoomRef = null;     /* 协作模式下对应的房间对象 */
 
 function openMidpoint(roomMode){
   var room = (roomMode && typeof rmCurrentRoom === 'function') ? rmCurrentRoom() : null;
-  var cloudRoom = room && rmDb && room.docId && room.docId.indexOf('local-') !== 0;
-  mpRoomMode = !!cloudRoom;
-  mpRoomRef = cloudRoom ? room : null;
+  var sharedRoom = room && room.toolType === 'midpoint';
+  mpRoomMode = !!sharedRoom;
+  mpRoomRef = sharedRoom ? room : null;
 
   hideAllViews();
   document.getElementById('viewMidpoint').classList.add('show');
@@ -1552,6 +1610,7 @@ function openMidpoint(roomMode){
     if (panel) panel.style.display = 'none';
     if (btn) btn.textContent = '计算中心点 & 搜索周边设施';
   }
+  if (typeof rmRefreshTypedRoomUI === 'function') rmRefreshTypedRoomUI('midpoint');
 }
 
 /* 计算按钮分发：协作模式从共享点算，单人模式从输入框算 */
@@ -1578,6 +1637,8 @@ function mpRoomWrite(room, people){
     rmDb.collection('rooms').doc(room.docId).update({ meetup: room.meetup }).catch(function(err){
       console.warn('[碰面同步] 写入云端失败：', err);
     });
+  } else if (typeof rmSaveLocalRooms === 'function') {
+    rmSaveLocalRooms();
   }
   mpRenderRoomPanel(room);
 }
@@ -4175,6 +4236,7 @@ function rmUpsertLocalRoom(docId, data){
   room.members = data.members || [];
   room.nextMemberId = data.nextMemberId || 1;
   room.tripId = data.tripId || null;
+  room.toolType = data.toolType || data.roomType || 'legacy';
   room.ledger = data.ledger || null;   /* 房间共享账本（云端为准的那份） */
   room.meetup = data.meetup || null;   /* 房间共享碰面点（每人放自己的出发点） */
   /* 如果本地已有这个房间的镜像账本，用云端最新数据回填并刷新界面 */
@@ -4205,11 +4267,12 @@ function rmRenderHomeRoomList(){
     ROOMS.forEach(function(room){
       /* 优先用云端共享账本；没有再退回本地镜像行程 */
       var ledger = room.ledger || (room.tripId !== null ? GL_TRIPS.find(function(t){ return t.id === room.tripId; }) : null);
-      var sub = room.members.length + ' 人在局 · 房号 ' + room.code;
+      var typeLabel = room.toolType === 'midpoint' ? '碰面' : (room.toolType === 'ledger' ? '账本' : '协同');
+      var sub = typeLabel + ' · ' + room.members.length + ' 人 · 房号 ' + room.code;
       var right = '';
       if (ledger && ledger.expenses && ledger.expenses.length > 0){
         var totalCents = ledger.expenses.reduce(function(s, e){ return s + e.amountCents; }, 0);
-        sub = room.members.length + ' 人在局 · ' + ledger.expenses.length + ' 笔支出 · 房号 ' + room.code;
+        sub = typeLabel + ' · ' + room.members.length + ' 人 · ' + ledger.expenses.length + ' 笔支出 · 房号 ' + room.code;
         right = '<div class="gl-trip-total">¥' + (totalCents / 100).toFixed(2) + '</div>';
       }
       var card = document.createElement('div');
@@ -4220,7 +4283,10 @@ function rmRenderHomeRoomList(){
           '<div class="rm-room-name">' + splitEscapeHtml(room.name) + '</div>' +
           '<div class="rm-room-sub">' + sub + '</div>' +
         '</div>' + right;
-      card.addEventListener('click', function(){ rmEnterRoom(room.docId); });
+      card.addEventListener('click', function(){
+        if (room.toolType === 'midpoint' || room.toolType === 'ledger') rmEnterTypedRoom(room.docId, room.toolType);
+        else rmEnterRoom(room.docId);
+      });
       list.appendChild(card);
     });
   }
@@ -4573,11 +4639,13 @@ function rmJoinByCode(){
     alert('查找失败：' + (err.message || err));
   });
 }
-document.getElementById('heroJoinBtn').addEventListener('click', rmJoinByCode);
-document.getElementById('heroJoinCode').addEventListener('keydown', function(e){ if (e.key === 'Enter') rmJoinByCode(); });
-document.getElementById('heroJoinCode').addEventListener('input', function(){
-  this.value = this.value.toUpperCase();
-});
+var legacyHeroJoinBtn = document.getElementById('heroJoinBtn');
+var legacyHeroJoinCode = document.getElementById('heroJoinCode');
+if (legacyHeroJoinBtn) legacyHeroJoinBtn.addEventListener('click', rmJoinByCode);
+if (legacyHeroJoinCode){
+  legacyHeroJoinCode.addEventListener('keydown', function(e){ if (e.key === 'Enter') rmJoinByCode(); });
+  legacyHeroJoinCode.addEventListener('input', function(){ this.value = this.value.toUpperCase(); });
+}
 
 /* —— 行程账本联动：房间成员共用一本云端账本，实时同步、跨设备可见 —— */
 function rmOpenLedger(){
@@ -4595,11 +4663,15 @@ function rmOpenLedger(){
   if (room.ledger){
     /* 云端已有这本账：直接用云端的，保证和其他成员看到的一致 */
     glHydrateTripFromCloud(trip, room.ledger);
+    room.members.forEach(function(rm){
+      var exists = trip.members.some(function(tm){ return (rm.uid && tm.uid === rm.uid) || tm.name === rm.name; });
+      if (!exists) trip.members.push({ id: trip.nextMemberId++, uid: rm.uid || null, name: rm.name, color: rm.color });
+    });
   } else {
     /* 云端还没有：用房间当前成员初始化一份，再写上云，成为共享账本 */
     room.members.forEach(function(rm){
       if (!trip.members.some(function(tm){ return tm.name === rm.name; })){
-        trip.members.push({ id: trip.nextMemberId++, name: rm.name, color: rm.color });
+        trip.members.push({ id: trip.nextMemberId++, uid: rm.uid || null, name: rm.name, color: rm.color });
       }
     });
     if (!trip.name) trip.name = room.name;
@@ -4934,6 +5006,285 @@ function spinnerSpin(){
   var input = document.getElementById('spinNameInput');
   if (addBtn) addBtn.addEventListener('click', spinnerAddName);
   if (input) input.addEventListener('keydown', function(e){ if (e.key === 'Enter') spinnerAddName(); });
+})();
+</script>
+
+<script>
+/* ============================================================
+   独立协作房间（上线版入口）
+   - 碰面与账本使用不同的 toolType，房间码不可混用
+   - 创建者和加入者都只登记自己的名字
+   - 创建/加入后直接进入对应功能，不再经过旧的中央房间页
+   旧中央房间代码保留，只用于打开历史 legacy 房间。
+   ============================================================ */
+(function initTypedRooms(){
+  var CFG = {
+    midpoint: {
+      nameId: 'mpEntryName', codeId: 'mpJoinCode', createId: 'mpCreateRoomBtn', joinId: 'mpJoinRoomBtn',
+      entryId: 'mpCollabEntry', activeId: 'mpCollabActive', activeCodeId: 'mpActiveCode', errorId: 'mpRoomError',
+      copyId: 'mpCopyCodeBtn', leaveId: 'mpLeaveRoomBtn', label: '碰面', createText: '创建碰面码', joinText: '加入'
+    },
+    ledger: {
+      nameId: 'glEntryName', codeId: 'glJoinCode', createId: 'glCreateRoomBtn', joinId: 'glJoinRoomBtn',
+      entryId: 'glCollabEntry', activeId: 'glCollabActive', activeCodeId: 'glActiveCode', errorId: 'glRoomError',
+      copyId: 'glCopyCodeBtn', leaveId: 'glLeaveRoomBtn', label: '账本', createText: '创建账本码', joinText: '加入'
+    }
+  };
+
+  function typedRoom(type){
+    var room = (typeof rmCurrentRoom === 'function') ? rmCurrentRoom() : null;
+    return room && room.toolType === type ? room : null;
+  }
+  function saveNickname(name){
+    try { localStorage.setItem('pintu_nickname', name); } catch(e){}
+  }
+  function savedNickname(){
+    try { return localStorage.getItem('pintu_nickname') || ''; } catch(e){ return ''; }
+  }
+  function setError(type, message){
+    var el = document.getElementById(CFG[type].errorId);
+    if (!el) return;
+    el.textContent = message || '';
+    el.style.display = message ? 'block' : 'none';
+  }
+  function setBusy(type, busy, action){
+    var c = CFG[type];
+    var createBtn = document.getElementById(c.createId);
+    var joinBtn = document.getElementById(c.joinId);
+    if (createBtn){ createBtn.disabled = busy; createBtn.textContent = busy && action === 'create' ? '创建中…' : c.createText; }
+    if (joinBtn){ joinBtn.disabled = busy; joinBtn.textContent = busy && action === 'join' ? '加入中…' : c.joinText; }
+  }
+  function backendErrorText(err){
+    var msg = err && (err.message || err.errorMessage || err.code || err);
+    return '连接房间失败：' + msg + '。请确认 CloudBase 匿名登录、数据库 rooms 权限和安全域名均已开启。';
+  }
+
+  window.rmRefreshTypedRoomUI = function(type){
+    var c = CFG[type];
+    if (!c) return;
+    var room = typedRoom(type);
+    var entry = document.getElementById(c.entryId);
+    var active = document.getElementById(c.activeId);
+    var code = document.getElementById(c.activeCodeId);
+    var nameInput = document.getElementById(c.nameId);
+    if (nameInput && !nameInput.value) nameInput.value = savedNickname();
+    if (entry) entry.style.display = room ? 'none' : 'flex';
+    if (active) active.style.display = room ? 'flex' : 'none';
+    if (code) code.textContent = room ? room.code : '------';
+  };
+
+  function persistTypedRoom(room, patch){
+    Object.keys(patch).forEach(function(k){ room[k] = patch[k]; });
+    if (rmDb && room.docId && room.docId.indexOf('local-') !== 0){
+      return rmDb.collection('rooms').doc(room.docId).update(patch);
+    }
+    rmSaveLocalRooms();
+    return Promise.resolve();
+  }
+
+  function registerSelf(room, type, name){
+    var uid = window.rmMyUid;
+    var members = (room.members || []).slice();
+    var duplicate = members.some(function(m){ return m.name === name && m.uid && m.uid !== uid; });
+    if (duplicate) return Promise.reject(new Error('房间里已经有人使用“' + name + '”，请在名字后加一个数字或昵称区分。'));
+
+    var mine = members.find(function(m){ return m.uid === uid; });
+    var nextId = room.nextMemberId || 1;
+    if (mine){
+      mine.name = name;
+    } else {
+      members.push({ id: nextId++, uid: uid, name: name, color: GL_COLORS[members.length % GL_COLORS.length] });
+    }
+    var patch = { members: members, nextMemberId: nextId };
+
+    if (type === 'midpoint'){
+      var meetup = room.meetup || { people: [] };
+      var people = (meetup.people || []).slice();
+      var myPoint = people.find(function(p){ return p.uid === uid; });
+      if (myPoint) myPoint.name = name;
+      else people.push({ uid: uid, name: name, address: '', lat: null, lng: null, color: LOC_COLORS[people.length % LOC_COLORS.length] });
+      patch.meetup = { people: people };
+    }
+    saveNickname(name);
+    return persistTypedRoom(room, patch).then(function(){ return room; });
+  }
+
+  function startTypedWatcher(docId, type){
+    if (rmWatcher){ rmWatcher.close(); rmWatcher = null; }
+    if (!rmDb || docId.indexOf('local-') === 0) return;
+    rmWatcher = rmDb.collection('rooms').doc(docId).watch({
+      onChange: function(snapshot){
+        var doc = snapshot.docs && snapshot.docs[0];
+        if (!doc) return;
+        var room = rmUpsertLocalRoom(docId, doc);
+        if (rmCurrentRoomId === docId){
+          rmRefreshTypedRoomUI(type);
+          if (type === 'midpoint' && typeof mpOnRoomSync === 'function') mpOnRoomSync(room);
+        }
+      },
+      onError: function(err){
+        console.warn('[独立房间实时同步] 监听失败：', err);
+        setError(type, '实时同步暂时中断，请检查网络后刷新页面。');
+      }
+    });
+  }
+
+  window.rmEnterTypedRoom = function(docId, type){
+    var room = ROOMS.find(function(r){ return r.docId === docId; });
+    if (!room) return;
+    if (room.toolType !== type){
+      alert('这个房间码属于' + (room.toolType === 'midpoint' ? '碰面' : '账本') + '，不能在' + CFG[type].label + '里使用。');
+      return;
+    }
+    rmCurrentRoomId = docId;
+    rmReturnToRoom = false;
+    rmRememberRoom(docId);
+    if (type === 'midpoint') openMidpoint(true);
+    else rmOpenLedger();
+    rmRefreshTypedRoomUI(type);
+    startTypedWatcher(docId, type);
+  };
+
+  function makeRoomData(type, name){
+    var member = { id: 1, uid: window.rmMyUid, name: name, color: GL_COLORS[0] };
+    return {
+      name: name + (type === 'midpoint' ? '发起的碰面' : '发起的账本'),
+      code: rmGenCode(), toolType: type, members: [member], nextMemberId: 2,
+      tripId: null, ledger: null,
+      meetup: type === 'midpoint' ? { people: [{ uid: window.rmMyUid, name: name, address: '', lat: null, lng: null, color: LOC_COLORS[0] }] } : { people: [] },
+      createdAt: new Date()
+    };
+  }
+
+  function addCloudRoomUnique(type, name, attempts){
+    var roomData = makeRoomData(type, name);
+    return rmDb.collection('rooms').where({ code: roomData.code }).get().then(function(res){
+      if (res.data && res.data.length){
+        if (attempts > 1) return addCloudRoomUnique(type, name, attempts - 1);
+        throw new Error('房间码生成冲突，请再点一次创建');
+      }
+      return rmDb.collection('rooms').add(roomData).then(function(result){ return { docId: result.id, data: roomData }; });
+    });
+  }
+
+  function createTyped(type){
+    var c = CFG[type];
+    var nameInput = document.getElementById(c.nameId);
+    var name = (nameInput.value || '').trim();
+    setError(type, '');
+    if (!name){ setError(type, '请先填写你自己的名字。'); nameInput.focus(); return; }
+    setBusy(type, true, 'create');
+    rmTcbReady.then(function(ready){
+      saveNickname(name);
+      if (ready && rmDb) return addCloudRoomUnique(type, name, 3);
+      if (rmTcbError || CLOUDBASE_ENV_ID !== '你的环境ID') throw (rmTcbError || new Error('CloudBase 尚未连接成功'));
+      var data = makeRoomData(type, name);
+      var docId = 'local-' + (rmLocalNextId++);
+      return { docId: docId, data: data };
+    }).then(function(result){
+      rmUpsertLocalRoom(result.docId, result.data);
+      rmRememberRoom(result.docId);
+      if (result.docId.indexOf('local-') === 0) rmSaveLocalRooms();
+      rmEnterTypedRoom(result.docId, type);
+    }).catch(function(err){ setError(type, backendErrorText(err)); })
+      .then(function(){ setBusy(type, false); });
+  }
+
+  function findTypedRoom(type, code){
+    return rmTcbReady.then(function(ready){
+      if (ready && rmDb){
+        return rmDb.collection('rooms').where({ code: code }).get().then(function(res){
+          var doc = res.data && res.data[0];
+          if (!doc) return null;
+          var docId = doc._id;
+          return { docId: docId, room: rmUpsertLocalRoom(docId, doc) };
+        });
+      }
+      if (rmTcbError || CLOUDBASE_ENV_ID !== '你的环境ID') throw (rmTcbError || new Error('CloudBase 尚未连接成功'));
+      var room = ROOMS.find(function(r){ return r.code === code; });
+      return room ? { docId: room.docId, room: room } : null;
+    });
+  }
+
+  function joinTyped(type){
+    var c = CFG[type];
+    var nameInput = document.getElementById(c.nameId);
+    var codeInput = document.getElementById(c.codeId);
+    var name = (nameInput.value || '').trim();
+    var code = (codeInput.value || '').trim().toUpperCase();
+    setError(type, '');
+    if (!name){ setError(type, '请先填写你自己的名字。'); nameInput.focus(); return; }
+    if (code.length !== 6){ setError(type, '请输入完整的 6 位房间码。'); codeInput.focus(); return; }
+    setBusy(type, true, 'join');
+    findTypedRoom(type, code).then(function(found){
+      if (!found) throw new Error('没有找到房间码“' + code + '”');
+      if (found.room.toolType !== type){
+        var actual = found.room.toolType === 'midpoint' ? '碰面码' : (found.room.toolType === 'ledger' ? '账本码' : '旧版综合房间码');
+        throw new Error('这是' + actual + '，不能加入当前的' + c.label + '功能');
+      }
+      return registerSelf(found.room, type, name).then(function(){ return found; });
+    }).then(function(found){
+      codeInput.value = '';
+      rmRememberRoom(found.docId);
+      rmEnterTypedRoom(found.docId, type);
+    }).catch(function(err){
+      var message = err && (err.message || err);
+      if (/没有找到|不能加入|已经有人/.test(message)) setError(type, message);
+      else setError(type, backendErrorText(err));
+    }).then(function(){ setBusy(type, false); });
+  }
+
+  function leaveTyped(type){
+    if (rmWatcher){ rmWatcher.close(); rmWatcher = null; }
+    rmCurrentRoomId = null;
+    rmReturnToRoom = false;
+    if (type === 'midpoint'){
+      mpRoomMode = false; mpRoomRef = null; openMidpoint(false);
+    } else rmGoHome();
+  }
+
+  Object.keys(CFG).forEach(function(type){
+    var c = CFG[type];
+    var createBtn = document.getElementById(c.createId);
+    var joinBtn = document.getElementById(c.joinId);
+    var codeInput = document.getElementById(c.codeId);
+    var copyBtn = document.getElementById(c.copyId);
+    var leaveBtn = document.getElementById(c.leaveId);
+    if (createBtn) createBtn.addEventListener('click', function(){ createTyped(type); });
+    if (joinBtn) joinBtn.addEventListener('click', function(){ joinTyped(type); });
+    if (codeInput){
+      codeInput.addEventListener('input', function(){ this.value = this.value.toUpperCase().replace(/[^A-Z2-9]/g, '').slice(0, 6); });
+      codeInput.addEventListener('keydown', function(e){ if (e.key === 'Enter') joinTyped(type); });
+    }
+    if (copyBtn) copyBtn.addEventListener('click', function(){
+      var room = typedRoom(type); if (!room) return;
+      copyTextToClipboard(room.code).then(function(){ copyBtn.textContent = '已复制'; setTimeout(function(){ copyBtn.textContent = '复制'; }, 1200); });
+    });
+    if (leaveBtn) leaveBtn.addEventListener('click', function(){ leaveTyped(type); });
+    rmRefreshTypedRoomUI(type);
+  });
+
+  /* 从首页进入工具时总是先展示该工具自己的入口；历史房间仍可从“行程”页恢复。 */
+  var originalOpenMidpoint = window.openMidpoint;
+  window.openMidpoint = function(roomMode){
+    if (!roomMode && typedRoom('midpoint')) rmCurrentRoomId = null;
+    return originalOpenMidpoint(roomMode);
+  };
+  var originalOpenGroupLedger = window.openGroupLedger;
+  window.openGroupLedger = function(){
+    if (typedRoom('ledger')) rmCurrentRoomId = null;
+    var result = originalOpenGroupLedger();
+    rmRefreshTypedRoomUI('ledger');
+    return result;
+  };
+
+  /* 新式独立房间的返回键直接回首页；只有 legacy 房间继续返回旧中央仪表盘。 */
+  window.goHome = function(){
+    var room = rmCurrentRoom();
+    if (rmReturnToRoom && room && room.toolType === 'legacy'){ rmBackToRoomDash(); return; }
+    rmGoHome();
+  };
+  window.glGoHome = window.goHome;
 })();
 </script>
 
