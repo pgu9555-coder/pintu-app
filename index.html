@@ -285,12 +285,18 @@
   .spin-decision-input{flex:1;max-width:160px;}
   .spin-wheel-wrap{position:relative;width:280px;height:280px;margin:6px auto 10px;}
   #spinCanvas{width:280px;height:280px;display:block;
-    transition:transform 4.2s cubic-bezier(0.12,0.7,0.16,1);
     transform:rotate(0deg);border-radius:50%;
+    transform-origin:50% 50%;will-change:transform;
     box-shadow:0 10px 30px rgba(15,25,22,0.18);}
   .spin-pointer{position:absolute;top:-4px;left:50%;transform:translateX(-50%);z-index:3;
     width:0;height:0;border-left:12px solid transparent;border-right:12px solid transparent;
     border-top:20px solid var(--ink);filter:drop-shadow(0 2px 2px rgba(0,0,0,.2));}
+  .spin-wheel-wrap.spinning .spin-pointer{animation:spinPointerTick .14s ease-in-out infinite alternate;}
+  .spin-wheel-wrap.spinning #spinCanvas{filter:saturate(1.08);box-shadow:0 14px 36px rgba(15,25,22,0.24);}
+  @keyframes spinPointerTick{
+    from{transform:translateX(-50%) rotate(-7deg);}
+    to{transform:translateX(-50%) rotate(7deg);}
+  }
   .spin-go-btn{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:2;
     width:64px;height:64px;border-radius:50%;border:4px solid #fff;cursor:pointer;
     background:var(--green);color:#fff;font-size:17px;font-weight:700;
@@ -301,8 +307,10 @@
   .spin-result{text-align:center;min-height:30px;margin:6px 0 18px;
     font-size:19px;font-weight:700;color:var(--green);
     font-family:'Space Grotesk',sans-serif;}
+  .spin-result.running{font-size:14px;color:var(--ink-soft);animation:spinStatusPulse .7s ease-in-out infinite alternate;}
   .spin-result .spin-result-name{color:var(--coral);}
   .spin-result.pop{animation:spinPop .5s ease;}
+  @keyframes spinStatusPulse{from{opacity:.5;transform:scale(.98);}to{opacity:1;transform:scale(1.02);}}
   @keyframes spinPop{0%{transform:scale(0.6);opacity:0;}60%{transform:scale(1.12);}100%{transform:scale(1);opacity:1;}}
   .tool-icon .sys-icon{font-size:19px;}
   .tool-title{font-weight:600;font-size:13px;color:var(--ink);margin-bottom:3px;}
@@ -334,8 +342,10 @@
   .gl-sync-badge{
     margin-left:auto;font-size:10.5px;font-weight:600;color:var(--green);
     background:var(--green-soft,#DDE9E5);border-radius:20px;padding:3px 9px;
-    animation:glSyncPulse 2s ease-in-out infinite;
   }
+  .gl-sync-badge[data-state="syncing"]{color:var(--blue);background:var(--blue-soft);animation:glSyncPulse .8s ease-in-out infinite;}
+  .gl-sync-badge[data-state="retry"]{color:var(--coral);background:var(--coral-soft);animation:glSyncPulse 1.2s ease-in-out infinite;}
+  .gl-sync-badge[data-state="synced"]{color:var(--green);background:var(--green-soft,#DDE9E5);animation:none;}
   @keyframes glSyncPulse{0%,100%{opacity:1;}50%{opacity:.55;}}
   .content{padding:0 20px 30px;}
   
@@ -3803,6 +3813,27 @@ var glSelectedSplitIds = [];
    每次改动数据后调用 glSave()，页面加载时先 glLoad() 读回来。 */
 var GL_LS_KEY = 'pintu_gl_trips_v1';
 var glHydrating = false; /* 正在用云端数据回填本地镜像时置真：避免把"收到的远端改动"又当成本地改动推回云端，形成回声 */
+var glCloudSyncStates = {}; /* 每个共享账本独立排队，避免连续写入乱序把新数据覆盖成旧数据 */
+
+function glSetSyncBadge(state, text){
+  var badge = document.getElementById('glSyncBadge');
+  if (!badge) return;
+  var trip = glCurrentTrip();
+  if (!trip || !trip.roomDocId){ badge.style.display = 'none'; return; }
+  badge.style.display = 'inline-block';
+  badge.dataset.state = state || 'synced';
+  badge.textContent = text || (state === 'syncing' ? '● 正在同步' : state === 'retry' ? '● 等待重试' : '● 已同步');
+}
+
+function glSyncState(roomDocId){
+  if (!glCloudSyncStates[roomDocId]){
+    glCloudSyncStates[roomDocId] = {
+      payload: null, inFlight: false, timer: null, retryCount: 0,
+      latestRevision: 0, ignoreBeforeRevision: 0
+    };
+  }
+  return glCloudSyncStates[roomDocId];
+}
 
 /* 把一趟行程账本压成要存到云端 room.ledger 的结构（都是可安全 JSON 化的普通数据） */
 function glSerializeLedger(trip){
@@ -3811,9 +3842,68 @@ function glSerializeLedger(trip){
     members: trip.members,
     expenses: trip.expenses,
     nextMemberId: trip.nextMemberId,
-    nextExpenseId: trip.nextExpenseId
+    nextExpenseId: trip.nextExpenseId,
+    revision: trip.cloudRevision || 0,
+    updatedAt: trip.cloudUpdatedAt || null,
+    updatedBy: trip.cloudUpdatedBy || null
   };
 }
+
+/* 串行、合并地写云端：
+   - 同一瞬间只允许一笔 update 在路上，避免手机快速输入时旧请求最后返回覆盖新请求；
+   - 在途期间产生的新改动合并成下一笔，最终云端一定以最新本地状态收尾；
+   - 临时断网自动重试，实时监听失效时下方的轮询仍能把其他设备改动拉回来。 */
+function glQueueCloudSync(trip){
+  if (!trip || !trip.roomDocId || !rmDb) return;
+  var state = glSyncState(trip.roomDocId);
+  var now = Date.now();
+  var revision = Math.max(now, state.latestRevision + 1);
+  state.latestRevision = revision;
+  trip.cloudRevision = revision;
+  trip.cloudUpdatedAt = now;
+  trip.cloudUpdatedBy = window.rmMyUid || null;
+  state.payload = JSON.parse(JSON.stringify(glSerializeLedger(trip)));
+  clearTimeout(state.timer);
+  state.timer = setTimeout(function(){ glFlushCloudSync(trip.roomDocId); }, 160);
+  glSetSyncBadge('syncing', '● 正在同步');
+}
+
+function glFlushCloudSync(roomDocId){
+  var state = glSyncState(roomDocId);
+  if (state.inFlight || !state.payload || !rmDb) return;
+  function setRoomBadge(status, message){
+    var current = glCurrentTrip();
+    if (current && current.roomDocId === roomDocId) glSetSyncBadge(status, message);
+  }
+  clearTimeout(state.timer);
+  state.timer = null;
+  var payload = state.payload;
+  state.payload = null;
+  state.inFlight = true;
+  setRoomBadge('syncing', '● 正在同步');
+  rmDb.collection('rooms').doc(roomDocId).update({ ledger: payload }).then(function(){
+    state.inFlight = false;
+    state.retryCount = 0;
+    /* 忽略可能晚到的旧 watch 事件，直到监听/轮询看见这次或更新的 revision。 */
+    state.ignoreBeforeRevision = Math.max(state.ignoreBeforeRevision, payload.revision || 0);
+    if (state.payload) glFlushCloudSync(roomDocId);
+    else setRoomBadge('synced', '● 已同步');
+  }).catch(function(err){
+    state.inFlight = false;
+    state.retryCount += 1;
+    if (!state.payload) state.payload = payload;
+    state.timer = setTimeout(function(){ glFlushCloudSync(roomDocId); }, Math.min(6000, 900 * state.retryCount));
+    setRoomBadge('retry', navigator.onLine === false ? '● 离线，联网后重试' : '● 同步重试中');
+    console.warn('[账本同步] 写入云端失败，将自动重试：', err);
+  });
+}
+
+window.addEventListener('online', function(){
+  Object.keys(glCloudSyncStates).forEach(function(roomDocId){
+    var state = glCloudSyncStates[roomDocId];
+    if (state && state.payload && !state.inFlight) glFlushCloudSync(roomDocId);
+  });
+});
 
 function glSave(){
   try {
@@ -3824,9 +3914,7 @@ function glSave(){
   if (!glHydrating){
     var trip = glCurrentTrip();
     if (trip && trip.roomDocId && rmDb){
-      rmDb.collection('rooms').doc(trip.roomDocId).update({ ledger: glSerializeLedger(trip) }).catch(function(err){
-        console.warn('[账本同步] 写入云端失败：', err);
-      });
+      glQueueCloudSync(trip);
     }
   }
 }
@@ -3853,14 +3941,26 @@ function glFindTripByRoom(docId){
    全程 glHydrating=true，回填过程中的 glSave 不会把数据又推回云端。 */
 function glHydrateTripFromCloud(trip, ledger){
   if (!trip || !ledger) return;
+  var syncState = trip.roomDocId ? glSyncState(trip.roomDocId) : null;
+  var remoteRevision = Number(ledger.revision || 0);
+  /* 本地刚写入时，watch 可能先送来一份旧快照。不能让旧快照把刚加的支出抹掉。 */
+  if (syncState && syncState.ignoreBeforeRevision){
+    if (!remoteRevision || remoteRevision < syncState.ignoreBeforeRevision) return;
+    syncState.ignoreBeforeRevision = 0;
+  }
+  if (syncState && (syncState.inFlight || syncState.payload)) return;
   glHydrating = true;
   if (ledger.name != null) trip.name = ledger.name;
   trip.members = ledger.members || [];
   trip.expenses = ledger.expenses || [];
   trip.nextMemberId = ledger.nextMemberId || (trip.members.length + 1);
   trip.nextExpenseId = ledger.nextExpenseId || (trip.expenses.length + 1);
+  trip.cloudRevision = remoteRevision || trip.cloudRevision || 0;
+  trip.cloudUpdatedAt = ledger.updatedAt || trip.cloudUpdatedAt || null;
+  trip.cloudUpdatedBy = ledger.updatedBy || trip.cloudUpdatedBy || null;
   try { localStorage.setItem(GL_LS_KEY, JSON.stringify({ trips: GL_TRIPS, nextTripId: glNextTripId })); } catch(e){}
   glHydrating = false;
+  if (trip.roomDocId && glCurrentTripId === trip.id) glSetSyncBadge('synced', '● 已同步');
 
   var view = document.getElementById('viewGroupLedger');
   if (glCurrentTripId === trip.id && view && view.classList.contains('show')){
@@ -3972,6 +4072,7 @@ function openGroupLedger(){
   glCurrentTripId = trip.id;
   hideAllViews();
   document.getElementById('viewGroupLedger').classList.add('show');
+  glSetSyncBadge('synced');
   window.scrollTo(0, 0);
   document.getElementById('glTripName').value = '';
   glSelectedPayerId = null;
@@ -3988,7 +4089,8 @@ function openGroupLedgerTrip(tripId){
   document.getElementById('viewGroupLedger').classList.add('show');
   window.scrollTo(0, 0);
   var badge = document.getElementById('glSyncBadge');
-  if (badge) badge.style.display = trip.roomDocId ? 'inline-block' : 'none';
+  if (trip.roomDocId) glSetSyncBadge('synced', '● 已同步');
+  else if (badge) badge.style.display = 'none';
   document.getElementById('glTripName').value = trip.name;
   if (glSelectedPayerId === null || !trip.members.some(function(m){ return m.id === glSelectedPayerId; })){
     glSelectedPayerId = trip.members.length ? trip.members[0].id : null;
@@ -4117,8 +4219,12 @@ function glAddExpense(){
   if (!(amount > 0)){ amountEl.focus(); return; }
   if (glSelectedPayerId === null){ alert('选一下这笔是谁付的钱'); return; }
   if (glSelectedSplitIds.length === 0){ alert('至少要有一个人参与平摊这笔支出'); return; }
+  var expenseId = trip.roomDocId
+    ? ((window.rmMyUid || 'member') + '-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7))
+    : trip.nextExpenseId;
+  trip.nextExpenseId += 1;
   trip.expenses.push({
-    id: trip.nextExpenseId++,
+    id: expenseId,
     desc: desc,
     amountCents: Math.round(amount * 100),
     payerId: glSelectedPayerId,
@@ -4940,8 +5046,11 @@ var SPIN_COLORS = ['#0F3D36','#B8842A','#3E6E8E','#A8506E','#C05B3C','#4C5C5B','
 var spinnerNames = ['我', '朋友A', '朋友B'];
 var spinnerAngle = 0;      /* 当前累计旋转角度 */
 var spinnerBusy = false;   /* 转动中，禁止重复点 */
+var spinnerRaf = null;     /* 用逐帧动画代替 CSS transition，兼容微信 WebView */
 
 function openSpinner(roomMode){
+  if (spinnerRaf){ cancelAnimationFrame(spinnerRaf); spinnerRaf = null; }
+  spinnerBusy = false;
   hideAllViews();
   document.getElementById('viewSpinner').classList.add('show');
   window.scrollTo(0, 0);
@@ -4959,12 +5068,14 @@ function openSpinner(roomMode){
 }
 
 function spinnerGoBack(){
+  if (spinnerRaf){ cancelAnimationFrame(spinnerRaf); spinnerRaf = null; }
+  spinnerBusy = false;
   goHome(); /* goHome 已处理"从房间进来就回房间、否则回首页" */
 }
 
 function spinnerClearResult(){
   var r = document.getElementById('spinResult');
-  if (r){ r.innerHTML = ''; r.classList.remove('pop'); }
+  if (r){ r.innerHTML = ''; r.classList.remove('pop', 'running'); }
 }
 
 /* 渲染"在场的人"列表，每人可删（复用账本成员行的样式） */
@@ -4985,6 +5096,7 @@ function spinnerRenderNames(){
       '<span class="m-name">' + splitEscapeHtml(name) + '</span>' +
       '<button class="m-del" aria-label="移除">×</button>';
     el.querySelector('.m-del').addEventListener('click', function(){
+      if (spinnerBusy){ showAppToast('转盘停下后再修改名单～'); return; }
       spinnerNames.splice(i, 1);
       spinnerClearResult();
       spinnerRenderNames();
@@ -4995,6 +5107,7 @@ function spinnerRenderNames(){
 }
 
 function spinnerAddName(){
+  if (spinnerBusy){ showAppToast('转盘停下后再加人～'); return; }
   var input = document.getElementById('spinNameInput');
   var name = input.value.trim();
   if (!name) return;
@@ -5061,9 +5174,11 @@ function spinnerSpin(){
   spinnerBusy = true;
   spinnerClearResult();
   var btn = document.getElementById('spinGoBtn');
-  if (btn) btn.disabled = true;
+  if (btn){ btn.disabled = true; btn.textContent = '转动中'; btn.setAttribute('aria-label', '转盘正在转动'); }
 
   var canvas = document.getElementById('spinCanvas');
+  var wrap = canvas ? canvas.closest('.spin-wheel-wrap') : null;
+  var resultEl = document.getElementById('spinResult');
   var seg = 360 / n;
   var winner = Math.floor(Math.random() * n);
 
@@ -5076,17 +5191,30 @@ function spinnerSpin(){
   var currentMod = ((spinnerAngle % 360) + 360) % 360;
   var delta = ((normalizedTarget - currentMod) % 360 + 360) % 360;
   var turns = 5 + Math.floor(Math.random() * 2); /* 5~6 圈 */
-  spinnerAngle += turns * 360 + delta;
-  canvas.style.transform = 'rotate(' + spinnerAngle + 'deg)';
+  var startAngle = spinnerAngle;
+  var targetAngle = spinnerAngle + turns * 360 + delta;
+  var duration = 4300 + Math.floor(Math.random() * 450);
+  var startTime = null;
+  var lastShownIndex = -1;
+  if (wrap) wrap.classList.add('spinning');
+  if (resultEl){
+    resultEl.classList.add('running');
+    resultEl.textContent = '转盘加速中…';
+  }
 
   var decisionEl = document.getElementById('spinDecision');
   var decision = (decisionEl && decisionEl.value.trim()) ? decisionEl.value.trim() : '谁买单';
 
   var done = function(){
-    canvas.removeEventListener('transitionend', done);
-    var r = document.getElementById('spinResult');
+    if (!spinnerBusy) return;
+    if (spinnerRaf){ cancelAnimationFrame(spinnerRaf); spinnerRaf = null; }
+    spinnerAngle = targetAngle;
+    if (canvas) canvas.style.transform = 'rotate(' + spinnerAngle + 'deg)';
+    if (wrap) wrap.classList.remove('spinning');
+    var r = resultEl;
     if (r){
       var nm = '<span class="spin-result-name">' + splitEscapeHtml(spinnerNames[winner]) + '</span>';
+      r.classList.remove('running');
       if (/^谁/.test(decision)){
         /* “谁买单” → “{名字} 买单！” */
         r.innerHTML = '🎉 ' + nm + ' ' + splitEscapeHtml(decision.replace(/^谁/, '')) + '！';
@@ -5097,11 +5225,33 @@ function spinnerSpin(){
       r.classList.remove('pop'); void r.offsetWidth; r.classList.add('pop');
     }
     spinnerBusy = false;
-    if (btn) btn.disabled = false;
+    if (btn){ btn.disabled = false; btn.textContent = '再转'; btn.setAttribute('aria-label', '再转一次'); }
   };
-  canvas.addEventListener('transitionend', done);
-  /* 兜底：万一 transitionend 没触发，4.6s 后强制收尾 */
-  setTimeout(function(){ if (spinnerBusy) done(); }, 4600);
+
+  function animate(now){
+    if (!startTime) startTime = now;
+    var progress = Math.min(1, (now - startTime) / duration);
+    /* 先快后慢的五次方缓动：前半程能清楚看到高速旋转，最后自然停在赢家。 */
+    var eased = 1 - Math.pow(1 - progress, 5);
+    var angle = startAngle + (targetAngle - startAngle) * eased;
+    spinnerAngle = angle;
+    if (canvas) canvas.style.transform = 'rotate(' + angle + 'deg)';
+
+    /* 动画过程中实时显示当前掠过的名字，让过程不是“等几秒只弹答案”。 */
+    if (resultEl){
+      var pointerOnWheel = (((270 - angle) % 360) + 360) % 360;
+      var shownIndex = Math.floor(pointerOnWheel / seg) % n;
+      if (shownIndex !== lastShownIndex){
+        lastShownIndex = shownIndex;
+        resultEl.textContent = progress < 0.7
+          ? '正在掠过：' + spinnerNames[shownIndex]
+          : '慢慢停下… ' + spinnerNames[shownIndex];
+      }
+    }
+    if (progress < 1) spinnerRaf = requestAnimationFrame(animate);
+    else done();
+  }
+  spinnerRaf = requestAnimationFrame(animate);
 }
 
 /* 绑定加名字的输入与按钮 */
@@ -5134,6 +5284,17 @@ function spinnerSpin(){
       copyId: 'glCopyCodeBtn', leaveId: 'glLeaveRoomBtn', label: '账本', createText: '创建账本码', joinText: '加入'
     }
   };
+  var typedPollTimer = null;
+  var typedPullBusy = false;
+  var typedActiveSync = null;
+
+  function stopTypedSync(){
+    if (rmWatcher){ rmWatcher.close(); rmWatcher = null; }
+    if (typedPollTimer){ clearInterval(typedPollTimer); typedPollTimer = null; }
+    typedPullBusy = false;
+    typedActiveSync = null;
+  }
+  window.rmStopTypedRoomSync = stopTypedSync;
 
   function typedRoom(type){
     var room = (typeof rmCurrentRoom === 'function') ? rmCurrentRoom() : null;
@@ -5213,25 +5374,54 @@ function spinnerSpin(){
     return persistTypedRoom(room, patch).then(function(){ return room; });
   }
 
+  function applyTypedRoomDoc(docId, type, doc){
+    if (!doc) return;
+    var room = rmUpsertLocalRoom(docId, doc);
+    if (rmCurrentRoomId !== docId) return;
+    rmRefreshTypedRoomUI(type);
+    if (type === 'midpoint' && typeof mpOnRoomSync === 'function') mpOnRoomSync(room);
+    if (type === 'ledger' && room.ledger){
+      var mirror = glFindTripByRoom(docId);
+      if (mirror) glHydrateTripFromCloud(mirror, room.ledger);
+    }
+  }
+
+  function pullTypedRoom(docId, type){
+    if (typedPullBusy || !rmDb || rmCurrentRoomId !== docId) return;
+    typedPullBusy = true;
+    rmDb.collection('rooms').doc(docId).get().then(function(res){
+      var doc = res.data && res.data[0];
+      if (doc) applyTypedRoomDoc(docId, type, doc);
+    }).catch(function(err){
+      console.warn('[独立房间自动刷新] 拉取失败：', err);
+      if (type === 'ledger') glSetSyncBadge('retry', navigator.onLine === false ? '● 离线等待中' : '● 自动刷新中');
+    }).then(function(){ typedPullBusy = false; });
+  }
+
   function startTypedWatcher(docId, type){
-    if (rmWatcher){ rmWatcher.close(); rmWatcher = null; }
+    stopTypedSync();
     if (!rmDb || docId.indexOf('local-') === 0) return;
+    typedActiveSync = { docId: docId, type: type };
+    pullTypedRoom(docId, type); /* 进入房间立即校准一次，不依赖 watch 的首个事件 */
     rmWatcher = rmDb.collection('rooms').doc(docId).watch({
       onChange: function(snapshot){
         var doc = snapshot.docs && snapshot.docs[0];
         if (!doc) return;
-        var room = rmUpsertLocalRoom(docId, doc);
-        if (rmCurrentRoomId === docId){
-          rmRefreshTypedRoomUI(type);
-          if (type === 'midpoint' && typeof mpOnRoomSync === 'function') mpOnRoomSync(room);
-        }
+        applyTypedRoomDoc(docId, type, doc);
       },
       onError: function(err){
         console.warn('[独立房间实时同步] 监听失败：', err);
-        setError(type, '实时同步暂时中断，请检查网络后刷新页面。');
+        /* 微信 WebView 偶尔会断开长连接；保留轮询，用户无需手动刷新。 */
+        if (type === 'ledger') glSetSyncBadge('retry', '● 自动刷新中');
       }
     });
+    /* watch 是主通道；每 2.5 秒拉取一次做移动端兜底，跨设备改动不会因长连接断开而消失。 */
+    typedPollTimer = setInterval(function(){ pullTypedRoom(docId, type); }, 2500);
   }
+
+  document.addEventListener('visibilitychange', function(){
+    if (!document.hidden && typedActiveSync) pullTypedRoom(typedActiveSync.docId, typedActiveSync.type);
+  });
 
   window.rmEnterTypedRoom = function(docId, type){
     var room = ROOMS.find(function(r){ return r.docId === docId; });
@@ -5339,7 +5529,7 @@ function spinnerSpin(){
   }
 
   function leaveTyped(type){
-    if (rmWatcher){ rmWatcher.close(); rmWatcher = null; }
+    stopTypedSync();
     rmCurrentRoomId = null;
     rmReturnToRoom = false;
     if (type === 'midpoint'){
@@ -5386,6 +5576,7 @@ function spinnerSpin(){
   window.goHome = function(){
     var room = rmCurrentRoom();
     if (rmReturnToRoom && room && room.toolType === 'legacy'){ rmBackToRoomDash(); return; }
+    stopTypedSync();
     rmGoHome();
   };
   window.glGoHome = window.goHome;
