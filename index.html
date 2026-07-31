@@ -80,7 +80,7 @@
         rmDb = rmTcbApp.database();
         window.rmBackendStatus.state = 'connected';
         try {
-          var cu = rmTcbApp.auth().currentUser;
+          var cu = auth.currentUser;
           if (cu && cu.uid) window.rmMyUid = cu.uid;   /* 每台设备的身份，用于协作碰面认领"我的出发点" */
         } catch(e){}
         return true;
@@ -5286,12 +5286,16 @@ function spinnerSpin(){
   };
   var typedPollTimer = null;
   var typedPullBusy = false;
+  var typedPullStartedAt = 0;
+  var typedPullToken = 0;
   var typedActiveSync = null;
 
   function stopTypedSync(){
     if (rmWatcher){ rmWatcher.close(); rmWatcher = null; }
     if (typedPollTimer){ clearInterval(typedPollTimer); typedPollTimer = null; }
     typedPullBusy = false;
+    typedPullStartedAt = 0;
+    typedPullToken += 1; /* 让已经离开房间后才返回的旧请求失效 */
     typedActiveSync = null;
   }
   window.rmStopTypedRoomSync = stopTypedSync;
@@ -5387,40 +5391,75 @@ function spinnerSpin(){
   }
 
   function pullTypedRoom(docId, type){
-    if (typedPullBusy || !rmDb || rmCurrentRoomId !== docId) return;
+    if (!rmDb || rmCurrentRoomId !== docId) return;
+    /* 某些微信 WebView 会让一次 get() 永远悬着不返回。旧版的 busy 会因此
+       永久卡死，之后每 2.5 秒的轮询全部被跳过，只能靠手动刷新页面。
+       超过 8 秒就允许下一次请求接管，并用 token 防止旧请求晚到时改乱状态。 */
+    var now = Date.now();
+    if (typedPullBusy && now - typedPullStartedAt < 8000) return;
     typedPullBusy = true;
-    rmDb.collection('rooms').doc(docId).get().then(function(res){
+    typedPullStartedAt = now;
+    var requestToken = ++typedPullToken;
+    var request = rmDb.collection('rooms').doc(docId).get();
+    Promise.resolve(request).then(function(res){
+      if (requestToken !== typedPullToken || rmCurrentRoomId !== docId) return;
       var doc = res.data && res.data[0];
       if (doc) applyTypedRoomDoc(docId, type, doc);
     }).catch(function(err){
+      if (requestToken !== typedPullToken) return;
       console.warn('[独立房间自动刷新] 拉取失败：', err);
       if (type === 'ledger') glSetSyncBadge('retry', navigator.onLine === false ? '● 离线等待中' : '● 自动刷新中');
-    }).then(function(){ typedPullBusy = false; });
+    }).then(function(){
+      if (requestToken === typedPullToken){
+        typedPullBusy = false;
+        typedPullStartedAt = 0;
+      }
+    });
+    setTimeout(function(){
+      if (requestToken === typedPullToken && typedPullBusy){
+        typedPullBusy = false;
+        typedPullStartedAt = 0;
+      }
+    }, 8500);
   }
 
   function startTypedWatcher(docId, type){
     stopTypedSync();
     if (!rmDb || docId.indexOf('local-') === 0) return;
     typedActiveSync = { docId: docId, type: type };
+    /* 先启动稳定的短轮询，再尝试实时监听。这样即使 watch 在某些微信/
+       Chrome 环境里同步抛错，轮询也已经在运行，不会退化成“刷新才看得到”。 */
+    typedPollTimer = setInterval(function(){ pullTypedRoom(docId, type); }, 2000);
     pullTypedRoom(docId, type); /* 进入房间立即校准一次，不依赖 watch 的首个事件 */
-    rmWatcher = rmDb.collection('rooms').doc(docId).watch({
-      onChange: function(snapshot){
-        var doc = snapshot.docs && snapshot.docs[0];
-        if (!doc) return;
-        applyTypedRoomDoc(docId, type, doc);
-      },
-      onError: function(err){
-        console.warn('[独立房间实时同步] 监听失败：', err);
-        /* 微信 WebView 偶尔会断开长连接；保留轮询，用户无需手动刷新。 */
-        if (type === 'ledger') glSetSyncBadge('retry', '● 自动刷新中');
-      }
-    });
-    /* watch 是主通道；每 2.5 秒拉取一次做移动端兜底，跨设备改动不会因长连接断开而消失。 */
-    typedPollTimer = setInterval(function(){ pullTypedRoom(docId, type); }, 2500);
+    try {
+      rmWatcher = rmDb.collection('rooms').doc(docId).watch({
+        onChange: function(snapshot){
+          var doc = snapshot.docs && snapshot.docs[0];
+          if (!doc) return;
+          applyTypedRoomDoc(docId, type, doc);
+        },
+        onError: function(err){
+          console.warn('[独立房间实时同步] 监听失败，继续使用轮询：', err);
+          /* 微信 WebView 偶尔会断开长连接；轮询仍会继续工作。 */
+          if (type === 'ledger') glSetSyncBadge('retry', '● 自动刷新中');
+          pullTypedRoom(docId, type);
+        }
+      });
+    } catch (err) {
+      rmWatcher = null;
+      console.warn('[独立房间实时同步] 当前浏览器不支持监听，继续使用轮询：', err);
+      if (type === 'ledger') glSetSyncBadge('retry', '● 自动刷新中');
+    }
   }
 
   document.addEventListener('visibilitychange', function(){
     if (!document.hidden && typedActiveSync) pullTypedRoom(typedActiveSync.docId, typedActiveSync.type);
+  });
+  window.addEventListener('focus', function(){
+    if (typedActiveSync) pullTypedRoom(typedActiveSync.docId, typedActiveSync.type);
+  });
+  window.addEventListener('online', function(){
+    if (typedActiveSync) pullTypedRoom(typedActiveSync.docId, typedActiveSync.type);
   });
 
   window.rmEnterTypedRoom = function(docId, type){
