@@ -556,6 +556,36 @@
   .m-item .m-name{flex:1;font-size:13.5px;font-weight:500;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .m-item .m-price{font-family:'IBM Plex Mono',monospace;font-size:13.5px;font-weight:600;color:var(--green);flex-shrink:0;}
   .m-empty{font-size:12.5px;color:#B9B3A2;text-align:center;padding:14px 0 6px;}
+  .gl-row-actions{display:flex;align-items:center;gap:5px;flex-shrink:0;margin-right:4px;}
+  .gl-edit-btn{
+    border:1px solid var(--line);background:var(--paper-raised);color:var(--blue);
+    border-radius:8px;padding:5px 8px;font:600 11.5px inherit;cursor:pointer;white-space:nowrap;
+  }
+  .gl-edit-btn:active{transform:scale(.97);background:var(--blue-soft);}
+  .gl-editor-backdrop{
+    position:fixed;inset:0;z-index:5000;background:rgba(15,25,22,.48);
+    display:flex;align-items:flex-end;justify-content:center;
+  }
+  .gl-editor-card{
+    width:min(100%,480px);max-height:88vh;overflow-y:auto;background:var(--paper-raised);
+    border-radius:20px 20px 0 0;padding:18px 20px max(20px,env(safe-area-inset-bottom));
+    box-shadow:0 -10px 35px rgba(15,61,54,.18);animation:fbModalUp .22s ease;
+  }
+  .gl-editor-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px;}
+  .gl-editor-title{font-size:16px;font-weight:700;color:var(--green);}
+  .gl-editor-close{
+    width:32px;height:32px;border-radius:50%;border:1px solid var(--line);background:var(--paper);
+    color:var(--ink-soft);font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  }
+  .gl-editor-label{display:block;font-size:11.5px;color:var(--ink-soft);margin:12px 2px 6px;}
+  .gl-editor-actions{display:flex;gap:9px;margin-top:16px;}
+  .gl-editor-actions .btn-sub{flex:0 0 34%;}
+  .gl-editor-actions .btn-main{flex:1;}
+  .gl-settlement-updated{
+    display:none;background:var(--blue-soft);color:var(--blue);border-radius:10px;
+    padding:9px 11px;font-size:12px;line-height:1.45;margin-bottom:12px;
+  }
+  .gl-settlement-updated.show{display:block;}
 
   .tax-opts{display:flex;gap:8px;margin-bottom:12px;}
   .tax-opt{
@@ -1445,6 +1475,7 @@
         </div>
 
         <div class="pane" id="glPane3">
+          <div class="gl-settlement-updated" id="glSettlementUpdated">账本刚刚有更新，下面的结算结果已自动重新计算。</div>
           <div class="total-banner">
             <div class="tb-label">本趟总花费</div>
             <div class="tb-amt" id="glFinalTotal">¥0.00</div>
@@ -1454,7 +1485,7 @@
           <div class="mp-title" style="margin-bottom:10px;"><i class="ti-scale" style="color:var(--gold)"></i>每人收支情况</div>
           <div class="settle-list" id="glBalanceList" style="margin-bottom:20px;"></div>
 
-          <div class="mp-title" style="margin-bottom:10px;"><i class="ti-arrow-back-up" style="color:var(--green);transform:scaleX(-1);display:inline-block;"></i>最省事的转账方案</div>
+          <div class="mp-title" style="margin-bottom:10px;"><i class="ti-arrow-back-up" style="color:var(--green);transform:scaleX(-1);display:inline-block;"></i>建议转账方案</div>
           <div class="settle-list" id="glTransferList"></div>
           <div class="verify-strip" id="glVerifyStrip"></div>
 
@@ -3806,6 +3837,8 @@ var glNextTripId = 1;
 var glCurrentTripId = null;
 var glSelectedPayerId = null;
 var glSelectedSplitIds = [];
+var glSplitSelectionTouched = false;
+var glCurrentStep = 1;
 
 /* ---------- 本地持久化：把行程账本存进 localStorage，刷新/重开都不丢 ----------
    账本目前是纯本机数据（没接后端），只用 localStorage 就够了：
@@ -3839,14 +3872,120 @@ function glSyncState(roomDocId){
 function glSerializeLedger(trip){
   return {
     name: trip.name,
+    nameUpdatedAt: trip.nameUpdatedAt || 0,
     members: trip.members,
     expenses: trip.expenses,
+    memberTombstones: trip.memberTombstones || {},
+    expenseTombstones: trip.expenseTombstones || {},
     nextMemberId: trip.nextMemberId,
     nextExpenseId: trip.nextExpenseId,
     revision: trip.cloudRevision || 0,
     updatedAt: trip.cloudUpdatedAt || null,
     updatedBy: trip.cloudUpdatedBy || null
   };
+}
+
+function glClone(value){
+  return JSON.parse(JSON.stringify(value == null ? null : value));
+}
+
+function glItemVersion(item){
+  return Number(item && (item.updatedAt || item.createdAt) || 0);
+}
+
+function glPickNewerItem(a, b){
+  if (!a) return b ? glClone(b) : null;
+  if (!b) return glClone(a);
+  var av = glItemVersion(a), bv = glItemVersion(b);
+  if (av !== bv) return glClone(av > bv ? a : b);
+  /* 同一毫秒的并发修改也要在所有设备得到同一个确定结果，避免来回覆盖。 */
+  return glClone(JSON.stringify(a) >= JSON.stringify(b) ? a : b);
+}
+
+function glMergeTombstones(a, b){
+  var merged = {};
+  [a || {}, b || {}].forEach(function(source){
+    Object.keys(source).forEach(function(id){
+      var incoming = source[id] || {};
+      var current = merged[id];
+      var incomingAt = Number(incoming.deletedAt || 0);
+      var currentAt = Number(current && current.deletedAt || 0);
+      if (!current || incomingAt > currentAt || (incomingAt === currentAt && JSON.stringify(incoming) > JSON.stringify(current))){
+        merged[id] = glClone(incoming);
+      }
+    });
+  });
+  return merged;
+}
+
+function glMergeItems(localItems, remoteItems, tombstones){
+  var byId = {}, order = [];
+  function absorb(items){
+    (items || []).forEach(function(item){
+      if (!item || item.id == null) return;
+      var key = String(item.id);
+      if (order.indexOf(key) === -1) order.push(key);
+      byId[key] = glPickNewerItem(byId[key], item);
+    });
+  }
+  /* 云端顺序优先，本地新增项目接在后面；同一 id 只保留较新版本。 */
+  absorb(remoteItems);
+  absorb(localItems);
+  return order.map(function(key){ return byId[key]; }).filter(function(item){
+    var tombstone = tombstones[String(item.id)];
+    return !tombstone || Number(tombstone.deletedAt || 0) < glItemVersion(item);
+  });
+}
+
+/* 多设备并发时按成员/支出 id 合并，而不是让最后上传的整本账覆盖别人刚加的记录。 */
+function glMergeLedgers(localLedger, remoteLedger){
+  var local = localLedger || {};
+  var remote = remoteLedger || {};
+  var memberTombstones = glMergeTombstones(local.memberTombstones, remote.memberTombstones);
+  var expenseTombstones = glMergeTombstones(local.expenseTombstones, remote.expenseTombstones);
+  var localNameAt = Number(local.nameUpdatedAt || 0);
+  var remoteNameAt = Number(remote.nameUpdatedAt || 0);
+  var name = localNameAt > remoteNameAt ? local.name : remote.name;
+  if (localNameAt === remoteNameAt) name = remote.name || local.name || '';
+  var latestUpdatedAt = Math.max(Number(local.updatedAt || 0), Number(remote.updatedAt || 0));
+  return {
+    name: name || '',
+    nameUpdatedAt: Math.max(localNameAt, remoteNameAt),
+    members: glMergeItems(local.members, remote.members, memberTombstones),
+    expenses: glMergeItems(local.expenses, remote.expenses, expenseTombstones),
+    memberTombstones: memberTombstones,
+    expenseTombstones: expenseTombstones,
+    nextMemberId: Math.max(Number(local.nextMemberId || 1), Number(remote.nextMemberId || 1)),
+    nextExpenseId: Math.max(Number(local.nextExpenseId || 1), Number(remote.nextExpenseId || 1)),
+    revision: Math.max(Number(local.revision || 0), Number(remote.revision || 0)),
+    updatedAt: latestUpdatedAt || null,
+    updatedBy: Number(local.updatedAt || 0) >= Number(remote.updatedAt || 0) ? (local.updatedBy || null) : (remote.updatedBy || null)
+  };
+}
+
+function glLedgerContentSignature(ledger){
+  var value = glMergeLedgers(ledger || {}, {});
+  value.members.sort(function(a, b){ return String(a.id).localeCompare(String(b.id)); });
+  value.expenses.sort(function(a, b){ return String(a.id).localeCompare(String(b.id)); });
+  delete value.revision;
+  delete value.updatedAt;
+  delete value.updatedBy;
+  return JSON.stringify(value);
+}
+
+function glApplyLedgerToTrip(trip, ledger){
+  if (!trip || !ledger) return;
+  trip.name = ledger.name || '';
+  trip.nameUpdatedAt = Number(ledger.nameUpdatedAt || 0);
+  trip.members = ledger.members || [];
+  trip.expenses = ledger.expenses || [];
+  trip.memberTombstones = ledger.memberTombstones || {};
+  trip.expenseTombstones = ledger.expenseTombstones || {};
+  trip.nextMemberId = ledger.nextMemberId || (trip.members.length + 1);
+  trip.nextExpenseId = ledger.nextExpenseId || (trip.expenses.length + 1);
+  trip.cloudRevision = Number(ledger.revision || 0);
+  trip.cloudUpdatedAt = ledger.updatedAt || null;
+  trip.cloudUpdatedBy = ledger.updatedBy || null;
 }
 
 /* 串行、合并地写云端：
@@ -3881,11 +4020,27 @@ function glFlushCloudSync(roomDocId){
   state.payload = null;
   state.inFlight = true;
   setRoomBadge('syncing', '● 正在同步');
-  rmDb.collection('rooms').doc(roomDocId).update({ ledger: payload }).then(function(){
+  var roomRef = rmDb.collection('rooms').doc(roomDocId);
+  var writtenLedger = payload;
+  roomRef.get().then(function(res){
+    var doc = res.data && res.data[0];
+    writtenLedger = glMergeLedgers(payload, doc && doc.ledger);
+    writtenLedger.revision = Math.max(Number(payload.revision || 0), Number(writtenLedger.revision || 0));
+    writtenLedger.updatedAt = Math.max(Number(payload.updatedAt || 0), Number(writtenLedger.updatedAt || 0));
+    writtenLedger.updatedBy = payload.updatedBy || writtenLedger.updatedBy || null;
+    return roomRef.update({ ledger: writtenLedger });
+  }).then(function(){
     state.inFlight = false;
     state.retryCount = 0;
-    /* 忽略可能晚到的旧 watch 事件，直到监听/轮询看见这次或更新的 revision。 */
-    state.ignoreBeforeRevision = Math.max(state.ignoreBeforeRevision, payload.revision || 0);
+    var trip = glFindTripByRoom(roomDocId);
+    if (trip){
+      var reconciled = glMergeLedgers(glSerializeLedger(trip), writtenLedger);
+      glHydrating = true;
+      glApplyLedgerToTrip(trip, reconciled);
+      try { localStorage.setItem(GL_LS_KEY, JSON.stringify({ trips: GL_TRIPS, nextTripId: glNextTripId })); } catch(ignore){}
+      glHydrating = false;
+      if (state.payload) state.payload = glMergeLedgers(state.payload, reconciled);
+    }
     if (state.payload) glFlushCloudSync(roomDocId);
     else setRoomBadge('synced', '● 已同步');
   }).catch(function(err){
@@ -3925,6 +4080,13 @@ function glLoad(){
     var data = JSON.parse(raw);
     if (data && Array.isArray(data.trips)){
       GL_TRIPS = data.trips;
+      GL_TRIPS.forEach(function(trip){
+        trip.members = Array.isArray(trip.members) ? trip.members : [];
+        trip.expenses = Array.isArray(trip.expenses) ? trip.expenses : [];
+        trip.memberTombstones = trip.memberTombstones || {};
+        trip.expenseTombstones = trip.expenseTombstones || {};
+        trip.nameUpdatedAt = Number(trip.nameUpdatedAt || 0);
+      });
       /* 保证新建行程的 id 不会和已存的撞号 */
       var maxId = GL_TRIPS.reduce(function(mx, t){ return Math.max(mx, t.id || 0); }, 0);
       glNextTripId = Math.max(data.nextTripId || 1, maxId + 1);
@@ -3943,21 +4105,12 @@ function glHydrateTripFromCloud(trip, ledger){
   if (!trip || !ledger) return;
   var syncState = trip.roomDocId ? glSyncState(trip.roomDocId) : null;
   var remoteRevision = Number(ledger.revision || 0);
-  /* 本地刚写入时，watch 可能先送来一份旧快照。不能让旧快照把刚加的支出抹掉。 */
-  if (syncState && syncState.ignoreBeforeRevision){
-    if (!remoteRevision || remoteRevision < syncState.ignoreBeforeRevision) return;
-    syncState.ignoreBeforeRevision = 0;
-  }
   if (syncState && (syncState.inFlight || syncState.payload)) return;
+  var localLedger = glSerializeLedger(trip);
+  var mergedLedger = glMergeLedgers(localLedger, ledger);
+  var remoteNeedsRepair = glLedgerContentSignature(mergedLedger) !== glLedgerContentSignature(ledger);
   glHydrating = true;
-  if (ledger.name != null) trip.name = ledger.name;
-  trip.members = ledger.members || [];
-  trip.expenses = ledger.expenses || [];
-  trip.nextMemberId = ledger.nextMemberId || (trip.members.length + 1);
-  trip.nextExpenseId = ledger.nextExpenseId || (trip.expenses.length + 1);
-  trip.cloudRevision = remoteRevision || trip.cloudRevision || 0;
-  trip.cloudUpdatedAt = ledger.updatedAt || trip.cloudUpdatedAt || null;
-  trip.cloudUpdatedBy = ledger.updatedBy || trip.cloudUpdatedBy || null;
+  glApplyLedgerToTrip(trip, mergedLedger);
   try { localStorage.setItem(GL_LS_KEY, JSON.stringify({ trips: GL_TRIPS, nextTripId: glNextTripId })); } catch(e){}
   glHydrating = false;
   if (trip.roomDocId && glCurrentTripId === trip.id) glSetSyncBadge('synced', '● 已同步');
@@ -3971,16 +4124,62 @@ function glHydrateTripFromCloud(trip, ledger){
       glSelectedPayerId = trip.members.length ? trip.members[0].id : null;
     }
     glSelectedSplitIds = glSelectedSplitIds.filter(function(id){ return trip.members.some(function(m){ return m.id === id; }); });
-    if (glSelectedSplitIds.length === 0) glSelectedSplitIds = trip.members.map(function(m){ return m.id; });
+    if (!glSplitSelectionTouched || glSelectedSplitIds.length === 0) glSelectedSplitIds = trip.members.map(function(m){ return m.id; });
     if (typeof glRenderMemberList === 'function') glRenderMemberList();
     if (typeof glRenderPayerBar === 'function') glRenderPayerBar();
     if (typeof glRenderSplitBar === 'function') glRenderSplitBar();
     if (typeof glRenderExpenseList === 'function') glRenderExpenseList();
+    if (typeof glRefreshSettlementIfVisible === 'function') glRefreshSettlementIfVisible(true);
   }
+  /* 若远端刚好覆盖了另一台设备的一笔不同改动，合并结果会自动补写回云端，最终两边收敛。 */
+  if (remoteNeedsRepair && trip.roomDocId && rmDb) glQueueCloudSync(trip);
 }
 
 function glCurrentTrip(){
   return GL_TRIPS.find(function(t){ return t.id === glCurrentTripId; }) || null;
+}
+
+function glMutationStamp(){
+  return Date.now();
+}
+
+function glMyMember(trip){
+  if (!trip || !window.rmMyUid) return null;
+  return trip.members.find(function(m){ return m.uid && m.uid === window.rmMyUid; }) || null;
+}
+
+function glResetExpenseDefaults(trip){
+  if (!trip) return;
+  var mine = glMyMember(trip);
+  glSelectedPayerId = mine ? mine.id : (trip.members.length ? trip.members[0].id : null);
+  glSelectedSplitIds = trip.members.map(function(m){ return m.id; });
+  glSplitSelectionTouched = false;
+  if (typeof glRenderPayerBar === 'function') glRenderPayerBar();
+  if (typeof glRenderSplitBar === 'function') glRenderSplitBar();
+}
+
+function glCloseEditor(){
+  var backdrop = document.getElementById('glEditorBackdrop');
+  if (backdrop) backdrop.remove();
+}
+
+function glOpenEditor(title, bodyHtml){
+  glCloseEditor();
+  var backdrop = document.createElement('div');
+  backdrop.className = 'gl-editor-backdrop';
+  backdrop.id = 'glEditorBackdrop';
+  backdrop.setAttribute('role', 'dialog');
+  backdrop.setAttribute('aria-modal', 'true');
+  backdrop.innerHTML =
+    '<div class="gl-editor-card">' +
+      '<div class="gl-editor-head"><div class="gl-editor-title">' + splitEscapeHtml(title) + '</div>' +
+      '<button class="gl-editor-close" type="button" aria-label="关闭">×</button></div>' +
+      '<div id="glEditorBody">' + bodyHtml + '</div>' +
+    '</div>';
+  backdrop.addEventListener('click', function(e){ if (e.target === backdrop) glCloseEditor(); });
+  backdrop.querySelector('.gl-editor-close').addEventListener('click', glCloseEditor);
+  document.getElementById('screen').appendChild(backdrop);
+  return backdrop;
 }
 
 /* ---------- 首页：进行中的行程列表 ---------- */
@@ -4051,6 +4250,7 @@ function glGoHome(){
   glRenderHomeTripList();
 }
 function glGoStep(n){
+  glCurrentStep = n;
   document.getElementById('glPane1').classList.toggle('show', n === 1);
   document.getElementById('glPane2').classList.toggle('show', n === 2);
   document.getElementById('glPane3').classList.toggle('show', n === 3);
@@ -4066,7 +4266,7 @@ function glGoStep(n){
 
 /* 首页大卡片"行程账本" = 新建一趟行程，从第一步开始 */
 function openGroupLedger(){
-  var trip = { id: glNextTripId++, name: '', members: [], expenses: [], nextMemberId: 1, nextExpenseId: 1 };
+  var trip = { id: glNextTripId++, name: '', nameUpdatedAt: 0, members: [], expenses: [], memberTombstones: {}, expenseTombstones: {}, nextMemberId: 1, nextExpenseId: 1 };
   GL_TRIPS.push(trip);
   glSave();
   glCurrentTripId = trip.id;
@@ -4077,6 +4277,7 @@ function openGroupLedger(){
   document.getElementById('glTripName').value = '';
   glSelectedPayerId = null;
   glSelectedSplitIds = [];
+  glSplitSelectionTouched = false;
   glGoStep(1);
   glRenderMemberList();
 }
@@ -4092,12 +4293,7 @@ function openGroupLedgerTrip(tripId){
   if (trip.roomDocId) glSetSyncBadge('synced', '● 已同步');
   else if (badge) badge.style.display = 'none';
   document.getElementById('glTripName').value = trip.name;
-  if (glSelectedPayerId === null || !trip.members.some(function(m){ return m.id === glSelectedPayerId; })){
-    glSelectedPayerId = trip.members.length ? trip.members[0].id : null;
-  }
-  glSelectedSplitIds = trip.members.map(function(m){ return m.id; });
-  glRenderPayerBar();
-  glRenderSplitBar();
+  glResetExpenseDefaults(trip);
   glRenderExpenseList();
   glGoStep(2);
 }
@@ -4105,7 +4301,7 @@ function openGroupLedgerTrip(tripId){
 /* ---------- Step 1：行程名字 + 同行的人 ---------- */
 document.getElementById('glTripName').addEventListener('input', function(){
   var trip = glCurrentTrip();
-  if (trip){ trip.name = this.value.trim(); glSave(); }
+  if (trip){ trip.name = this.value.trim(); trip.nameUpdatedAt = glMutationStamp(); glSave(); }
 });
 
 function glAddMember(){
@@ -4118,7 +4314,8 @@ function glAddMember(){
     alert('已经有一个叫「' + name + '」的人了，换个名字区分一下吧（比如加个姓）。');
     return;
   }
-  trip.members.push({ id: trip.nextMemberId++, name: name, color: GL_COLORS[trip.members.length % GL_COLORS.length] });
+  var stamp = glMutationStamp();
+  trip.members.push({ id: trip.nextMemberId++, name: name, color: GL_COLORS[trip.members.length % GL_COLORS.length], createdAt: stamp, updatedAt: stamp, updatedBy: window.rmMyUid || null });
   glSave();
   input.value = '';
   input.focus();
@@ -4133,9 +4330,47 @@ function glDeleteMember(id){
     alert('这个人已经在支出记录里了，先去"记支出"那一步把相关支出删掉或改掉，再来移除。');
     return;
   }
+  var member = trip.members.find(function(m){ return m.id === id; });
+  if (!member || !confirm('移除“' + member.name + '”？')) return;
+  trip.memberTombstones = trip.memberTombstones || {};
+  trip.memberTombstones[String(id)] = { deletedAt: glMutationStamp(), deletedBy: window.rmMyUid || null };
   trip.members = trip.members.filter(function(m){ return m.id !== id; });
   glSave();
   glRenderMemberList();
+}
+function glOpenMemberEditor(id){
+  var trip = glCurrentTrip();
+  var member = trip && trip.members.find(function(m){ return m.id === id; });
+  if (!member) return;
+  var modal = glOpenEditor('修改成员名字',
+    '<label class="gl-editor-label" for="glEditMemberName">名字</label>' +
+    '<input class="field" id="glEditMemberName" type="text" maxlength="12" value="' + splitEscapeHtml(member.name) + '">' +
+    '<div class="gl-editor-actions"><button class="btn-sub" id="glCancelMemberEdit" type="button">取消</button><button class="btn-main" id="glSaveMemberEdit" type="button">保存修改</button></div>');
+  var input = modal.querySelector('#glEditMemberName');
+  modal.querySelector('#glCancelMemberEdit').addEventListener('click', glCloseEditor);
+  modal.querySelector('#glSaveMemberEdit').addEventListener('click', function(){
+    var name = input.value.trim();
+    if (!name){ input.focus(); return; }
+    if (trip.members.some(function(m){ return m.id !== id && m.name === name; })){
+      alert('已经有一个叫“' + name + '”的人了，请换个名字区分。');
+      input.focus();
+      return;
+    }
+    var currentMember = trip.members.find(function(m){ return m.id === id; });
+    if (!currentMember){ glCloseEditor(); showAppToast('该成员已被其他设备移除'); return; }
+    currentMember.name = name;
+    currentMember.updatedAt = glMutationStamp();
+    currentMember.updatedBy = window.rmMyUid || null;
+    glSave();
+    glCloseEditor();
+    glRenderMemberList();
+    glRenderPayerBar();
+    glRenderSplitBar();
+    glRenderExpenseList();
+    glRefreshSettlementIfVisible(false);
+  });
+  input.addEventListener('keydown', function(e){ if (e.key === 'Enter') modal.querySelector('#glSaveMemberEdit').click(); });
+  setTimeout(function(){ input.focus(); input.select(); }, 0);
 }
 function glRenderMemberList(){
   var trip = glCurrentTrip();
@@ -4151,7 +4386,9 @@ function glRenderMemberList(){
     el.innerHTML =
       '<span class="d-ava" style="width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:#fff;background:' + splitSafeColor(m.color) + ';flex-shrink:0;">' + splitEscapeHtml((m.name || '?')[0]) + '</span>' +
       '<span class="m-name">' + splitEscapeHtml(m.name) + '</span>' +
+      '<div class="gl-row-actions"><button class="gl-edit-btn" type="button">修改</button></div>' +
       '<button class="m-del" aria-label="移除">×</button>';
+    el.querySelector('.gl-edit-btn').addEventListener('click', function(){ glOpenMemberEditor(m.id); });
     el.querySelector('.m-del').addEventListener('click', function(){ glDeleteMember(m.id); });
     list.appendChild(el);
   });
@@ -4162,14 +4399,9 @@ document.getElementById('glMemberName').addEventListener('keydown', function(e){
 document.getElementById('glBtnToStep2').addEventListener('click', function(){
   var trip = glCurrentTrip();
   if (!trip) return;
-  if (!trip.name){ trip.name = '未命名行程 ' + trip.id; glSave(); }
+  if (!trip.name){ trip.name = '未命名行程 ' + trip.id; trip.nameUpdatedAt = glMutationStamp(); glSave(); }
   if (trip.members.length < 2){ alert('至少要有 2 个人才能算谁转给谁～'); return; }
-  if (glSelectedPayerId === null || !trip.members.some(function(m){ return m.id === glSelectedPayerId; })){
-    glSelectedPayerId = trip.members[0].id;
-  }
-  glSelectedSplitIds = trip.members.map(function(m){ return m.id; }); /* 默认全员平摊 */
-  glRenderPayerBar();
-  glRenderSplitBar();
+  glResetExpenseDefaults(trip);
   glRenderExpenseList();
   glGoStep(2);
 });
@@ -4203,6 +4435,7 @@ function glRenderSplitBar(){
       var idx = glSelectedSplitIds.indexOf(m.id);
       if (idx > -1) glSelectedSplitIds.splice(idx, 1);
       else glSelectedSplitIds.push(m.id);
+      glSplitSelectionTouched = true;
       glRenderSplitBar();
     };
     bar.appendChild(chip);
@@ -4223,16 +4456,21 @@ function glAddExpense(){
     ? ((window.rmMyUid || 'member') + '-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7))
     : trip.nextExpenseId;
   trip.nextExpenseId += 1;
+  var stamp = glMutationStamp();
   trip.expenses.push({
     id: expenseId,
     desc: desc,
     amountCents: Math.round(amount * 100),
     payerId: glSelectedPayerId,
-    splitIds: glSelectedSplitIds.slice()
+    splitIds: glSelectedSplitIds.slice(),
+    createdAt: stamp,
+    updatedAt: stamp,
+    updatedBy: window.rmMyUid || null
   });
   glSave();
   descEl.value = '';
   amountEl.value = '';
+  glResetExpenseDefaults(trip); /* 下一笔恢复为“我付款、全员平摊”，避免静默沿用上一笔的特殊选择。 */
   descEl.focus();
   glRenderExpenseList();
 }
@@ -4244,6 +4482,78 @@ function glMemberById(id){
   var trip = glCurrentTrip();
   if (!trip) return null;
   return trip.members.find(function(m){ return m.id === id; });
+}
+function glOpenExpenseEditor(expenseId){
+  var trip = glCurrentTrip();
+  var expense = trip && trip.expenses.find(function(e){ return String(e.id) === String(expenseId); });
+  if (!expense) return;
+  var payerId = expense.payerId;
+  var splitIds = expense.splitIds.slice();
+  var payerHtml = trip.members.map(function(m){
+    return '<button class="diner-chip' + (m.id === payerId ? ' on' : '') + '" type="button" data-payer-id="' + m.id + '"><span class="d-ava" style="background:' + splitSafeColor(m.color) + '">' + splitEscapeHtml((m.name || '?')[0]) + '</span>' + splitEscapeHtml(m.name) + '</button>';
+  }).join('');
+  var splitHtml = trip.members.map(function(m){
+    return '<button class="diner-chip' + (splitIds.indexOf(m.id) > -1 ? ' on' : '') + '" type="button" data-split-id="' + m.id + '"><span class="d-ava" style="background:' + splitSafeColor(m.color) + '">' + splitEscapeHtml((m.name || '?')[0]) + '</span>' + splitEscapeHtml(m.name) + '</button>';
+  }).join('');
+  var modal = glOpenEditor('修改支出',
+    '<label class="gl-editor-label" for="glEditExpenseDesc">花在哪里</label>' +
+    '<input class="field" id="glEditExpenseDesc" type="text" maxlength="20" value="' + splitEscapeHtml(expense.desc) + '">' +
+    '<label class="gl-editor-label" for="glEditExpenseAmount">金额</label>' +
+    '<input class="field" id="glEditExpenseAmount" type="number" inputmode="decimal" min="0" step="0.01" value="' + (expense.amountCents / 100).toFixed(2) + '">' +
+    '<span class="gl-editor-label">谁付的钱</span><div class="diner-bar" id="glEditPayerBar">' + payerHtml + '</div>' +
+    '<span class="gl-editor-label">谁参与平摊</span><div class="diner-bar" id="glEditSplitBar">' + splitHtml + '</div>' +
+    '<div class="gl-editor-actions"><button class="btn-sub" id="glCancelExpenseEdit" type="button">取消</button><button class="btn-main" id="glSaveExpenseEdit" type="button">保存修改</button></div>');
+  function repaintChoices(){
+    modal.querySelectorAll('[data-payer-id]').forEach(function(chip){ chip.classList.toggle('on', Number(chip.dataset.payerId) === payerId); });
+    modal.querySelectorAll('[data-split-id]').forEach(function(chip){ chip.classList.toggle('on', splitIds.indexOf(Number(chip.dataset.splitId)) > -1); });
+  }
+  modal.querySelectorAll('[data-payer-id]').forEach(function(chip){
+    chip.addEventListener('click', function(){ payerId = Number(chip.dataset.payerId); repaintChoices(); });
+  });
+  modal.querySelectorAll('[data-split-id]').forEach(function(chip){
+    chip.addEventListener('click', function(){
+      var id = Number(chip.dataset.splitId);
+      var idx = splitIds.indexOf(id);
+      if (idx > -1) splitIds.splice(idx, 1); else splitIds.push(id);
+      repaintChoices();
+    });
+  });
+  modal.querySelector('#glCancelExpenseEdit').addEventListener('click', glCloseEditor);
+  modal.querySelector('#glSaveExpenseEdit').addEventListener('click', function(){
+    var descInput = modal.querySelector('#glEditExpenseDesc');
+    var amountInput = modal.querySelector('#glEditExpenseAmount');
+    var desc = descInput.value.trim();
+    var amount = Number(amountInput.value);
+    if (!desc){ descInput.focus(); return; }
+    if (!isFinite(amount) || amount <= 0){ amountInput.focus(); return; }
+    if (payerId == null){ alert('请选择付款人'); return; }
+    if (splitIds.length === 0){ alert('至少要有一个人参与平摊'); return; }
+    var currentExpense = trip.expenses.find(function(e){ return String(e.id) === String(expenseId); });
+    if (!currentExpense){ glCloseEditor(); showAppToast('这笔支出已被其他设备删除'); return; }
+    currentExpense.desc = desc;
+    currentExpense.amountCents = Math.round(amount * 100);
+    currentExpense.payerId = payerId;
+    currentExpense.splitIds = splitIds.slice();
+    currentExpense.updatedAt = glMutationStamp();
+    currentExpense.updatedBy = window.rmMyUid || null;
+    glSave();
+    glCloseEditor();
+    glRenderExpenseList();
+    glRefreshSettlementIfVisible(false);
+    showAppToast('支出已修改并同步');
+  });
+  setTimeout(function(){ modal.querySelector('#glEditExpenseDesc').focus(); }, 0);
+}
+function glDeleteExpense(expenseId){
+  var trip = glCurrentTrip();
+  var expense = trip && trip.expenses.find(function(e){ return String(e.id) === String(expenseId); });
+  if (!expense || !confirm('删除“' + expense.desc + '”这笔 ¥' + (expense.amountCents / 100).toFixed(2) + ' 支出？\n删除后会同步到其他设备。')) return;
+  trip.expenseTombstones = trip.expenseTombstones || {};
+  trip.expenseTombstones[String(expense.id)] = { deletedAt: glMutationStamp(), deletedBy: window.rmMyUid || null };
+  trip.expenses = trip.expenses.filter(function(x){ return String(x.id) !== String(expense.id); });
+  glSave();
+  glRenderExpenseList();
+  glRefreshSettlementIfVisible(false);
 }
 function glRenderExpenseList(){
   var trip = glCurrentTrip();
@@ -4266,17 +4576,15 @@ function glRenderExpenseList(){
         '<br><span style="font-size:11px;color:var(--ink-soft);font-weight:400;">' + (payer ? splitEscapeHtml(payer.name) : '?') + ' 付 · ' + splitEscapeHtml(splitNames) + ' 平摊</span>' +
       '</span>' +
       '<span class="m-price">¥' + (e.amountCents / 100).toFixed(2) + '</span>' +
+      '<div class="gl-row-actions"><button class="gl-edit-btn" type="button">修改</button></div>' +
       '<button class="m-del" aria-label="删除">×</button>';
-    el.querySelector('.m-del').addEventListener('click', function(){
-      trip.expenses = trip.expenses.filter(function(x){ return x.id !== e.id; });
-      glSave();
-      glRenderExpenseList();
-    });
+    el.querySelector('.gl-edit-btn').addEventListener('click', function(){ glOpenExpenseEditor(e.id); });
+    el.querySelector('.m-del').addEventListener('click', function(){ glDeleteExpense(e.id); });
     list.appendChild(el);
   });
 }
 
-/* ---------- Step 3：算清楚 —— 净额 + 贪心债务简化，得到最少转账笔数 ---------- */
+/* ---------- Step 3：算清楚 —— 小团体精确求最少笔数，大团体使用稳定的贪心方案 ---------- */
 function glComputeSettlement(trip){
   var balance = {};
   trip.members.forEach(function(m){ balance[m.id] = 0; });
@@ -4292,32 +4600,64 @@ function glComputeSettlement(trip){
     });
   });
 
-  var creditors = [], debtors = [];
-  Object.keys(balance).forEach(function(id){
-    var v = balance[id];
-    if (v > 0) creditors.push({ id: Number(id), amt: v });
-    else if (v < 0) debtors.push({ id: Number(id), amt: -v });
-  });
-  creditors.sort(function(a, b){ return b.amt - a.amt; });
-  debtors.sort(function(a, b){ return b.amt - a.amt; });
+  var nodes = Object.keys(balance).map(function(id){ return { id: Number(id), value: balance[id] }; })
+    .filter(function(node){ return node.value !== 0; })
+    .sort(function(a, b){ return Math.abs(b.value) - Math.abs(a.value); });
 
-  var transfers = [];
-  var ci = 0, di = 0;
-  while (ci < creditors.length && di < debtors.length){
-    var c = creditors[ci], d = debtors[di];
-    var amt = Math.min(c.amt, d.amt);
-    if (amt > 0) transfers.push({ from: d.id, to: c.id, amountCents: amt });
-    c.amt -= amt; d.amt -= amt;
-    if (c.amt <= 0) ci++;
-    if (d.amt <= 0) di++;
+  function greedyTransfers(){
+    var creditors = [], debtors = [];
+    nodes.forEach(function(node){
+      if (node.value > 0) creditors.push({ id: node.id, amt: node.value });
+      else debtors.push({ id: node.id, amt: -node.value });
+    });
+    var transfers = [], ci = 0, di = 0;
+    while (ci < creditors.length && di < debtors.length){
+      var c = creditors[ci], d = debtors[di];
+      var amt = Math.min(c.amt, d.amt);
+      if (amt > 0) transfers.push({ from: d.id, to: c.id, amountCents: amt });
+      c.amt -= amt; d.amt -= amt;
+      if (c.amt <= 0) ci++;
+      if (d.amt <= 0) di++;
+    }
+    return transfers;
   }
-  return { balance: balance, transfers: transfers };
+
+  /* 常见旅行团人数不多，回溯所有有效配对并选笔数最少的一组；超过 10 个非零账户时避免指数级卡顿。 */
+  if (nodes.length <= 10){
+    var memo = {};
+    function solve(values){
+      var first = values.findIndex(function(v){ return v !== 0; });
+      if (first === -1) return [];
+      var key = values.join(',');
+      if (memo[key]) return glClone(memo[key]);
+      var firstValue = values[first];
+      var best = null;
+      var tried = {};
+      for (var j = first + 1; j < values.length; j++){
+        if (firstValue * values[j] >= 0 || tried[values[j]]) continue;
+        tried[values[j]] = true;
+        var next = values.slice();
+        var transfer = firstValue < 0
+          ? { from: nodes[first].id, to: nodes[j].id, amountCents: -firstValue }
+          : { from: nodes[j].id, to: nodes[first].id, amountCents: firstValue };
+        next[j] += firstValue;
+        next[first] = 0;
+        var rest = solve(next);
+        var candidate = [transfer].concat(rest);
+        if (!best || candidate.length < best.length) best = candidate;
+        if (next[j] === 0) break; /* 完全抵消已经是当前层最优选择，无需尝试同额重复分支。 */
+      }
+      memo[key] = best || [];
+      return glClone(memo[key]);
+    }
+    return { balance: balance, transfers: solve(nodes.map(function(node){ return node.value; })), exact: true };
+  }
+  return { balance: balance, transfers: greedyTransfers(), exact: false };
 }
 
-document.getElementById('glBtnSettle').addEventListener('click', function(){
+function glRenderSettlement(showUpdatedNotice){
   var trip = glCurrentTrip();
-  if (!trip) return;
-  if (trip.expenses.length === 0){ alert('还没有任何支出记录，先去加一笔。'); return; }
+  if (!trip || trip.expenses.length === 0) return false;
   var result = glComputeSettlement(trip);
 
   var totalCents = trip.expenses.reduce(function(s, e){ return s + e.amountCents; }, 0);
@@ -4360,7 +4700,32 @@ document.getElementById('glBtnSettle').addEventListener('click', function(){
   }
 
   document.getElementById('glVerifyStrip').innerHTML =
-    getIconHtml('shield-check') + '共 ' + result.transfers.length + ' 笔转账，转完大家就都两清了';
+    getIconHtml('shield-check') + (result.exact ? '已找到最少 ' : '已生成 ') + result.transfers.length + ' 笔转账，转完大家就都两清了';
+
+  var updated = document.getElementById('glSettlementUpdated');
+  if (updated){
+    updated.classList.toggle('show', !!showUpdatedNotice);
+    if (showUpdatedNotice) setTimeout(function(){ updated.classList.remove('show'); }, 3500);
+  }
+  return true;
+}
+
+function glRefreshSettlementIfVisible(fromRemote){
+  if (glCurrentStep !== 3) return;
+  var trip = glCurrentTrip();
+  if (!trip || trip.expenses.length === 0){
+    glGoStep(2);
+    showAppToast('账本已没有支出，请先添加一笔');
+    return;
+  }
+  glRenderSettlement(!!fromRemote);
+}
+
+document.getElementById('glBtnSettle').addEventListener('click', function(){
+  var trip = glCurrentTrip();
+  if (!trip) return;
+  if (trip.expenses.length === 0){ alert('还没有任何支出记录，先去加一笔。'); return; }
+  glRenderSettlement(false);
 
   glGoStep(3);
 });
@@ -4866,7 +5231,7 @@ function rmOpenLedger(){
   /* 找 / 建这个房间对应的本地镜像行程（真正的数据源是云端 room.ledger） */
   var trip = glFindTripByRoom(room.docId);
   if (!trip){
-    trip = { id: glNextTripId++, roomDocId: room.docId, name: room.name, members: [], expenses: [], nextMemberId: 1, nextExpenseId: 1 };
+    trip = { id: glNextTripId++, roomDocId: room.docId, name: room.name, nameUpdatedAt: 0, members: [], expenses: [], memberTombstones: {}, expenseTombstones: {}, nextMemberId: 1, nextExpenseId: 1 };
     GL_TRIPS.push(trip);
   }
 
@@ -4875,13 +5240,17 @@ function rmOpenLedger(){
     glHydrateTripFromCloud(trip, room.ledger);
     room.members.forEach(function(rm){
       var exists = trip.members.some(function(tm){ return (rm.uid && tm.uid === rm.uid) || tm.name === rm.name; });
-      if (!exists) trip.members.push({ id: trip.nextMemberId++, uid: rm.uid || null, name: rm.name, color: rm.color });
+      if (!exists){
+        var stamp = glMutationStamp();
+        trip.members.push({ id: trip.nextMemberId++, uid: rm.uid || null, name: rm.name, color: rm.color, createdAt: stamp, updatedAt: stamp, updatedBy: window.rmMyUid || null });
+      }
     });
   } else {
     /* 云端还没有：用房间当前成员初始化一份，再写上云，成为共享账本 */
     room.members.forEach(function(rm){
       if (!trip.members.some(function(tm){ return tm.name === rm.name; })){
-        trip.members.push({ id: trip.nextMemberId++, uid: rm.uid || null, name: rm.name, color: rm.color });
+        var stamp = glMutationStamp();
+        trip.members.push({ id: trip.nextMemberId++, uid: rm.uid || null, name: rm.name, color: rm.color, createdAt: stamp, updatedAt: stamp, updatedBy: window.rmMyUid || null });
       }
     });
     if (!trip.name) trip.name = room.name;
