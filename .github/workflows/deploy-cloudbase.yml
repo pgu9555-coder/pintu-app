@@ -6,6 +6,9 @@ on:
       - main
     paths:
       - index.html
+      - cloudbase-security-rules.json
+      - scripts/apply-cloudbase-security.cjs
+      - .github/workflows/deploy-cloudbase.yml
   workflow_dispatch:
 
 permissions:
@@ -50,6 +53,16 @@ jobs:
             exit 1
           fi
           tcb login --apiKeyId "$TCB_SECRET_ID" --apiKey "$TCB_SECRET_KEY"
+
+      - name: Apply and verify database security rules
+        env:
+          TCB_SECRET_ID: ${{ secrets.TCB_SECRET_ID }}
+          TCB_SECRET_KEY: ${{ secrets.TCB_SECRET_KEY }}
+          CLOUDBASE_ENV_ID: pintu-d4g77ecn24b674fa0
+          TCB_REGION: ap-shanghai
+        run: |
+          npm install --no-save @cloudbase/manager-node@5.6.6
+          node scripts/apply-cloudbase-security.cjs
 
       - name: Deploy index.html to production
         run: tcb hosting deploy ./cloudbase-site / -e pintu-d4g77ecn24b674fa0

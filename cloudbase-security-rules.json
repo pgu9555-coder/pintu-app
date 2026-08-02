@@ -1,0 +1,8 @@
+{
+  "rooms": {
+    "read": "auth != null",
+    "create": "auth != null && request.data.ownerUid == auth.uid",
+    "update": "auth != null",
+    "delete": "auth != null && doc.ownerUid == auth.uid"
+  }
+}
