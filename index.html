@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- deployment build: 2026-08-02-launch-qa-v6 -->
+<!-- deployment build: 2026-08-02-launch-qa-v7 -->
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -2871,7 +2871,12 @@ document.getElementById('btnScan').addEventListener('click', function(){
       stage.classList.remove('scanning');
       btn.disabled = false;
       DISHES = OCR_DISHES.map(function(d, i){
-        return {id:nextDishId++, name:d.name, price:d.price, claims:OCR_PRECLAIMS[i].slice()};
+        var sampleOrder = ['a','b','c','d','e'];
+        var claims = OCR_PRECLAIMS[i].map(function(sampleId){
+          var diner = DINERS[sampleOrder.indexOf(sampleId)];
+          return diner ? diner.id : null;
+        }).filter(Boolean);
+        return {id:nextDishId++, name:d.name, price:d.price, claims:claims};
       });
       FEE = { type:'percent', value:10, label:'服务费（小票识别）' };
       splitEntryMode = 'scan';
