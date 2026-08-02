@@ -14,6 +14,7 @@ on:
       - scripts/apply-cloudbase-function-security.cjs
       - scripts/migrate-room-members.cjs
       - scripts/test-room-gateway.cjs
+      - scripts/test-index-html.cjs
       - .github/workflows/deploy-cloudbase.yml
   workflow_dispatch:
 
@@ -61,7 +62,9 @@ jobs:
           tcb login --apiKeyId "$TCB_SECRET_ID" --apiKey "$TCB_SECRET_KEY"
 
       - name: Test room gateway access rules
-        run: node scripts/test-room-gateway.cjs
+        run: |
+          node scripts/test-room-gateway.cjs
+          node scripts/test-index-html.cjs
 
       - name: Deploy room access gateway
         run: tcb fn deploy roomGateway
@@ -84,9 +87,6 @@ jobs:
           CLOUDBASE_ENV_ID: pintu-d4g77ecn24b674fa0
         run: node scripts/migrate-room-members.cjs
 
-      - name: Deploy index.html to production
-        run: tcb hosting deploy ./cloudbase-site / -e pintu-d4g77ecn24b674fa0
-
       - name: Apply and verify database security rules
         env:
           TCB_SECRET_ID: ${{ secrets.TCB_SECRET_ID }}
@@ -94,3 +94,6 @@ jobs:
           CLOUDBASE_ENV_ID: pintu-d4g77ecn24b674fa0
           TCB_REGION: ap-shanghai
         run: node scripts/apply-cloudbase-security.cjs
+
+      - name: Deploy index.html to production
+        run: tcb hosting deploy ./cloudbase-site / -e pintu-d4g77ecn24b674fa0

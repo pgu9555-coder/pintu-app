@@ -41,6 +41,15 @@ function roomCollection(inTransaction) {
           if (!room) return { updated: 0 };
           rooms.set(id, { ...room, ...clone(patch) });
           return { updated: 1 };
+        },
+        async set(value) {
+          rooms.set(id, { ...clone(value), _id: id });
+          return { set: 1 };
+        },
+        async remove() {
+          if (!rooms.has(id)) return { deleted: 0 };
+          rooms.delete(id);
+          return { deleted: 1 };
         }
       };
     }
@@ -104,9 +113,23 @@ async function main() {
     }
   });
   assert.equal(created.ok, true);
-  assert.match(created.data.room.code, /^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}$/);
+  assert.match(created.data.room.code, /^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{8}$/);
   assert.deepEqual(created.data.room.memberUids, ["owner"]);
   const { docId, room } = created.data;
+
+  const idempotentRequest = {
+    action: "create",
+    clientRequestId: "request_12345678",
+    room: { toolType: "ledger", name: "幂等创建", members: [{ name: "创建者" }] }
+  };
+  const idempotentFirst = await call("idempotent-owner", idempotentRequest);
+  const roomCountAfterFirstCreate = rooms.size;
+  const idempotentSecond = await call("idempotent-owner", idempotentRequest);
+  assert.equal(idempotentFirst.ok, true);
+  assert.equal(idempotentSecond.ok, true);
+  assert.equal(idempotentSecond.data.docId, idempotentFirst.data.docId);
+  assert.equal(idempotentSecond.data.room.code, idempotentFirst.data.room.code);
+  assert.equal(rooms.size, roomCountAfterFirstCreate, "a retried create request must not create a duplicate room");
 
   const duplicate = await call("stranger-1", {
     action: "join",
@@ -137,15 +160,282 @@ async function main() {
   assert.equal(wrongType.code, "WRONG_ROOM_TYPE");
   assert.equal(rooms.get(docId).memberUids.includes("stranger-2"), false);
 
+  const baseLedger = clone(rooms.get(docId).ledger);
+  const ownerMember = baseLedger.members.find((item) => item.uid === "owner");
+  const joinedMember = baseLedger.members.find((item) => item.uid === "member");
+  const stamp = Date.now();
+  const ownerExpense = {
+    id: "expense-owner",
+    desc: "房主的车票",
+    amountCents: 12000,
+    payerId: ownerMember.id,
+    splitIds: [ownerMember.id, joinedMember.id],
+    createdAt: stamp,
+    updatedAt: stamp,
+    updatedBy: "owner"
+  };
+  const memberExpense = {
+    id: "expense-member",
+    desc: "成员的酒店",
+    amountCents: 24000,
+    payerId: joinedMember.id,
+    splitIds: [ownerMember.id, joinedMember.id],
+    createdAt: stamp + 1,
+    updatedAt: stamp + 1,
+    updatedBy: "member"
+  };
+
+  const ownerSync = await call("owner", {
+    action: "syncLedger",
+    docId,
+    ledger: { ...clone(baseLedger), expenses: [ownerExpense], revision: stamp, updatedAt: stamp, updatedBy: "owner" }
+  });
+  assert.equal(ownerSync.ok, true);
+  const memberSync = await call("member", {
+    action: "syncLedger",
+    docId,
+    ledger: { ...clone(baseLedger), expenses: [memberExpense], revision: stamp + 1, updatedAt: stamp + 1, updatedBy: "member" }
+  });
+  assert.equal(memberSync.ok, true);
+  assert.deepEqual(
+    memberSync.data.ledger.expenses.map((item) => item.id).sort(),
+    ["expense-member", "expense-owner"],
+    "two stale devices must converge without losing either expense"
+  );
+
+  const beforeDeniedSync = JSON.stringify(rooms.get(docId).ledger);
+  const deniedSync = await call("stranger-3", { action: "syncLedger", docId, ledger: baseLedger });
+  assert.equal(deniedSync.code, "ROOM_NOT_FOUND");
+  assert.equal(JSON.stringify(rooms.get(docId).ledger), beforeDeniedSync);
+
+  const futureLedger = clone(memberSync.data.ledger);
+  futureLedger.nameUpdatedAt = Date.now() + 10 * 60 * 1000;
+  const futureSync = await call("owner", { action: "syncLedger", docId, ledger: futureLedger });
+  assert.equal(futureSync.code, "INVALID_LEDGER");
+  assert.equal(JSON.stringify(rooms.get(docId).ledger), beforeDeniedSync);
+
+  const invalidReferenceLedger = clone(memberSync.data.ledger);
+  invalidReferenceLedger.expenses.push({
+    id: "expense-invalid",
+    desc: "无效支出",
+    amountCents: 100,
+    payerId: "missing-member",
+    splitIds: [ownerMember.id],
+    createdAt: stamp + 2,
+    updatedAt: stamp + 2,
+    updatedBy: "owner"
+  });
+  const invalidReference = await call("owner", { action: "syncLedger", docId, ledger: invalidReferenceLedger });
+  assert.equal(invalidReference.code, "INVALID_LEDGER");
+  assert.equal(JSON.stringify(rooms.get(docId).ledger), beforeDeniedSync);
+
+  const injectedIdLedger = clone(memberSync.data.ledger);
+  injectedIdLedger.members[0].id = 'x" onmouseover="alert(1)';
+  const injectedId = await call("owner", { action: "syncLedger", docId, ledger: injectedIdLedger });
+  assert.equal(injectedId.code, "INVALID_LEDGER");
+  assert.equal(JSON.stringify(rooms.get(docId).ledger), beforeDeniedSync);
+
+  const midpointCreated = await call("mid-owner", {
+    action: "create",
+    room: { toolType: "midpoint", name: "碰面测试", members: [{ name: "碰面房主" }] }
+  });
+  assert.equal(midpointCreated.ok, true);
+  const midpointDocId = midpointCreated.data.docId;
+  const midpointEpoch = midpointCreated.data.room.members[0].membershipEpoch;
+  const midpointSync = await call("mid-owner", { action: "syncLedger", docId: midpointDocId, ledger: baseLedger });
+  assert.equal(midpointSync.code, "WRONG_ROOM_TYPE");
+  const pointSaved = await call("mid-owner", {
+    action: "setMeetupPoint",
+    docId: midpointDocId,
+    membershipEpoch: midpointEpoch,
+    mutationAt: stamp + 10,
+    person: { name: "新名字", address: "深圳市南山区华侨城", lat: 22.54, lng: 113.98, color: "red;onmouseover=alert(1)" }
+  });
+  assert.equal(pointSaved.ok, true);
+  assert.equal(rooms.get(midpointDocId).meetup.people[0].uid, "mid-owner");
+  assert.match(rooms.get(midpointDocId).meetup.people[0].color, /^#[0-9A-F]{6}$/);
+  const stalePoint = await call("mid-owner", {
+    action: "setMeetupPoint",
+    docId: midpointDocId,
+    membershipEpoch: midpointEpoch,
+    mutationAt: stamp + 9,
+    person: { name: "旧名字", address: "旧地址", lat: 1, lng: 1 }
+  });
+  assert.equal(stalePoint.ok, true);
+  assert.equal(rooms.get(midpointDocId).meetup.people[0].address, "深圳市南山区华侨城");
+  const pointDeleted = await call("mid-owner", {
+    action: "setMeetupPoint",
+    docId: midpointDocId,
+    membershipEpoch: midpointEpoch,
+    mutationAt: stamp + 12,
+    person: null
+  });
+  assert.equal(pointDeleted.ok, true);
+  assert.equal(rooms.get(midpointDocId).meetup.people.length, 0);
+  await call("mid-owner", {
+    action: "setMeetupPoint",
+    docId: midpointDocId,
+    membershipEpoch: midpointEpoch,
+    mutationAt: stamp + 11,
+    person: { name: "迟到请求", address: "不应复活", lat: 2, lng: 2 }
+  });
+  assert.equal(rooms.get(midpointDocId).meetup.people.length, 0, "a stale request must not resurrect a deleted point");
+
+  const midpointMemberJoined = await call("mid-member", {
+    action: "join",
+    type: "midpoint",
+    code: midpointCreated.data.room.code,
+    name: "碰面成员"
+  });
+  assert.equal(midpointMemberJoined.ok, true);
+  const oldMemberEpoch = midpointMemberJoined.data.room.members.find((item) => item.uid === "mid-member").membershipEpoch;
+  const midpointMemberLeft = await call("mid-member", { action: "leave", docId: midpointDocId });
+  assert.equal(midpointMemberLeft.ok, true);
+  const midpointMemberRejoined = await call("mid-member", {
+    action: "join",
+    type: "midpoint",
+    code: midpointCreated.data.room.code,
+    name: "碰面成员"
+  });
+  const newMemberEpoch = midpointMemberRejoined.data.room.members.find((item) => item.uid === "mid-member").membershipEpoch;
+  assert.notEqual(newMemberEpoch, oldMemberEpoch, "rejoining must rotate the membership epoch");
+  const delayedOldMembershipPoint = await call("mid-member", {
+    action: "setMeetupPoint",
+    docId: midpointDocId,
+    membershipEpoch: oldMemberEpoch,
+    mutationAt: stamp + 30,
+    person: { name: "旧身份", address: "不应写入", lat: 3, lng: 3 }
+  });
+  assert.equal(delayedOldMembershipPoint.code, "STALE_MEMBERSHIP");
+  assert.equal(rooms.get(midpointDocId).meetup.people.some((item) => item.address === "不应写入"), false);
+
+  const legacyCreated = await call("legacy-owner", {
+    action: "create",
+    room: { name: "旧版测试", members: [{ name: "甲" }, { name: "乙" }] }
+  });
+  assert.equal(legacyCreated.ok, true);
+  const legacyDocId = legacyCreated.data.docId;
+  const legacyLedger = {
+    name: "旧版测试",
+    nameUpdatedAt: stamp,
+    members: legacyCreated.data.room.members.map((item) => ({ ...item, createdAt: stamp, updatedAt: stamp })),
+    expenses: [],
+    memberTombstones: {},
+    expenseTombstones: {},
+    nextMemberId: 3,
+    nextExpenseId: 1,
+    revision: stamp,
+    updatedAt: stamp
+  };
+  const legacySync = await call("legacy-owner", { action: "syncLedger", docId: legacyDocId, ledger: legacyLedger });
+  assert.equal(legacySync.ok, true);
+  const legacyAdd = await call("legacy-owner", {
+    action: "updateLegacyMembers",
+    docId: legacyDocId,
+    operation: "add",
+    name: "丙"
+  });
+  assert.equal(legacyAdd.ok, true);
+  assert.equal(rooms.get(legacyDocId).members.length, 3);
+
   const left = await call("member", { action: "leave", docId });
   assert.equal(left.ok, true);
   assert.equal(rooms.get(docId).memberUids.includes("member"), false);
   assert.equal(rooms.get(docId).members.some((item) => item.uid === "member"), false);
   assert.equal(rooms.get(docId).ledger.members.some((item) => item.uid === "member"), true);
+  const leftSync = await call("member", { action: "syncLedger", docId, ledger: memberSync.data.ledger });
+  assert.equal(leftSync.code, "ROOM_NOT_FOUND");
 
   const ownerLeave = await call("owner", { action: "leave", docId });
   assert.equal(ownerLeave.code, "OWNER_MUST_DISBAND");
   assert.equal(rooms.get(docId).memberUids.includes("owner"), true);
+
+  const deniedDisband = await call("member", { action: "disband", docId });
+  assert.equal(deniedDisband.code, "NOT_OWNER");
+  assert.equal(rooms.has(docId), true);
+  const ownerDisband = await call("owner", { action: "disband", docId });
+  assert.equal(ownerDisband.ok, true);
+  assert.equal(rooms.has(docId), false);
+  const repeatedDisband = await call("owner", { action: "disband", docId });
+  assert.equal(repeatedDisband.ok, true);
+
+  const inferredOwnerDocId = "room-inferred-owner";
+  rooms.set(inferredOwnerDocId, {
+    _id: inferredOwnerDocId,
+    code: "QWERTY",
+    toolType: "ledger",
+    memberUids: ["inferred-owner"],
+    members: [],
+    ledger: { members: [], expenses: [], memberTombstones: {}, expenseTombstones: {} }
+  });
+  const inferredDisband = await call("inferred-owner", { action: "disband", docId: inferredOwnerDocId });
+  assert.equal(inferredDisband.ok, true, "legacy rooms must infer their original owner safely");
+  assert.equal(rooms.has(inferredOwnerDocId), false);
+
+  const orphanJoinDocId = "room-orphan-join";
+  rooms.set(orphanJoinDocId, {
+    _id: orphanJoinDocId,
+    code: "ZXCVBN",
+    name: "待认领旧房间",
+    toolType: "midpoint",
+    memberUids: [],
+    members: [],
+    meetup: { people: [] }
+  });
+  const orphanJoined = await call("first-valid-joiner", {
+    action: "join",
+    code: "ZXCVBN",
+    type: "midpoint",
+    name: "新房主"
+  });
+  assert.equal(orphanJoined.ok, true);
+  assert.equal(rooms.get(orphanJoinDocId).ownerUid, "first-valid-joiner");
+  const orphanDisband = await call("first-valid-joiner", { action: "disband", docId: orphanJoinDocId });
+  assert.equal(orphanDisband.ok, true);
+
+  const limitCreated = await call("limit-owner", {
+    action: "create",
+    room: { toolType: "ledger", name: "合并上限测试", members: [{ name: "上限房主" }] }
+  });
+  const limitDocId = limitCreated.data.docId;
+  const limitBase = clone(limitCreated.data.room.ledger);
+  const firstTombstones = {};
+  const secondTombstones = {};
+  for (let i = 0; i < 1100; i += 1) {
+    firstTombstones[`deleted_a_${i}`] = { deletedAt: stamp + 20, deletedBy: "limit-owner" };
+    secondTombstones[`deleted_b_${i}`] = { deletedAt: stamp + 21, deletedBy: "limit-owner" };
+  }
+  const firstLimitSync = await call("limit-owner", {
+    action: "syncLedger",
+    docId: limitDocId,
+    ledger: { ...clone(limitBase), memberTombstones: firstTombstones, updatedAt: stamp + 20, revision: stamp + 20 }
+  });
+  assert.equal(firstLimitSync.ok, true);
+  const beforeRejectedMerge = JSON.stringify(rooms.get(limitDocId).ledger);
+  const rejectedLimitSync = await call("limit-owner", {
+    action: "syncLedger",
+    docId: limitDocId,
+    ledger: { ...clone(limitBase), memberTombstones: secondTombstones, updatedAt: stamp + 21, revision: stamp + 21 }
+  });
+  assert.equal(rejectedLimitSync.code, "INVALID_LEDGER");
+  assert.equal(JSON.stringify(rooms.get(limitDocId).ledger), beforeRejectedMerge, "an oversized merged ledger must not be written");
+
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const missingRoom = await call("brute-force-client", {
+      action: "join",
+      code: "AAAAAAAA",
+      type: "ledger",
+      name: "猜码者"
+    });
+    assert.equal(missingRoom.code, "ROOM_NOT_FOUND");
+  }
+  const rateLimited = await call("brute-force-client", {
+    action: "join",
+    code: "AAAAAAAA",
+    type: "ledger",
+    name: "猜码者"
+  });
+  assert.equal(rateLimited.code, "RATE_LIMITED", "rapid room-code guessing must be throttled");
 
   console.log("roomGateway unit checks passed.");
 }
