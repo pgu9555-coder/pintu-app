@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- deployment build: 2026-08-02-02 -->
+<!-- deployment build: 2026-08-02-room-lifecycle -->
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -1014,6 +1014,14 @@
   .rm-room-card .rm-room-name{font-weight:700;font-size:14.5px;color:var(--ink);}
   .rm-room-card .rm-room-sub{font-size:11.5px;color:var(--ink-soft);margin-top:2px;}
   .rm-room-card .rm-room-code{font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:12.5px;color:var(--ink-soft);flex-shrink:0;}
+  .rm-room-card .rm-room-del{
+    flex-shrink:0;width:26px;height:26px;border-radius:50%;
+    border:1px solid var(--line);background:transparent;color:var(--ink-soft);
+    font-size:17px;line-height:1;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;
+    transition:background .15s,color .15s,border-color .15s;
+  }
+  .rm-room-card .rm-room-del:hover{background:var(--coral-soft);color:var(--coral);border-color:var(--coral);}
 
   /* 上线兜底：键盘焦点、刘海屏安全区、减少动态效果与运行状态提示 */
   :focus-visible{outline:3px solid rgba(62,110,142,.55);outline-offset:3px;}
@@ -4010,7 +4018,7 @@ function glQueueCloudSync(trip){
 
 function glFlushCloudSync(roomDocId){
   var state = glSyncState(roomDocId);
-  if (state.inFlight || !state.payload || !rmDb) return;
+  if (state.cancelled || state.inFlight || !state.payload || !rmDb) return;
   function setRoomBadge(status, message){
     var current = glCurrentTrip();
     if (current && current.roomDocId === roomDocId) glSetSyncBadge(status, message);
@@ -4031,6 +4039,7 @@ function glFlushCloudSync(roomDocId){
     writtenLedger.updatedBy = payload.updatedBy || writtenLedger.updatedBy || null;
     return roomRef.update({ ledger: writtenLedger });
   }).then(function(){
+    if (state.cancelled) return;
     state.inFlight = false;
     state.retryCount = 0;
     var trip = glFindTripByRoom(roomDocId);
@@ -4045,6 +4054,7 @@ function glFlushCloudSync(roomDocId){
     if (state.payload) glFlushCloudSync(roomDocId);
     else setRoomBadge('synced', '● 已同步');
   }).catch(function(err){
+    if (state.cancelled) return;
     state.inFlight = false;
     state.retryCount += 1;
     if (!state.payload) state.payload = payload;
@@ -4194,18 +4204,25 @@ function glRenderHomeTripList(){
     return (t.name && t.name.trim() !== '') || t.members.length > 0 || t.expenses.length > 0;
   });
   if (GL_TRIPS.length !== beforeLen) glSave(); /* 真的删掉了空壳才写盘 */
+  /* 房间共享账本已经在“进行中的房间”展示，不再重复列成另一趟行程。
+     退出/解散房间后，有支出的本地快照会解除房间绑定并重新出现在这里。 */
+  var rememberedRoomIds = typeof rmGetMyRoomIds === 'function' ? rmGetMyRoomIds() : [];
+  var visibleTrips = GL_TRIPS.filter(function(t){
+    return !t.roomDocId || rememberedRoomIds.indexOf(t.roomDocId) === -1;
+  });
   var label = document.getElementById('glHomeTripsLabel');
   var list = document.getElementById('glHomeTripsList');
   if (!label || !list) return;
-  if (GL_TRIPS.length === 0){
+  if (visibleTrips.length === 0){
     label.style.display = 'none';
     list.style.display = 'none';
+    if (typeof rmUpdateTripsEmptyState === 'function') rmUpdateTripsEmptyState();
     return;
   }
   label.style.display = 'block';
   list.style.display = 'block';
   list.innerHTML = '';
-  GL_TRIPS.forEach(function(trip){
+  visibleTrips.forEach(function(trip){
     var totalCents = trip.expenses.reduce(function(s, e){ return s + e.amountCents; }, 0);
     var card = document.createElement('div');
     card.className = 'gl-trip-card';
@@ -4241,6 +4258,7 @@ function glRenderHomeTripList(){
     });
     list.appendChild(card);
   });
+  if (typeof rmUpdateTripsEmptyState === 'function') rmUpdateTripsEmptyState();
 }
 
 /* ---------- 页面导航 ---------- */
@@ -4798,6 +4816,131 @@ function rmForgetRoom(docId){
   rmSaveMyRoomIds(rmGetMyRoomIds().filter(function(id){ return id !== docId; }));
 }
 
+function rmIsRoomOwner(room){
+  if (!room) return false;
+  var ownerUid = room.ownerUid || (room.members && room.members[0] && room.members[0].uid) || null;
+  return !!ownerUid && ownerUid === window.rmMyUid;
+}
+
+function rmUpdateTripsEmptyState(){
+  var empty = document.getElementById('tripsEmptyState');
+  var roomList = document.getElementById('rmHomeRoomsList');
+  var tripList = document.getElementById('glHomeTripsList');
+  if (!empty || !roomList || !tripList) return;
+  var roomsHidden = roomList.style.display === 'none';
+  var tripsHidden = tripList.style.display === 'none';
+  empty.style.display = roomsHidden && tripsHidden ? 'block' : 'none';
+}
+
+/* 房间结束或本人退出后，把有支出的共享账本留成一份本机历史快照；
+   空账本直接清理，避免产生新的“0 笔支出”幽灵行程。 */
+function rmDetachRoomMirror(docId, roomSnapshot){
+  var state = glCloudSyncStates && glCloudSyncStates[docId];
+  if (state){
+    state.cancelled = true;
+    state.payload = null;
+    if (state.timer) clearTimeout(state.timer);
+    delete glCloudSyncStates[docId];
+  }
+  var trip = glFindTripByRoom(docId);
+  if (!trip && roomSnapshot && roomSnapshot.ledger && roomSnapshot.ledger.expenses && roomSnapshot.ledger.expenses.length){
+    trip = { id: glNextTripId++, roomDocId: docId, name: roomSnapshot.name || '', members: [], expenses: [], memberTombstones: {}, expenseTombstones: {}, nextMemberId: 1, nextExpenseId: 1 };
+    glApplyLedgerToTrip(trip, roomSnapshot.ledger);
+    GL_TRIPS.push(trip);
+  }
+  if (!trip) return;
+  if (!trip.expenses || trip.expenses.length === 0){
+    GL_TRIPS = GL_TRIPS.filter(function(t){ return t.id !== trip.id; });
+    if (glCurrentTripId === trip.id) glCurrentTripId = null;
+  } else {
+    delete trip.roomDocId;
+    delete trip.cloudRevision;
+    delete trip.cloudUpdatedAt;
+    delete trip.cloudUpdatedBy;
+  }
+  try { localStorage.setItem(GL_LS_KEY, JSON.stringify({ trips: GL_TRIPS, nextTripId: glNextTripId })); } catch(ignore){}
+}
+
+function rmRemoveRoomLocally(room, message){
+  if (!room) return;
+  if (room._removedLocally) return;
+  room._removedLocally = true;
+  var docId = room.docId;
+  if (typeof window.rmStopTypedRoomSync === 'function') window.rmStopTypedRoomSync();
+  else if (rmWatcher){ rmWatcher.close(); rmWatcher = null; }
+  rmDetachRoomMirror(docId, room);
+  ROOMS = ROOMS.filter(function(r){ return r.docId !== docId; });
+  rmForgetRoom(docId);
+  rmSaveLocalRooms();
+  if (rmCurrentRoomId === docId) rmCurrentRoomId = null;
+  rmReturnToRoom = false;
+  if (typeof glRenderHomeTripList === 'function') glRenderHomeTripList();
+  rmRenderHomeRoomList();
+  rmUpdateTripsEmptyState();
+  if (message && typeof showAppToast === 'function') showAppToast(message);
+}
+
+function rmHandleRoomDeleted(docId, type){
+  var room = ROOMS.find(function(r){ return r.docId === docId; }) || { docId: docId, name: '这个房间' };
+  var wasCurrent = rmCurrentRoomId === docId;
+  rmRemoveRoomLocally(room, '房间已被解散，已保存有支出的本机账本');
+  if (wasCurrent) rmGoHome();
+}
+
+/* 首页卡片与房间内“退出/取消”共用同一套生命周期逻辑：
+   创建者取消 = 解散云端房间；普通成员退出 = 从成员名单移除；
+   旧房间无法可靠判断创建者时，只从本机列表移除，避免误删别人的数据。 */
+function rmCancelRoom(room, options){
+  options = options || {};
+  if (!room || room._cancelBusy) return;
+  var isLocal = room.docId.indexOf('local-') === 0;
+  var isOwner = options.forceDisband || rmIsRoomOwner(room);
+  var canLeaveMembership = !isOwner && room.members && room.members.some(function(m){ return m.uid === window.rmMyUid; });
+  var hasExpenses = !!(room.ledger && room.ledger.expenses && room.ledger.expenses.length);
+  var message;
+  if (isOwner){
+    message = '确定取消并解散「' + room.name + '」？\n其他成员将无法再进入这个房间。';
+  } else if (canLeaveMembership){
+    message = '确定退出「' + room.name + '」？\n房间会从你的列表移除，其他成员仍可继续使用。';
+  } else {
+    message = '确定把「' + room.name + '」从本机列表移除？\n这不会影响其他成员。';
+  }
+  if (hasExpenses) message += '\n已有支出会在这台设备保留为历史账本。';
+  if (!confirm(message)) return;
+
+  room._cancelBusy = true;
+  var finish = function(){
+    room._cancelBusy = false;
+    rmRemoveRoomLocally(room, isOwner ? '房间已取消' : '已退出房间');
+    rmGoHome();
+  };
+  var fail = function(err){
+    room._cancelBusy = false;
+    console.warn('[取消/退出房间] 云端操作失败：', err);
+    if (typeof showAppToast === 'function') showAppToast('操作失败，房间仍然保留，请检查网络后重试');
+  };
+
+  if (isLocal || !rmDb){ finish(); return; }
+  var ref = rmDb.collection('rooms').doc(room.docId);
+  if (isOwner){
+    ref.remove().then(finish).catch(fail);
+    return;
+  }
+  if (!canLeaveMembership){ finish(); return; }
+  /* 退出前重新读取最新成员，避免用旧页面数据覆盖别人刚加入的成员。 */
+  ref.get().then(function(res){
+    var latest = res.data && res.data[0];
+    if (!latest){ finish(); return null; }
+    var patch = {
+      members: (latest.members || []).filter(function(m){ return m.uid !== window.rmMyUid; })
+    };
+    if (latest.meetup && latest.meetup.people){
+      patch.meetup = { people: latest.meetup.people.filter(function(p){ return p.uid !== window.rmMyUid; }) };
+    }
+    return ref.update(patch).then(finish);
+  }).catch(fail);
+}
+
 function rmCurrentRoom(){
   return ROOMS.find(function(r){ return r.docId === rmCurrentRoomId; }) || null;
 }
@@ -4813,6 +4956,8 @@ function rmUpsertLocalRoom(docId, data){
   room.nextMemberId = data.nextMemberId || 1;
   room.tripId = data.tripId || null;
   room.toolType = data.toolType || data.roomType || 'legacy';
+  room.ownerUid = data.ownerUid || (data.members && data.members[0] && data.members[0].uid) || null;
+  room.createdAt = data.createdAt || room.createdAt || null;
   room.ledger = data.ledger || null;   /* 房间共享账本（云端为准的那份） */
   room.meetup = data.meetup || null;   /* 房间共享碰面点（每人放自己的出发点） */
   /* 如果本地已有这个房间的镜像账本，用云端最新数据回填并刷新界面 */
@@ -4835,6 +4980,7 @@ function rmRenderHomeRoomList(){
     if (ROOMS.length === 0){
       label.style.display = 'none';
       list.style.display = 'none';
+      rmUpdateTripsEmptyState();
       return;
     }
     label.style.display = 'block';
@@ -4842,7 +4988,7 @@ function rmRenderHomeRoomList(){
     list.innerHTML = '';
     ROOMS.forEach(function(room){
       /* 优先用云端共享账本；没有再退回本地镜像行程 */
-      var ledger = room.ledger || (room.tripId !== null ? GL_TRIPS.find(function(t){ return t.id === room.tripId; }) : null);
+      var ledger = room.ledger || glFindTripByRoom(room.docId);
       var typeLabel = room.toolType === 'midpoint' ? '碰面' : (room.toolType === 'ledger' ? '账本' : '协同');
       var sub = typeLabel + ' · ' + room.members.length + ' 人 · 房号 ' + room.code;
       var right = '';
@@ -4858,13 +5004,19 @@ function rmRenderHomeRoomList(){
         '<div class="rm-room-info">' +
           '<div class="rm-room-name">' + splitEscapeHtml(room.name) + '</div>' +
           '<div class="rm-room-sub">' + sub + '</div>' +
-        '</div>' + right;
+        '</div>' + right +
+        '<button class="rm-room-del" type="button" aria-label="' + (rmIsRoomOwner(room) ? '取消并解散房间' : '退出房间') + '" title="' + (rmIsRoomOwner(room) ? '取消房间' : '退出房间') + '">×</button>';
       card.addEventListener('click', function(){
         if (room.toolType === 'midpoint' || room.toolType === 'ledger') rmEnterTypedRoom(room.docId, room.toolType);
         else rmEnterRoom(room.docId);
       });
+      card.querySelector('.rm-room-del').addEventListener('click', function(e){
+        e.stopPropagation();
+        rmCancelRoom(room);
+      });
       list.appendChild(card);
     });
+    rmUpdateTripsEmptyState();
   }
 
   rmTcbReady.then(function(ready){
@@ -4874,15 +5026,23 @@ function rmRenderHomeRoomList(){
     Promise.all(ids.map(function(id){
       return rmDb.collection('rooms').doc(id).get().then(function(res){
         var doc = res.data && res.data[0];
-        return doc ? { docId: id, data: doc } : null;
-      }).catch(function(){ return null; });
+        return doc ? { docId: id, state: 'found', data: doc } : { docId: id, state: 'missing' };
+      }).catch(function(err){ return { docId: id, state: 'error', error: err }; });
     })).then(function(results){
-      ROOMS = [];
+      /* 网络错误只保留旧缓存，不能误当成房间被删除；只有明确查不到才忘记。 */
+      ROOMS = ROOMS.filter(function(room){ return ids.indexOf(room.docId) !== -1; });
+      var hadError = false;
       results.forEach(function(r){
-        if (r) rmUpsertLocalRoom(r.docId, r.data);
-        else rmForgetRoom(ids[results.indexOf(r)]); /* 房间被解散了，本地列表里也清掉 */
+        if (r.state === 'found') rmUpsertLocalRoom(r.docId, r.data);
+        else if (r.state === 'missing'){
+          var stale = ROOMS.find(function(room){ return room.docId === r.docId; });
+          rmForgetRoom(r.docId);
+          if (stale) rmDetachRoomMirror(r.docId, stale);
+          ROOMS = ROOMS.filter(function(room){ return room.docId !== r.docId; });
+        } else hadError = true;
       });
       paint();
+      if (hadError && typeof showAppToast === 'function') showAppToast('部分房间暂时无法刷新，已保留本机记录');
     });
   });
 }
@@ -4975,7 +5135,7 @@ function rmEnterRoom(docId){
     rmWatcher = rmDb.collection('rooms').doc(docId).watch({
       onChange: function(snapshot){
         var doc = snapshot.docs && snapshot.docs[0];
-        if (!doc){ return; } /* 房间被别人解散了 */
+        if (!doc){ rmHandleRoomDeleted(docId, 'legacy'); return; }
         rmUpsertLocalRoom(docId, doc);
         if (rmCurrentRoomId === docId) rmRenderDash();
       },
@@ -5046,6 +5206,7 @@ document.getElementById('rmBtnCreate').addEventListener('click', function(){
     code: rmGenCode(),
     members: rmDraftMembers.slice(),
     nextMemberId: rmDraftNextId,
+    ownerUid: window.rmMyUid,
     tripId: null,
     createdAt: new Date()
   };
@@ -5263,8 +5424,8 @@ function rmOpenLedger(){
     }
   }
 
-  /* 保留 tripId 兼容首页列表等旧逻辑 */
-  if (room.tripId !== trip.id){ rmUpdateRoom(room, { tripId: trip.id }); }
+  /* trip.id 是每台设备自己的本地编号，不能写到云端让别的设备误用。 */
+  room.tripId = trip.id;
   glCurrentTripId = trip.id; /* 先指向这本账，glSave 才会把它（而不是别的）落盘/同步 */
   glSave();
   openGroupLedgerTrip(trip.id);
@@ -5274,27 +5435,7 @@ function rmOpenLedger(){
 document.getElementById('rmBtnDisband').addEventListener('click', function(){
   var room = rmCurrentRoom();
   if (!room) return;
-  var hasLedger = room.tripId !== null;
-  var msg = '确定解散「' + room.name + '」？';
-  if (hasLedger) msg += '\n（绑定的行程账本会保留在首页"进行中的行程"里，钱的记录不会丢）';
-  if (!confirm(msg)) return;
-
-  if (rmWatcher){ rmWatcher.close(); rmWatcher = null; }
-  var docId = room.docId;
-
-  rmTcbReady.then(function(ready){
-    if (ready && rmDb && docId.indexOf('local-') !== 0){
-      return rmDb.collection('rooms').doc(docId).remove();
-    }
-  }).catch(function(err){
-    console.warn('[解散房间] 云端删除失败：', err);
-  }).then(function(){
-    ROOMS = ROOMS.filter(function(r){ return r.docId !== docId; });
-    rmForgetRoom(docId);
-    rmSaveLocalRooms();
-    rmCurrentRoomId = null;
-    rmGoHome();
-  });
+  rmCancelRoom(room, { forceDisband: true });
 });
 
 /* 本机体验模式也要经得住刷新。 */
@@ -5333,17 +5474,14 @@ function rmSyncTabbarActive(activeTab){
 function rmShowTripsTab(){
   hideAllViews();
   document.getElementById('viewTrips').classList.add('show');
+  document.getElementById('tripsEmptyState').style.display = 'none';
   window.scrollTo(0, 0);
   rmSyncTabbarActive('trips');
   if (typeof glRenderHomeTripList === 'function') glRenderHomeTripList();
   rmRenderHomeRoomList();
-  /* 空状态：两份列表都还是隐藏的（意味着都是空的）才显示提示语。
-     用个小延时，等上面两个渲染函数（其中房间那个还要异步查云端）跑完再判断。 */
-  setTimeout(function(){
-    var roomsHidden = document.getElementById('rmHomeRoomsList').style.display === 'none';
-    var tripsHidden = document.getElementById('glHomeTripsList').style.display === 'none';
-    document.getElementById('tripsEmptyState').style.display = (roomsHidden && tripsHidden) ? 'block' : 'none';
-  }, 400);
+  /* 云端房间可能需要数秒返回；每份列表渲染完成时都会重新计算空状态，
+     不再依赖容易误判的固定 400ms 定时器。 */
+  rmUpdateTripsEmptyState();
 }
 
 document.addEventListener('click', function(e){
@@ -5706,10 +5844,12 @@ function spinnerSpin(){
     var active = document.getElementById(c.activeId);
     var code = document.getElementById(c.activeCodeId);
     var nameInput = document.getElementById(c.nameId);
+    var leaveBtn = document.getElementById(c.leaveId);
     if (nameInput && !nameInput.value) nameInput.value = savedNickname();
     if (entry) entry.style.display = room ? 'none' : 'flex';
     if (active) active.style.display = room ? 'flex' : 'none';
     if (code) code.textContent = room ? room.code : '------';
+    if (leaveBtn) leaveBtn.textContent = room && rmIsRoomOwner(room) ? '取消房间' : '退出房间';
   };
 
   function persistTypedRoom(room, patch){
@@ -5775,6 +5915,7 @@ function spinnerSpin(){
       if (requestToken !== typedPullToken || rmCurrentRoomId !== docId) return;
       var doc = res.data && res.data[0];
       if (doc) applyTypedRoomDoc(docId, type, doc);
+      else rmHandleRoomDeleted(docId, type);
     }).catch(function(err){
       if (requestToken !== typedPullToken) return;
       console.warn('[独立房间自动刷新] 拉取失败：', err);
@@ -5805,7 +5946,7 @@ function spinnerSpin(){
       rmWatcher = rmDb.collection('rooms').doc(docId).watch({
         onChange: function(snapshot){
           var doc = snapshot.docs && snapshot.docs[0];
-          if (!doc) return;
+          if (!doc){ rmHandleRoomDeleted(docId, type); return; }
           applyTypedRoomDoc(docId, type, doc);
         },
         onError: function(err){
@@ -5853,6 +5994,7 @@ function spinnerSpin(){
     return {
       name: name + (type === 'midpoint' ? '发起的碰面' : '发起的账本'),
       code: rmGenCode(), toolType: type, members: [member], nextMemberId: 2,
+      ownerUid: window.rmMyUid,
       tripId: null, ledger: null,
       meetup: type === 'midpoint' ? { people: [{ uid: window.rmMyUid, name: name, address: '', lat: null, lng: null, color: LOC_COLORS[0] }] } : { people: [] },
       createdAt: new Date()
@@ -5938,12 +6080,9 @@ function spinnerSpin(){
   }
 
   function leaveTyped(type){
-    stopTypedSync();
-    rmCurrentRoomId = null;
-    rmReturnToRoom = false;
-    if (type === 'midpoint'){
-      mpRoomMode = false; mpRoomRef = null; openMidpoint(false);
-    } else rmGoHome();
+    var room = typedRoom(type);
+    if (!room){ stopTypedSync(); rmGoHome(); return; }
+    rmCancelRoom(room);
   }
 
   Object.keys(CFG).forEach(function(type){
