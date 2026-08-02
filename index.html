@@ -69,6 +69,7 @@
     return Promise.resolve(promise).then(function(result){ return rmRequireCloudSuccess(result, label); });
   }
   /* 浏览器只允许读取本人已经加入的房间，并且查询必须显式带上成员条件。
+     {openid} 会由 CloudBase 自动映射为当前平台的 openid/uid；数据库规则同时兼容两种身份字段。
      所有写入统一走云函数，避免前端绕过事务或修改门禁字段。 */
   function rmMemberRoomQuery(docId){
     return rmDb.collection('rooms').where({

@@ -1,6 +1,6 @@
 {
   "rooms": {
-    "read": "auth != null && auth.uid in doc.memberUids",
+    "read": "auth != null && (auth.openid in doc.memberUids || auth.uid in doc.memberUids)",
     "create": false,
     "update": false,
     "delete": false

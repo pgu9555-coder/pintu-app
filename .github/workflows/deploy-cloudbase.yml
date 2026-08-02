@@ -15,6 +15,7 @@ on:
       - scripts/migrate-room-members.cjs
       - scripts/test-room-gateway.cjs
       - scripts/test-index-html.cjs
+      - scripts/test-security-config.cjs
       - .github/workflows/deploy-cloudbase.yml
   workflow_dispatch:
 
@@ -66,6 +67,7 @@ jobs:
         run: |
           node scripts/test-room-gateway.cjs
           node scripts/test-index-html.cjs
+          node scripts/test-security-config.cjs
 
       - name: Deploy room access gateway
         run: tcb fn deploy roomGateway --force --yes
