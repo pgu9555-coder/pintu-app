@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- deployment build: 2026-08-02-collab-sync-v5 -->
+<!-- deployment build: 2026-08-02-launch-qa-v6 -->
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -1170,6 +1170,15 @@
       </div>
 
       <div class="content">
+
+        <div class="manual-card" id="splitPeopleSetup">
+          <div class="mc-title"><i class="ti-users"></i>这顿有谁</div>
+          <div class="input-row">
+            <input class="field" id="splitDinerName" type="text" placeholder="输入名字" maxlength="12">
+            <button class="add-btn" id="splitAddDinerBtn" aria-label="添加用餐人"><i class="ti-plus"></i></button>
+          </div>
+          <div class="manual-list" id="splitDinerSetupList"></div>
+        </div>
 
         <div class="pane" id="pane1">
           <div class="camera-stage" id="cameraStage">
@@ -2519,19 +2528,15 @@ function hideAllViews(){
 function openSplit(){
   hideAllViews();
   document.getElementById('viewSplit').classList.add('show');
+  splitResetSession();
   splitEntryMode = 'scan';
   goSplitStep(1);
   window.scrollTo(0, 0);
 }
 
 /* 3. 分账数据与逻辑（变量名均不与原脚本冲突） */
-var DINERS = [
-  {id:'a', name:'阿哲', color:'#0F3D36'},
-  {id:'b', name:'小雨', color:'#B8842A'},
-  {id:'c', name:'Ken',  color:'#3E6E8E'},
-  {id:'d', name:'露露', color:'#A8506E'},
-  {id:'e', name:'胖虎', color:'#C05B3C'}
-];
+var DINERS = [];
+var splitNextDinerId = 1;
 var DISHES = [];
 var nextDishId = 1;
 var FEE = { type:'none', value:0, label:'服务费' };
@@ -2551,7 +2556,78 @@ var OCR_PRECLAIMS = [
 var activeDiner = 'a';
 var splitEntryMode = 'scan';
 
+function splitResetSession(){
+  var room = (typeof rmCurrentRoom === 'function' && typeof rmReturnToRoom !== 'undefined' && rmReturnToRoom) ? rmCurrentRoom() : null;
+  DINERS = room && room.members ? room.members.map(function(member, index){
+    return { id: 'room-' + String(member.id), name: member.name, color: member.color || LOC_COLORS[index % LOC_COLORS.length] };
+  }) : [];
+  splitNextDinerId = 1;
+  DISHES = [];
+  nextDishId = 1;
+  FEE = { type:'none', value:0, label:'服务费' };
+  splitTaxType = 'none';
+  activeDiner = DINERS.length ? DINERS[0].id : null;
+  document.querySelectorAll('.tax-opt').forEach(function(option){ option.classList.toggle('on', option.dataset.tax === 'none'); });
+  document.getElementById('taxPercentWrap').classList.remove('show');
+  document.getElementById('taxFixedWrap').classList.remove('show');
+  document.getElementById('inTaxPercent').value = '';
+  document.getElementById('inTaxFixed').value = '';
+  renderSplitDinerSetup();
+  renderManualList();
+}
+
+function renderSplitDinerSetup(){
+  var list = document.getElementById('splitDinerSetupList');
+  if (!list) return;
+  list.innerHTML = '';
+  if (!DINERS.length){
+    list.innerHTML = '<div class="m-empty">先把这顿一起吃饭的人加进来（至少 2 人）</div>';
+    return;
+  }
+  DINERS.forEach(function(diner){
+    var row = document.createElement('div');
+    row.className = 'm-item';
+    row.innerHTML =
+      '<span class="d-ava" style="background:' + splitSafeColor(diner.color) + '">' + splitEscapeHtml((diner.name || '?')[0]) + '</span>' +
+      '<input class="field split-diner-edit" type="text" maxlength="12" aria-label="修改用餐人名字" value="' + splitEscapeHtml(diner.name) + '">' +
+      '<button class="m-del" aria-label="移除用餐人">×</button>';
+    var edit = row.querySelector('.split-diner-edit');
+    edit.addEventListener('change', function(){
+      var next = edit.value.trim();
+      if (!next || DINERS.some(function(other){ return other.id !== diner.id && other.name === next; })){
+        edit.value = diner.name;
+        showAppToast(!next ? '名字不能为空' : '这个名字已经有了');
+        return;
+      }
+      diner.name = next;
+      renderSplitDinerSetup();
+    });
+    row.querySelector('.m-del').addEventListener('click', function(){
+      DINERS = DINERS.filter(function(item){ return item.id !== diner.id; });
+      activeDiner = DINERS.length ? DINERS[0].id : null;
+      renderSplitDinerSetup();
+    });
+    list.appendChild(row);
+  });
+}
+
+function splitAddDiner(){
+  var input = document.getElementById('splitDinerName');
+  var name = input.value.trim();
+  if (!name){ input.focus(); return; }
+  if (DINERS.some(function(diner){ return diner.name === name; })){ showAppToast('这个名字已经有了'); input.select(); return; }
+  if (DINERS.length >= 12){ showAppToast('最多支持 12 个人'); return; }
+  var id = 'diner-' + (splitNextDinerId++);
+  DINERS.push({ id: id, name: name, color: LOC_COLORS[(DINERS.length) % LOC_COLORS.length] });
+  if (!activeDiner) activeDiner = id;
+  input.value = '';
+  renderSplitDinerSetup();
+  input.focus();
+}
+
 function goSplitStep(n){
+  var setup = document.getElementById('splitPeopleSetup');
+  if (setup) setup.style.display = n === 1 ? 'block' : 'none';
   document.getElementById('pane1').classList.toggle('show', n===1 && splitEntryMode==='scan');
   document.getElementById('paneManual').classList.toggle('show', n===1 && splitEntryMode==='manual');
   document.getElementById('pane2').classList.toggle('show', n===2);
@@ -2778,7 +2854,11 @@ function settleBill(){
 /* 4. 所有事件绑定（本块底部执行，元素此时已存在） */
 var splitTaxType = 'none';
 
+document.getElementById('splitAddDinerBtn').addEventListener('click', splitAddDiner);
+document.getElementById('splitDinerName').addEventListener('keydown', function(e){ if (e.key === 'Enter') splitAddDiner(); });
+
 document.getElementById('btnScan').addEventListener('click', function(){
+  if (DINERS.length < 2){ alert('先添加至少 2 个一起吃饭的人'); return; }
   var stage = document.getElementById('cameraStage');
   var hint = document.getElementById('scanHint');
   var btn = this;
@@ -2839,6 +2919,7 @@ document.querySelectorAll('.tax-opt').forEach(function(opt){
 });
 
 document.getElementById('btnManualNext').addEventListener('click', function(){
+  if (DINERS.length < 2){ alert('先添加至少 2 个一起吃饭的人'); return; }
   if(DISHES.length===0){ alert('先添加至少一道菜品'); return; }
   if(splitTaxType==='none'){
     FEE = { type:'none', value:0, label:'服务费' };
