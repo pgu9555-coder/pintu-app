@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- deployment build: 2026-08-02-room-lifecycle -->
+<!-- deployment build: 2026-08-02-ledger-sync-v2 -->
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -3870,11 +3870,37 @@ function glSetSyncBadge(state, text){
 function glSyncState(roomDocId){
   if (!glCloudSyncStates[roomDocId]){
     glCloudSyncStates[roomDocId] = {
-      payload: null, inFlight: false, timer: null, retryCount: 0,
-      latestRevision: 0, ignoreBeforeRevision: 0
+      payload: null, inFlight: false, inFlightPayload: null, inFlightStartedAt: 0,
+      attemptToken: 0, timer: null, retryCount: 0, latestRevision: 0, cancelled: false
     };
   }
   return glCloudSyncStates[roomDocId];
+}
+
+/* 微信 WebView 偶尔会让 CloudBase 的 get/update Promise 一直不返回。
+   所有账本写入都必须有截止时间，否则一次悬挂会让状态永久停在“正在同步”。 */
+function glPromiseTimeout(promise, timeoutMs, label){
+  return new Promise(function(resolve, reject){
+    var settled = false;
+    var timer = setTimeout(function(){
+      if (settled) return;
+      settled = true;
+      var err = new Error((label || '云端请求') + '超时');
+      err.code = 'SYNC_TIMEOUT';
+      reject(err);
+    }, timeoutMs);
+    Promise.resolve(promise).then(function(value){
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(value);
+    }).catch(function(err){
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      reject(err);
+    });
+  });
 }
 
 /* 把一趟行程账本压成要存到云端 room.ledger 的结构（都是可安全 JSON 化的普通数据） */
@@ -3896,6 +3922,18 @@ function glSerializeLedger(trip){
 
 function glClone(value){
   return JSON.parse(JSON.stringify(value == null ? null : value));
+}
+
+/* 共享数据不能使用“每台设备各自从 1 开始”的编号，否则两台手机同时
+   新增成员时会拿到相同 id，合并时其中一个会被当成同一条数据覆盖。 */
+function glMakeSharedId(prefix){
+  var random = '';
+  if (window.crypto && window.crypto.getRandomValues){
+    var bytes = new Uint32Array(2);
+    window.crypto.getRandomValues(bytes);
+    random = bytes[0].toString(36) + bytes[1].toString(36);
+  } else random = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+  return (prefix || 'item') + '-' + Date.now().toString(36) + '-' + random;
 }
 
 function glItemVersion(item){
@@ -4028,19 +4066,30 @@ function glFlushCloudSync(roomDocId){
   var payload = state.payload;
   state.payload = null;
   state.inFlight = true;
+  state.inFlightPayload = payload;
+  state.inFlightStartedAt = Date.now();
+  var attemptToken = ++state.attemptToken;
   setRoomBadge('syncing', '● 正在同步');
   var roomRef = rmDb.collection('rooms').doc(roomDocId);
   var writtenLedger = payload;
-  roomRef.get().then(function(res){
+  glPromiseTimeout(roomRef.get(), 7000, '读取共享账本').then(function(res){
+    if (state.cancelled || attemptToken !== state.attemptToken) return Promise.reject({ staleAttempt: true });
     var doc = res.data && res.data[0];
-    writtenLedger = glMergeLedgers(payload, doc && doc.ledger);
+    if (!doc){
+      var missing = new Error('共享房间已不存在');
+      missing.code = 'ROOM_NOT_FOUND';
+      throw missing;
+    }
+    writtenLedger = glMergeLedgers(payload, doc.ledger);
     writtenLedger.revision = Math.max(Number(payload.revision || 0), Number(writtenLedger.revision || 0));
     writtenLedger.updatedAt = Math.max(Number(payload.updatedAt || 0), Number(writtenLedger.updatedAt || 0));
     writtenLedger.updatedBy = payload.updatedBy || writtenLedger.updatedBy || null;
-    return roomRef.update({ ledger: writtenLedger });
+    return glPromiseTimeout(roomRef.update({ ledger: writtenLedger }), 7000, '写入共享账本');
   }).then(function(){
-    if (state.cancelled) return;
+    if (state.cancelled || attemptToken !== state.attemptToken) return;
     state.inFlight = false;
+    state.inFlightPayload = null;
+    state.inFlightStartedAt = 0;
     state.retryCount = 0;
     var trip = glFindTripByRoom(roomDocId);
     if (trip){
@@ -4054,10 +4103,16 @@ function glFlushCloudSync(roomDocId){
     if (state.payload) glFlushCloudSync(roomDocId);
     else setRoomBadge('synced', '● 已同步');
   }).catch(function(err){
-    if (state.cancelled) return;
+    if (state.cancelled || attemptToken !== state.attemptToken || (err && err.staleAttempt)) return;
     state.inFlight = false;
+    state.inFlightPayload = null;
+    state.inFlightStartedAt = 0;
+    if (err && err.code === 'ROOM_NOT_FOUND'){
+      rmHandleRoomDeleted(roomDocId, 'ledger');
+      return;
+    }
     state.retryCount += 1;
-    if (!state.payload) state.payload = payload;
+    state.payload = state.payload ? glMergeLedgers(state.payload, payload) : payload;
     state.timer = setTimeout(function(){ glFlushCloudSync(roomDocId); }, Math.min(6000, 900 * state.retryCount));
     setRoomBadge('retry', navigator.onLine === false ? '● 离线，联网后重试' : '● 同步重试中');
     console.warn('[账本同步] 写入云端失败，将自动重试：', err);
@@ -4115,16 +4170,27 @@ function glFindTripByRoom(docId){
 function glHydrateTripFromCloud(trip, ledger){
   if (!trip || !ledger) return;
   var syncState = trip.roomDocId ? glSyncState(trip.roomDocId) : null;
-  var remoteRevision = Number(ledger.revision || 0);
-  if (syncState && (syncState.inFlight || syncState.payload)) return;
   var localLedger = glSerializeLedger(trip);
   var mergedLedger = glMergeLedgers(localLedger, ledger);
+  var hasPendingSync = !!(syncState && (syncState.inFlight || syncState.payload));
+  var pendingLedger = null;
+  if (hasPendingSync){
+    pendingLedger = glMergeLedgers(syncState.inFlightPayload || {}, syncState.payload || {});
+    mergedLedger = glMergeLedgers(mergedLedger, pendingLedger);
+    /* 远端有本设备尚未包含的内容时，排到当前写入之后补写；如果内容已经
+       包含在途数据则不重复入队，避免轮询期间形成无休止的回写循环。 */
+    if (glLedgerContentSignature(mergedLedger) !== glLedgerContentSignature(pendingLedger)){
+      syncState.payload = syncState.payload ? glMergeLedgers(syncState.payload, mergedLedger) : glClone(mergedLedger);
+    }
+  }
   var remoteNeedsRepair = glLedgerContentSignature(mergedLedger) !== glLedgerContentSignature(ledger);
   glHydrating = true;
   glApplyLedgerToTrip(trip, mergedLedger);
   try { localStorage.setItem(GL_LS_KEY, JSON.stringify({ trips: GL_TRIPS, nextTripId: glNextTripId })); } catch(e){}
   glHydrating = false;
-  if (trip.roomDocId && glCurrentTripId === trip.id) glSetSyncBadge('synced', '● 已同步');
+  if (trip.roomDocId && glCurrentTripId === trip.id){
+    glSetSyncBadge(hasPendingSync ? 'syncing' : 'synced', hasPendingSync ? '● 正在同步' : '● 已同步');
+  }
 
   var view = document.getElementById('viewGroupLedger');
   if (glCurrentTripId === trip.id && view && view.classList.contains('show')){
@@ -4143,7 +4209,7 @@ function glHydrateTripFromCloud(trip, ledger){
     if (typeof glRefreshSettlementIfVisible === 'function') glRefreshSettlementIfVisible(true);
   }
   /* 若远端刚好覆盖了另一台设备的一笔不同改动，合并结果会自动补写回云端，最终两边收敛。 */
-  if (remoteNeedsRepair && trip.roomDocId && rmDb) glQueueCloudSync(trip);
+  if (remoteNeedsRepair && !hasPendingSync && trip.roomDocId && rmDb) glQueueCloudSync(trip);
 }
 
 function glCurrentTrip(){
@@ -4334,7 +4400,9 @@ function glAddMember(){
     return;
   }
   var stamp = glMutationStamp();
-  trip.members.push({ id: trip.nextMemberId++, name: name, color: GL_COLORS[trip.members.length % GL_COLORS.length], createdAt: stamp, updatedAt: stamp, updatedBy: window.rmMyUid || null });
+  var memberId = trip.roomDocId ? glMakeSharedId('member') : trip.nextMemberId;
+  trip.nextMemberId += 1;
+  trip.members.push({ id: memberId, name: name, color: GL_COLORS[trip.members.length % GL_COLORS.length], createdAt: stamp, updatedAt: stamp, updatedBy: window.rmMyUid || null });
   glSave();
   input.value = '';
   input.focus();
@@ -4472,7 +4540,7 @@ function glAddExpense(){
   if (glSelectedPayerId === null){ alert('选一下这笔是谁付的钱'); return; }
   if (glSelectedSplitIds.length === 0){ alert('至少要有一个人参与平摊这笔支出'); return; }
   var expenseId = trip.roomDocId
-    ? ((window.rmMyUid || 'member') + '-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7))
+    ? glMakeSharedId('expense')
     : trip.nextExpenseId;
   trip.nextExpenseId += 1;
   var stamp = glMutationStamp();
@@ -4500,7 +4568,7 @@ document.getElementById('glExpDesc').addEventListener('keydown', function(e){ if
 function glMemberById(id){
   var trip = glCurrentTrip();
   if (!trip) return null;
-  return trip.members.find(function(m){ return m.id === id; });
+  return trip.members.find(function(m){ return String(m.id) === String(id); });
 }
 function glOpenExpenseEditor(expenseId){
   var trip = glCurrentTrip();
@@ -4523,16 +4591,22 @@ function glOpenExpenseEditor(expenseId){
     '<span class="gl-editor-label">谁参与平摊</span><div class="diner-bar" id="glEditSplitBar">' + splitHtml + '</div>' +
     '<div class="gl-editor-actions"><button class="btn-sub" id="glCancelExpenseEdit" type="button">取消</button><button class="btn-main" id="glSaveExpenseEdit" type="button">保存修改</button></div>');
   function repaintChoices(){
-    modal.querySelectorAll('[data-payer-id]').forEach(function(chip){ chip.classList.toggle('on', Number(chip.dataset.payerId) === payerId); });
-    modal.querySelectorAll('[data-split-id]').forEach(function(chip){ chip.classList.toggle('on', splitIds.indexOf(Number(chip.dataset.splitId)) > -1); });
+    modal.querySelectorAll('[data-payer-id]').forEach(function(chip){ chip.classList.toggle('on', String(chip.dataset.payerId) === String(payerId)); });
+    modal.querySelectorAll('[data-split-id]').forEach(function(chip){ chip.classList.toggle('on', splitIds.some(function(id){ return String(id) === String(chip.dataset.splitId); })); });
   }
   modal.querySelectorAll('[data-payer-id]').forEach(function(chip){
-    chip.addEventListener('click', function(){ payerId = Number(chip.dataset.payerId); repaintChoices(); });
+    chip.addEventListener('click', function(){
+      var member = trip.members.find(function(m){ return String(m.id) === String(chip.dataset.payerId); });
+      if (member) payerId = member.id;
+      repaintChoices();
+    });
   });
   modal.querySelectorAll('[data-split-id]').forEach(function(chip){
     chip.addEventListener('click', function(){
-      var id = Number(chip.dataset.splitId);
-      var idx = splitIds.indexOf(id);
+      var member = trip.members.find(function(m){ return String(m.id) === String(chip.dataset.splitId); });
+      if (!member) return;
+      var id = member.id;
+      var idx = splitIds.findIndex(function(current){ return String(current) === String(id); });
       if (idx > -1) splitIds.splice(idx, 1); else splitIds.push(id);
       repaintChoices();
     });
@@ -5873,7 +5947,8 @@ function spinnerSpin(){
     if (mine){
       mine.name = name;
     } else {
-      members.push({ id: nextId++, uid: uid, name: name, color: GL_COLORS[members.length % GL_COLORS.length] });
+      members.push({ id: glMakeSharedId('member'), uid: uid, name: name, color: GL_COLORS[members.length % GL_COLORS.length] });
+      nextId += 1;
     }
     var patch = { members: members, nextMemberId: nextId };
 
@@ -5991,7 +6066,7 @@ function spinnerSpin(){
   };
 
   function makeRoomData(type, name){
-    var member = { id: 1, uid: window.rmMyUid, name: name, color: GL_COLORS[0] };
+    var member = { id: glMakeSharedId('member'), uid: window.rmMyUid, name: name, color: GL_COLORS[0] };
     return {
       name: name + (type === 'midpoint' ? '发起的碰面' : '发起的账本'),
       code: rmGenCode(), toolType: type, members: [member], nextMemberId: 2,
