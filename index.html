@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- deployment build: 2026-08-02-launch-qa-v7 -->
+<!-- deployment build: 2026-08-02-launch-qa-v8 -->
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -4417,6 +4417,7 @@ function glRenderHomeTripList(){
   var list = document.getElementById('glHomeTripsList');
   if (!label || !list) return;
   if (visibleTrips.length === 0){
+    list.innerHTML = '';
     label.style.display = 'none';
     list.style.display = 'none';
     if (typeof rmUpdateTripsEmptyState === 'function') rmUpdateTripsEmptyState();
