@@ -5138,7 +5138,12 @@ function rmCancelRoom(room, options){
   if (isLocal || !rmDb){ finish(); return; }
   var ref = rmDb.collection('rooms').doc(room.docId);
   if (isOwner){
-    rmCloudRequest(ref.remove(), '解散房间').then(finish).catch(fail);
+    /* 删除规则引用 ownerUid 时，CloudBase 要求前端删除条件也显式包含
+       ownerUid；仅用 doc(id).remove() 会把真正的房主也误判为无权限。 */
+    rmCloudRequest(
+      rmDb.collection('rooms').where({ _id: room.docId, ownerUid: window.rmMyUid }).remove(),
+      '解散房间'
+    ).then(finish).catch(fail);
     return;
   }
   if (!canLeaveMembership){ finish(); return; }
