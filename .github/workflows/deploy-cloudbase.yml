@@ -1,0 +1,55 @@
+name: Deploy PintU to CloudBase
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - index.html
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pintu-cloudbase-production
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Deploy production website
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+
+      - name: Prepare static site
+        shell: bash
+        run: |
+          mkdir -p cloudbase-site
+          cp index.html cloudbase-site/index.html
+
+      - name: Install CloudBase CLI
+        run: npm install --global @cloudbase/cli
+
+      - name: Log in to Tencent CloudBase
+        env:
+          TCB_SECRET_ID: ${{ secrets.TCB_SECRET_ID }}
+          TCB_SECRET_KEY: ${{ secrets.TCB_SECRET_KEY }}
+        shell: bash
+        run: |
+          if [ -z "$TCB_SECRET_ID" ] || [ -z "$TCB_SECRET_KEY" ]; then
+            echo "Missing TCB_SECRET_ID or TCB_SECRET_KEY in GitHub Actions secrets."
+            exit 1
+          fi
+          tcb login --apiKeyId "$TCB_SECRET_ID" --apiKey "$TCB_SECRET_KEY"
+
+      - name: Deploy index.html to production
+        run: tcb hosting deploy ./cloudbase-site / -e pintu-d4g77ecn24b674fa0
