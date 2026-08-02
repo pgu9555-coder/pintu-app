@@ -60,6 +60,8 @@ async function applyCollectionRule(collectionName, securityRule) {
     JSON.stringify(canonicalize(actualRule)) !==
     JSON.stringify(canonicalize(securityRule))
   ) {
+    console.error("Expected rule:", JSON.stringify(canonicalize(securityRule)));
+    console.error("Applied rule:", JSON.stringify(canonicalize(actualRule)));
     throw new Error(`Security rule mismatch for ${collectionName}.`);
   }
 
