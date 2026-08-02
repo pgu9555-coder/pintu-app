@@ -2,7 +2,7 @@
   "rooms": {
     "read": "auth != null",
     "create": "auth != null && request.data.ownerUid == auth.uid",
-    "update": "auth != null",
+    "update": "auth != null && (request.data.ownerUid == undefined || request.data.ownerUid == doc.ownerUid) && (request.data.code == undefined || request.data.code == doc.code)",
     "delete": "auth != null && doc.ownerUid == auth.uid"
   }
 }
