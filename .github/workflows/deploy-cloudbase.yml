@@ -67,7 +67,7 @@ jobs:
           node scripts/test-index-html.cjs
 
       - name: Deploy room access gateway
-        run: tcb fn deploy roomGateway
+        run: tcb fn deploy roomGateway --force --yes
 
       - name: Install deployment dependencies
         run: npm install --no-save @cloudbase/manager-node@5.6.6 @cloudbase/node-sdk@3.18.3
