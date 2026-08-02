@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- deployment build: 2026-08-02-ledger-sync-v4 -->
+<!-- deployment build: 2026-08-02-collab-sync-v5 -->
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -67,6 +67,34 @@
   }
   function rmCloudRequest(promise, label){
     return Promise.resolve(promise).then(function(result){ return rmRequireCloudSuccess(result, label); });
+  }
+  /* 碰面点按 uid 做原子 pull/push，只改当前用户这一项。这样两台手机同时
+     保存时不会再用各自的旧 people 数组互相覆盖。pull/push 都是幂等可重试的。 */
+  function rmWriteOwnMeetupPoint(roomRef, person, label, attempt){
+    attempt = attempt || 1;
+    var uid = person && person.uid ? person.uid : window.rmMyUid;
+    return rmCloudRequest(roomRef.update({ 'meetup.people': rmDb.command.pull({ uid: uid }) }), label || '更新碰面位置')
+      .then(function(){
+        if (!person) return null;
+        return rmCloudRequest(roomRef.update({ 'meetup.people': rmDb.command.push(person) }), label || '更新碰面位置');
+      }).catch(function(err){
+        if (attempt >= 3) throw err;
+        return new Promise(function(resolve){ setTimeout(resolve, 350 * attempt); })
+          .then(function(){ return rmWriteOwnMeetupPoint(roomRef, person, label, attempt + 1); });
+      });
+  }
+  function rmWriteOwnRoomMember(roomRef, member, label, attempt){
+    attempt = attempt || 1;
+    var uid = member && member.uid ? member.uid : window.rmMyUid;
+    return rmCloudRequest(roomRef.update({ members: rmDb.command.pull({ uid: uid }) }), label || '更新房间成员')
+      .then(function(){
+        if (!member) return null;
+        return rmCloudRequest(roomRef.update({ members: rmDb.command.push(member) }), label || '更新房间成员');
+      }).catch(function(err){
+        if (attempt >= 3) throw err;
+        return new Promise(function(resolve){ setTimeout(resolve, 350 * attempt); })
+          .then(function(){ return rmWriteOwnRoomMember(roomRef, member, label, attempt + 1); });
+      });
   }
   window.rmBackendStatus = { state: 'starting', error: null };
   /* 我的身份 id：优先用云端匿名登录 uid（登录成功后覆盖），拿不到时用这个设备级随机 id 兜底 */
@@ -1068,6 +1096,11 @@
       <div class="home-content">
         <div class="section-label">用完即走</div>
         <div class="tool-grid">
+          <div class="tool-card" onclick="openSplit()">
+            <div class="tool-icon split"><i class="ti-receipt"></i></div>
+            <div class="tool-title">闪电分账</div>
+            <div class="tool-desc">菜品各自认领<br>服务费也算清楚</div>
+          </div>
           <div class="tool-card" onclick="openMidpoint()">
             <div class="tool-icon midpoint"><i class="ti-map-pin-share"></i></div>
             <div class="tool-title">公平碰面 · 盲盒吃喝</div>
@@ -1078,7 +1111,7 @@
             <div class="tool-title">谁买单 · 转盘</div>
             <div class="tool-desc">这顿谁请？<br>转一转,天意决定</div>
           </div>
-          <div class="tool-card" style="grid-column:1 / -1;" onclick="openGroupLedger()">
+          <div class="tool-card" onclick="openGroupLedger()">
             <div class="tool-icon ledger"><i class="ti-users"></i></div>
             <div class="tool-title">行程账本</div>
             <div class="tool-desc">出去玩几天，各付各的钱，最后一键算清谁该转给谁</div>
@@ -1713,7 +1746,8 @@ function mpMyName(){
 function mpRoomWrite(room, people){
   room.meetup = { people: people };
   if (rmDb && room.docId && room.docId.indexOf('local-') !== 0){
-    rmCloudRequest(rmDb.collection('rooms').doc(room.docId).update({ meetup: rmDb.command.set(room.meetup) }), '写入碰面位置').catch(function(err){
+    var mine = people.find(function(person){ return person.uid === window.rmMyUid; }) || null;
+    rmWriteOwnMeetupPoint(rmDb.collection('rooms').doc(room.docId), mine, '写入碰面位置').catch(function(err){
       console.warn('[碰面同步] 写入云端失败：', err);
       if (typeof showAppToast === 'function') showAppToast('位置暂未同步，正在等待网络恢复');
     });
@@ -5021,19 +5055,11 @@ function rmCancelRoom(room, options){
     return;
   }
   if (!canLeaveMembership){ finish(); return; }
-  /* 退出前重新读取最新成员，避免用旧页面数据覆盖别人刚加入的成员。 */
-  rmCloudRequest(ref.get(), '读取房间').then(function(res){
-    var latest = res.data && res.data[0];
-    if (!latest){ finish(); return null; }
-    var patch = {
-      members: (latest.members || []).filter(function(m){ return m.uid !== window.rmMyUid; })
-    };
-    if (latest.meetup && latest.meetup.people){
-      patch.meetup = { people: latest.meetup.people.filter(function(p){ return p.uid !== window.rmMyUid; }) };
-    }
-    if (patch.meetup) patch.meetup = rmDb.command.set(patch.meetup);
-    return rmCloudRequest(ref.update(patch), '退出房间').then(finish);
-  }).catch(fail);
+  /* 只原子移除当前用户，不再整组覆盖 members/people，避免有人恰好加入或
+     保存位置时被退出操作误删。 */
+  rmWriteOwnRoomMember(ref, null, '退出房间')
+    .then(function(){ return rmWriteOwnMeetupPoint(ref, null, '移除碰面位置'); })
+    .then(finish).catch(fail);
 }
 
 function rmCurrentRoom(){
@@ -5949,9 +5975,23 @@ function spinnerSpin(){
     if (rmDb && room.docId && room.docId.indexOf('local-') !== 0){
       var cloudPatch = {};
       Object.keys(patch).forEach(function(k){
-        cloudPatch[k] = (k === 'meetup' || k === 'ledger') ? rmDb.command.set(patch[k]) : patch[k];
+        if (k === 'members' || k === 'meetup') return;
+        if (k === 'nextMemberId') cloudPatch[k] = rmDb.command.max(Number(patch[k]) || 1);
+        else cloudPatch[k] = k === 'ledger' ? rmDb.command.set(patch[k]) : patch[k];
       });
-      return rmCloudRequest(rmDb.collection('rooms').doc(room.docId).update(cloudPatch), '更新房间');
+      var ref = rmDb.collection('rooms').doc(room.docId);
+      var baseWrite = Object.keys(cloudPatch).length
+        ? rmCloudRequest(ref.update(cloudPatch), '更新房间')
+        : Promise.resolve();
+      var member = patch.members
+        ? patch.members.find(function(item){ return item.uid === window.rmMyUid; }) || null
+        : undefined;
+      var point = patch.meetup
+        ? (patch.meetup.people || []).find(function(person){ return person.uid === window.rmMyUid; }) || null
+        : undefined;
+      return baseWrite
+        .then(function(){ return member === undefined ? null : rmWriteOwnRoomMember(ref, member, '登记房间成员'); })
+        .then(function(){ return point === undefined ? null : rmWriteOwnMeetupPoint(ref, point, '登记碰面成员'); });
     }
     rmSaveLocalRooms();
     return Promise.resolve();
