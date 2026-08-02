@@ -8,8 +8,8 @@ const rooms = rules.rooms || {};
 
 assert.equal(
   rooms.read,
-  "auth != null && (auth.openid in doc.memberUids || auth.uid in doc.memberUids)",
-  "room reads must support both WeChat/openid and Web/uid identities"
+  false,
+  "browser clients must not read room documents directly; use roomGateway"
 );
 assert.equal(rooms.create, false, "browser clients must not create room documents directly");
 assert.equal(rooms.update, false, "browser clients must not update room documents directly");

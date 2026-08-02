@@ -25,8 +25,15 @@ inlineScripts.forEach((script, index) => {
 
 assert.doesNotMatch(
   source,
-  /rmMemberRoomQuery\([^)]*\)\.update\s*\(/,
-  "browser code must not update rooms directly; use roomGateway"
+  /rmDb\.collection\s*\(\s*['"]rooms['"]\s*\)/,
+  "browser code must not access rooms directly; use roomGateway"
+);
+
+assert.match(source, /rmRoomGateway\(\s*['"]getRoom['"]/, "room reads must use roomGateway");
+assert.match(
+  source,
+  /function\s+rmRenderHomeRoomList\s*\(\)\s*\{\s*var\s+refreshToken\s*=\s*\+\+rmHomeRefreshToken;[\s\S]*?if\s*\(refreshToken\s*!==\s*rmHomeRefreshToken\)\s*return;/,
+  "home room refreshes must ignore stale gateway responses"
 );
 
 console.log(`index.html checks passed (${inlineScripts.length} inline scripts).`);

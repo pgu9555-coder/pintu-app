@@ -68,15 +68,8 @@
   function rmCloudRequest(promise, label){
     return Promise.resolve(promise).then(function(result){ return rmRequireCloudSuccess(result, label); });
   }
-  /* 浏览器只允许读取本人已经加入的房间，并且查询必须显式带上成员条件。
-     {openid} 会由 CloudBase 自动映射为当前平台的 openid/uid；数据库规则同时兼容两种身份字段。
-     所有写入统一走云函数，避免前端绕过事务或修改门禁字段。 */
-  function rmMemberRoomQuery(docId){
-    return rmDb.collection('rooms').where({
-      _id: docId,
-      memberUids: rmDb.command.in(['{openid}'])
-    });
-  }
+  /* 浏览器不直接读取或写入 rooms；所有访问都经过云函数按登录身份检查成员资格。
+     这样在 Chrome、微信 WebView 与匿名登录身份字段存在差异时也不会误拒绝合法成员。 */
   var RM_CREATE_REQUEST_KEY = 'pintu_pending_create_v1';
   function rmCreateFingerprint(payload){
     var room = (payload && payload.room) || {};
@@ -128,7 +121,7 @@
       else localStorage.removeItem(RM_CREATE_REQUEST_KEY);
     } catch(e){}
   }
-  /* 创建、加入、退出以及所有共享数据写入都经过云函数门禁；浏览器只读云数据库。 */
+  /* 创建、加入、读取、退出以及所有共享数据写入都经过云函数门禁。 */
   function rmRoomGateway(action, payload, label){
     if (!rmTcbApp) return Promise.reject(new Error('CloudBase 尚未连接成功'));
     var data = Object.assign({}, payload || {}, { action: action });
@@ -153,6 +146,11 @@
         }
         return result.data;
       });
+  }
+  function rmReadRoom(docId, label){
+    return rmRoomGateway('getRoom', { docId: docId }, label || '读取房间').then(function(data){
+      return data && data.room ? data.room : null;
+    });
   }
   function rmGatewayTimeout(promise, timeoutMs, label){
     return new Promise(function(resolve, reject){
@@ -5162,7 +5160,7 @@ glRenderHomeTripList();
    —— 数据源：CloudBase 的 rooms 集合，每个房间是一条文档
       {name, code, members, nextMemberId, tripId, createdAt}
    —— 本地只留一份"缓存"（ROOMS 数组），永远以云端数据为准：
-      · 打开房间主页时订阅实时更新（.watch()），并用短轮询兜底长连接断开
+      · 打开房间主页时每 2 秒经云函数校验身份并自动同步，避免浏览器权限与长连接差异
       · 首页展示"我参与过的房间"，用 localStorage 记一份房间 docId 列表
         （这份列表只是本机快捷入口；真正权限由云端成员名单控制，
         新设备必须先凭正确房间码通过云函数门禁，才能读取房间数据）
@@ -5188,6 +5186,7 @@ var rmLegacyPollTimer = null;
 var rmLegacyPullBusy = false;
 var rmLegacyPullStartedAt = 0;
 var rmLegacyPullToken = 0;
+var rmHomeRefreshToken = 0;
 var LS_KEY = 'pintu_my_room_ids';
 var RM_LOCAL_KEY = 'pintu_local_rooms_v1';
 
@@ -5215,7 +5214,11 @@ function rmSaveMyRoomIds(ids){
 }
 function rmRememberRoom(docId){
   var ids = rmGetMyRoomIds();
-  if (ids.indexOf(docId) === -1){ ids.push(docId); rmSaveMyRoomIds(ids); }
+  if (ids.indexOf(docId) === -1){
+    rmHomeRefreshToken += 1; /* 让仍在路上的旧首页读取失效，避免过滤掉刚加入的房间 */
+    ids.push(docId);
+    rmSaveMyRoomIds(ids);
+  }
 }
 function rmForgetRoom(docId){
   rmSaveMyRoomIds(rmGetMyRoomIds().filter(function(id){ return id !== docId; }));
@@ -5271,6 +5274,7 @@ function rmRemoveRoomLocally(room, message){
   if (room._removedLocally) return;
   room._removedLocally = true;
   var docId = room.docId;
+  rmHomeRefreshToken += 1; /* 防止较早的首页读取把已退出/解散的房间重新插回 */
   rmClearPendingMeetup(docId);
   if (typeof window.rmStopTypedRoomSync === 'function') window.rmStopTypedRoomSync();
   if (typeof window.rmStopLegacyRoomSync === 'function') window.rmStopLegacyRoomSync();
@@ -5375,6 +5379,7 @@ function rmUpsertLocalRoom(docId, data){
    云端模式：先把 localStorage 里记的房间 docId 逐个从云端拉一遍最新数据再渲染；
    降级模式（没配置后端）：直接用本地 ROOMS 缓存渲染，和之前版本一样。 */
 function rmRenderHomeRoomList(){
+  var refreshToken = ++rmHomeRefreshToken;
   var label = document.getElementById('rmHomeRoomsLabel');
   var list = document.getElementById('rmHomeRoomsList');
   if (!label || !list) return;
@@ -5423,15 +5428,16 @@ function rmRenderHomeRoomList(){
   }
 
   rmTcbReady.then(function(ready){
+    if (refreshToken !== rmHomeRefreshToken) return;
     if (!ready || !rmDb){ paint(); return; }
     var ids = rmGetMyRoomIds();
     if (ids.length === 0){ ROOMS = []; paint(); return; }
     Promise.all(ids.map(function(id){
-      return rmCloudRequest(rmMemberRoomQuery(id).get(), '刷新房间').then(function(res){
-        var doc = res.data && res.data[0];
+      return rmReadRoom(id, '刷新房间').then(function(doc){
         return doc ? { docId: id, state: 'found', data: doc } : { docId: id, state: 'missing' };
       }).catch(function(err){ return { docId: id, state: 'error', error: err }; });
     })).then(function(results){
+      if (refreshToken !== rmHomeRefreshToken) return;
       /* 网络错误只保留旧缓存，不能误当成房间被删除；只有明确查不到才忘记。 */
       ROOMS = ROOMS.filter(function(room){ return ids.indexOf(room.docId) !== -1; });
       var hadError = false;
@@ -5545,9 +5551,8 @@ function rmPullLegacyRoom(docId){
   rmLegacyPullBusy = true;
   rmLegacyPullStartedAt = now;
   var requestToken = ++rmLegacyPullToken;
-  rmCloudRequest(rmMemberRoomQuery(docId).get(), '自动刷新旧版房间').then(function(res){
+  rmReadRoom(docId, '自动刷新旧版房间').then(function(doc){
     if (requestToken !== rmLegacyPullToken || rmCurrentRoomId !== docId) return;
-    var doc = res.data && res.data[0];
     if (!doc){ rmHandleRoomDeleted(docId, 'legacy'); return; }
     rmUpsertLocalRoom(docId, doc);
     rmRenderDash();
@@ -5575,28 +5580,11 @@ function rmStartLegacyRoomSync(docId){
   if (!rmDb || docId.indexOf('local-') === 0) return;
   rmLegacyPollTimer = setInterval(function(){ rmPullLegacyRoom(docId); }, 2000);
   rmPullLegacyRoom(docId);
-  try {
-    rmWatcher = rmMemberRoomQuery(docId).watch({
-      onChange: function(snapshot){
-        if (rmCurrentRoomId !== docId) return;
-        var doc = snapshot.docs && snapshot.docs[0];
-        if (!doc){ rmHandleRoomDeleted(docId, 'legacy'); return; }
-        rmUpsertLocalRoom(docId, doc);
-        if (rmCurrentRoomId === docId) rmRenderDash();
-      },
-      onError: function(err){
-        if (rmCurrentRoomId !== docId) return;
-        console.warn('[旧版房间实时同步] 监听失败，继续使用轮询：', err);
-        rmPullLegacyRoom(docId);
-      }
-    });
-  } catch (err) {
-    rmWatcher = null;
-    console.warn('[旧版房间实时同步] 当前浏览器不支持监听，继续使用轮询：', err);
-  }
+  /* 数据库客户端读取保持关闭；短轮询统一经过 roomGateway，避免不同 WebView 的权限差异。 */
+  rmWatcher = null;
 }
 
-/* —— 进入某个房间：实时监听优先，短轮询兜底；降级模式直接渲染本地数据 —— */
+/* —— 进入某个房间：云函数短轮询同步；降级模式直接渲染本地数据 —— */
 function rmEnterRoom(docId){
   if (typeof window.rmStopTypedRoomSync === 'function') window.rmStopTypedRoomSync();
   rmStopLegacyRoomSync();
@@ -6364,10 +6352,10 @@ function spinnerSpin(){
     typedPullBusy = true;
     typedPullStartedAt = now;
     var requestToken = ++typedPullToken;
-    var request = rmCloudRequest(rmMemberRoomQuery(docId).get(), '自动刷新房间');
+    var request = rmReadRoom(docId, '自动刷新房间');
     Promise.resolve(request).then(function(res){
       if (requestToken !== typedPullToken || rmCurrentRoomId !== docId) return;
-      var doc = res.data && res.data[0];
+      var doc = res;
       if (doc) applyTypedRoomDoc(docId, type, doc);
       else rmHandleRoomDeleted(docId, type);
     }).catch(function(err){
@@ -6393,29 +6381,10 @@ function spinnerSpin(){
     stopTypedSync();
     if (!rmDb || docId.indexOf('local-') === 0) return;
     typedActiveSync = { docId: docId, type: type };
-    /* 先启动稳定的短轮询，再尝试实时监听。这样即使 watch 在某些微信/
-       Chrome 环境里同步抛错，轮询也已经在运行，不会退化成“刷新才看得到”。 */
+    /* 稳定的短轮询全部经过 roomGateway；数据库客户端读取和 watch 均保持关闭。 */
     typedPollTimer = setInterval(function(){ pullTypedRoom(docId, type); }, 2000);
-    pullTypedRoom(docId, type); /* 进入房间立即校准一次，不依赖 watch 的首个事件 */
-    try {
-      rmWatcher = rmMemberRoomQuery(docId).watch({
-        onChange: function(snapshot){
-          var doc = snapshot.docs && snapshot.docs[0];
-          if (!doc){ rmHandleRoomDeleted(docId, type); return; }
-          applyTypedRoomDoc(docId, type, doc);
-        },
-        onError: function(err){
-          console.warn('[独立房间实时同步] 监听失败，继续使用轮询：', err);
-          /* 微信 WebView 偶尔会断开长连接；轮询仍会继续工作。 */
-          if (type === 'ledger') glSetSyncBadge('retry', '● 自动刷新中');
-          pullTypedRoom(docId, type);
-        }
-      });
-    } catch (err) {
-      rmWatcher = null;
-      console.warn('[独立房间实时同步] 当前浏览器不支持监听，继续使用轮询：', err);
-      if (type === 'ledger') glSetSyncBadge('retry', '● 自动刷新中');
-    }
+    pullTypedRoom(docId, type); /* 进入房间立即校准一次 */
+    rmWatcher = null;
   }
 
   document.addEventListener('visibilitychange', function(){

@@ -475,6 +475,22 @@ async function roomByCode(code) {
   return rooms[0];
 }
 
+async function getRoom(event, uid) {
+  const docId = cleanText(event && event.docId, 80);
+  if (!docId) return failure("ROOM_REQUIRED", "缺少房间编号");
+  const response = requireDbSuccess(
+    await db.collection(ROOM_COLLECTION).doc(docId).get(),
+    "读取房间"
+  );
+  const room = response && Array.isArray(response.data) ? response.data[0] : response && response.data;
+  /* Do not reveal whether an unknown room exists. A missing room and a room the caller
+     has not joined intentionally return the same empty result. */
+  if (!room || !Array.isArray(room.memberUids) || !room.memberUids.includes(uid)) {
+    return success({ room: null });
+  }
+  return success({ room: { ...room, _id: room._id || docId } });
+}
+
 async function joinRoom(event, uid) {
   const code = cleanText(event.code, 8).toUpperCase();
   const expectedType = cleanText(event.type, 16);
@@ -854,6 +870,7 @@ exports.main = async (event) => {
     const action = cleanText(event && event.action, 24);
     if (action === "create") return await createRoom(event, uid);
     if (action === "join") return await joinRoom(event, uid);
+    if (action === "getRoom") return await getRoom(event, uid);
     if (action === "syncLedger") return await syncLedger(event, uid);
     if (action === "setMeetupPoint") return await setMeetupPoint(event, uid);
     if (action === "updateLegacyMembers") return await updateLegacyMembers(event, uid);

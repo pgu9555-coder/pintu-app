@@ -117,6 +117,13 @@ async function main() {
   assert.deepEqual(created.data.room.memberUids, ["owner"]);
   const { docId, room } = created.data;
 
+  const ownerRead = await call("owner", { action: "getRoom", docId });
+  assert.equal(ownerRead.ok, true);
+  assert.equal(ownerRead.data.room._id, docId);
+  const outsiderRead = await call("not-a-member", { action: "getRoom", docId });
+  assert.equal(outsiderRead.ok, true);
+  assert.equal(outsiderRead.data.room, null, "getRoom must not expose rooms to non-members");
+
   const idempotentRequest = {
     action: "create",
     clientRequestId: "request_12345678",
@@ -150,6 +157,8 @@ async function main() {
   assert.equal(joined.data.room.memberUids.includes("member"), true);
   assert.equal(joined.data.room.members.some((item) => item.uid === "member"), true);
   assert.equal(joined.data.room.ledger.members.some((item) => item.uid === "member"), true);
+  const memberRead = await call("member", { action: "getRoom", docId });
+  assert.equal(memberRead.data.room.memberUids.includes("member"), true);
 
   const wrongType = await call("stranger-2", {
     action: "join",
@@ -343,6 +352,8 @@ async function main() {
   assert.equal(rooms.get(docId).memberUids.includes("member"), false);
   assert.equal(rooms.get(docId).members.some((item) => item.uid === "member"), false);
   assert.equal(rooms.get(docId).ledger.members.some((item) => item.uid === "member"), true);
+  const leftRead = await call("member", { action: "getRoom", docId });
+  assert.equal(leftRead.data.room, null, "a member must lose read access immediately after leaving");
   const leftSync = await call("member", { action: "syncLedger", docId, ledger: memberSync.data.ledger });
   assert.equal(leftSync.code, "ROOM_NOT_FOUND");
 
@@ -356,6 +367,8 @@ async function main() {
   const ownerDisband = await call("owner", { action: "disband", docId });
   assert.equal(ownerDisband.ok, true);
   assert.equal(rooms.has(docId), false);
+  const disbandedRead = await call("owner", { action: "getRoom", docId });
+  assert.equal(disbandedRead.data.room, null);
   const repeatedDisband = await call("owner", { action: "disband", docId });
   assert.equal(repeatedDisband.ok, true);
 
