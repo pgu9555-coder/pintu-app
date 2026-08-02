@@ -1,0 +1,8 @@
+{
+  "*": {
+    "invoke": false
+  },
+  "roomGateway": {
+    "invoke": "auth != null"
+  }
+}

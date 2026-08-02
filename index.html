@@ -68,32 +68,55 @@
   function rmCloudRequest(promise, label){
     return Promise.resolve(promise).then(function(result){ return rmRequireCloudSuccess(result, label); });
   }
-  /* 碰面点按 uid 做原子 pull/push，只改当前用户这一项。这样两台手机同时
-     保存时不会再用各自的旧 people 数组互相覆盖。pull/push 都是幂等可重试的。 */
-  function rmWriteOwnMeetupPoint(roomRef, person, label, attempt){
-    attempt = attempt || 1;
-    var uid = person && person.uid ? person.uid : window.rmMyUid;
-    return rmCloudRequest(roomRef.update({ 'meetup.people': rmDb.command.pull({ uid: uid }) }), label || '更新碰面位置')
-      .then(function(){
-        if (!person) return null;
-        return rmCloudRequest(roomRef.update({ 'meetup.people': rmDb.command.push(person) }), label || '更新碰面位置');
-      }).catch(function(err){
-        if (attempt >= 3) throw err;
-        return new Promise(function(resolve){ setTimeout(resolve, 350 * attempt); })
-          .then(function(){ return rmWriteOwnMeetupPoint(roomRef, person, label, attempt + 1); });
+  /* 所有房间直连数据库的读写都必须同时带上“当前用户是成员”这个查询条件。
+     安全规则不是结果过滤器：只写 doc(id) 会在规则引用 memberUids 时被拒绝。 */
+  function rmMemberRoomQuery(docId){
+    return rmDb.collection('rooms').where({
+      _id: docId,
+      memberUids: rmDb.command.in(['{openid}'])
+    });
+  }
+  /* 安全规则要求每次客户端更新都显式带回这三个门禁字段，并且必须与
+     云端原值完全一致。这样恶意脚本不能把房主、房间码或成员名单清空。 */
+  function rmGuardedRoomPatch(room, patch){
+    return Object.assign({}, patch || {}, {
+      memberUids: (room && room.memberUids) || [],
+      ownerUid: (room && room.ownerUid) || null,
+      code: (room && room.code) || ''
+    });
+  }
+  /* 创建、凭码加入、退出会改变安全成员名单，只允许经过云函数门禁。 */
+  function rmRoomGateway(action, payload, label){
+    if (!rmTcbApp) return Promise.reject(new Error('CloudBase 尚未连接成功'));
+    var data = Object.assign({}, payload || {}, { action: action });
+    return rmCloudRequest(rmTcbApp.callFunction({ name: 'roomGateway', data: data }), label || '房间门禁')
+      .then(function(response){
+        var result = response && response.result;
+        if (typeof result === 'string'){
+          try { result = JSON.parse(result); } catch(e){}
+        }
+        if (!result || result.ok !== true){
+          var err = new Error((result && result.message) || '房间服务暂时不可用');
+          err.code = result && result.code;
+          throw err;
+        }
+        return result.data;
       });
   }
-  function rmWriteOwnRoomMember(roomRef, member, label, attempt){
+  /* 碰面点按 uid 做原子 pull/push，只改当前用户这一项。这样两台手机同时
+     保存时不会再用各自的旧 people 数组互相覆盖。pull/push 都是幂等可重试的。 */
+  function rmWriteOwnMeetupPoint(room, person, label, attempt){
     attempt = attempt || 1;
-    var uid = member && member.uid ? member.uid : window.rmMyUid;
-    return rmCloudRequest(roomRef.update({ members: rmDb.command.pull({ uid: uid }) }), label || '更新房间成员')
+    var roomRef = rmMemberRoomQuery(room.docId);
+    var uid = person && person.uid ? person.uid : window.rmMyUid;
+    return rmCloudRequest(roomRef.update(rmGuardedRoomPatch(room, { 'meetup.people': rmDb.command.pull({ uid: uid }) })), label || '更新碰面位置')
       .then(function(){
-        if (!member) return null;
-        return rmCloudRequest(roomRef.update({ members: rmDb.command.push(member) }), label || '更新房间成员');
+        if (!person) return null;
+        return rmCloudRequest(roomRef.update(rmGuardedRoomPatch(room, { 'meetup.people': rmDb.command.push(person) })), label || '更新碰面位置');
       }).catch(function(err){
         if (attempt >= 3) throw err;
         return new Promise(function(resolve){ setTimeout(resolve, 350 * attempt); })
-          .then(function(){ return rmWriteOwnRoomMember(roomRef, member, label, attempt + 1); });
+          .then(function(){ return rmWriteOwnMeetupPoint(room, person, label, attempt + 1); });
       });
   }
   window.rmBackendStatus = { state: 'starting', error: null };
@@ -1756,7 +1779,7 @@ function mpRoomWrite(room, people){
   room.meetup = { people: people };
   if (rmDb && room.docId && room.docId.indexOf('local-') !== 0){
     var mine = people.find(function(person){ return person.uid === window.rmMyUid; }) || null;
-    rmWriteOwnMeetupPoint(rmDb.collection('rooms').doc(room.docId), mine, '写入碰面位置').catch(function(err){
+    rmWriteOwnMeetupPoint(room, mine, '写入碰面位置').catch(function(err){
       console.warn('[碰面同步] 写入云端失败：', err);
       if (typeof showAppToast === 'function') showAppToast('位置暂未同步，正在等待网络恢复');
     });
@@ -4205,7 +4228,7 @@ function glFlushCloudSync(roomDocId){
   state.inFlightStartedAt = Date.now();
   var attemptToken = ++state.attemptToken;
   setRoomBadge('syncing', '● 正在同步');
-  var roomRef = rmDb.collection('rooms').doc(roomDocId);
+  var roomRef = rmMemberRoomQuery(roomDocId);
   var writtenLedger = payload;
   glPromiseTimeout(rmCloudRequest(roomRef.get(), '读取共享账本'), 7000, '读取共享账本').then(function(res){
     if (state.cancelled || attemptToken !== state.attemptToken) return Promise.reject({ staleAttempt: true });
@@ -4221,7 +4244,7 @@ function glFlushCloudSync(roomDocId){
     writtenLedger.updatedBy = payload.updatedBy || writtenLedger.updatedBy || null;
     /* set 命令会替换整个 ledger 字段；普通嵌套 update 无法把初始 null
        改成对象，CloudBase 会返回 Cannot create field ... in element {ledger:null}。 */
-    return glPromiseTimeout(rmCloudRequest(roomRef.update({ ledger: rmDb.command.set(writtenLedger) }), '写入共享账本'), 7000, '写入共享账本');
+    return glPromiseTimeout(rmCloudRequest(roomRef.update(rmGuardedRoomPatch(doc, { ledger: rmDb.command.set(writtenLedger) })), '写入共享账本'), 7000, '写入共享账本');
   }).then(function(){
     if (state.cancelled || attemptToken !== state.attemptToken) return;
     state.inFlight = false;
@@ -4977,8 +5000,8 @@ glRenderHomeTripList();
    —— 本地只留一份"缓存"（ROOMS 数组），永远以云端数据为准：
       · 打开房间主页时订阅实时更新（.watch()），云端一变本地就跟着刷新
       · 首页展示"我参与过的房间"，用 localStorage 记一份房间 docId 列表
-        （这份列表只是"这个浏览器记得哪些房间"，不是权限控制——
-        真正的房间数据所有人都在云端共享，谁知道房间码都能查到）
+        （这份列表只是本机快捷入口；真正权限由云端成员名单控制，
+        新设备必须先凭正确房间码通过云函数门禁，才能读取房间数据）
    —— 如果还没在最上面配置真实的 CLOUDBASE_ENV_ID，自动降级成
       纯本地模式（和最早那版一样，仅本浏览器内有效），不会报错崩溃，
       只是没法跨设备——方便你在正式接后端之前也能先玩、先测试界面。
@@ -5097,7 +5120,7 @@ function rmRemoveRoomLocally(room, message){
 function rmHandleRoomDeleted(docId, type){
   var room = ROOMS.find(function(r){ return r.docId === docId; }) || { docId: docId, name: '这个房间' };
   var wasCurrent = rmCurrentRoomId === docId;
-  rmRemoveRoomLocally(room, '房间已被解散，已保存有支出的本机账本');
+  rmRemoveRoomLocally(room, '房间已结束或你已退出，已有支出已保留到本机');
   if (wasCurrent) rmGoHome();
 }
 
@@ -5109,7 +5132,10 @@ function rmCancelRoom(room, options){
   if (!room || room._cancelBusy) return;
   var isLocal = room.docId.indexOf('local-') === 0;
   var isOwner = options.forceDisband || rmIsRoomOwner(room);
-  var canLeaveMembership = !isOwner && room.members && room.members.some(function(m){ return m.uid === window.rmMyUid; });
+  var canLeaveMembership = !isOwner && (
+    (room.memberUids && room.memberUids.indexOf(window.rmMyUid) !== -1) ||
+    (room.members && room.members.some(function(m){ return m.uid === window.rmMyUid; }))
+  );
   var hasExpenses = !!(room.ledger && room.ledger.expenses && room.ledger.expenses.length);
   var message;
   if (isOwner){
@@ -5136,7 +5162,6 @@ function rmCancelRoom(room, options){
   };
 
   if (isLocal || !rmDb){ finish(); return; }
-  var ref = rmDb.collection('rooms').doc(room.docId);
   if (isOwner){
     /* 删除规则引用 ownerUid 时，CloudBase 要求前端删除条件也显式包含
        ownerUid；仅用 doc(id).remove() 会把真正的房主也误判为无权限。 */
@@ -5147,11 +5172,8 @@ function rmCancelRoom(room, options){
     return;
   }
   if (!canLeaveMembership){ finish(); return; }
-  /* 只原子移除当前用户，不再整组覆盖 members/people，避免有人恰好加入或
-     保存位置时被退出操作误删。 */
-  rmWriteOwnRoomMember(ref, null, '退出房间')
-    .then(function(){ return rmWriteOwnMeetupPoint(ref, null, '移除碰面位置'); })
-    .then(finish).catch(fail);
+  /* memberUids 是数据库门禁，客户端无权自行修改；退出必须交给云函数。 */
+  rmRoomGateway('leave', { docId: room.docId }, '退出房间').then(finish).catch(fail);
 }
 
 function rmCurrentRoom(){
@@ -5166,6 +5188,7 @@ function rmUpsertLocalRoom(docId, data){
   room.name = data.name;
   room.code = data.code;
   room.members = data.members || [];
+  room.memberUids = data.memberUids || [];
   room.nextMemberId = data.nextMemberId || 1;
   room.tripId = data.tripId || null;
   room.toolType = data.toolType || data.roomType || 'legacy';
@@ -5237,7 +5260,7 @@ function rmRenderHomeRoomList(){
     var ids = rmGetMyRoomIds();
     if (ids.length === 0){ ROOMS = []; paint(); return; }
     Promise.all(ids.map(function(id){
-      return rmCloudRequest(rmDb.collection('rooms').doc(id).get(), '刷新房间').then(function(res){
+      return rmCloudRequest(rmMemberRoomQuery(id).get(), '刷新房间').then(function(res){
         var doc = res.data && res.data[0];
         return doc ? { docId: id, state: 'found', data: doc } : { docId: id, state: 'missing' };
       }).catch(function(err){ return { docId: id, state: 'error', error: err }; });
@@ -5345,7 +5368,7 @@ function rmEnterRoom(docId){
 
   rmTcbReady.then(function(ready){
     if (!ready || !rmDb){ rmShowDash(); return; }
-    rmWatcher = rmDb.collection('rooms').doc(docId).watch({
+    rmWatcher = rmMemberRoomQuery(docId).watch({
       onChange: function(snapshot){
         var doc = snapshot.docs && snapshot.docs[0];
         if (!doc){ rmHandleRoomDeleted(docId, 'legacy'); return; }
@@ -5428,9 +5451,9 @@ document.getElementById('rmBtnCreate').addEventListener('click', function(){
 
   rmTcbReady.then(function(ready){
     if (ready && rmDb){
-      return rmCloudRequest(rmDb.collection('rooms').add(roomData), '创建旧版房间').then(function(res){
-        var docId = res.id;
-        rmUpsertLocalRoom(docId, roomData);
+      return rmRoomGateway('create', { room: roomData }, '创建旧版房间').then(function(result){
+        var docId = result.docId;
+        rmUpsertLocalRoom(docId, result.room);
         rmRememberRoom(docId);
         return docId;
       });
@@ -5496,10 +5519,15 @@ function rmRenderDash(){
 /* 统一的"更新房间"入口：云端模式写回数据库（写完由 watch 自动刷新界面），
    降级模式直接改本地缓存 + 手动重渲染 */
 function rmUpdateRoom(room, patch){
+  var previous = {};
+  Object.keys(patch).forEach(function(k){ previous[k] = room[k]; });
   Object.keys(patch).forEach(function(k){ room[k] = patch[k]; });
   if (room.docId && room.docId.indexOf('local-') !== 0 && rmDb){
-    rmCloudRequest(rmDb.collection('rooms').doc(room.docId).update(patch), '更新旧版房间').catch(function(err){
+    rmCloudRequest(rmMemberRoomQuery(room.docId).update(rmGuardedRoomPatch(room, patch)), '更新旧版房间').catch(function(err){
       console.warn('[房间更新] 写入云端失败：', err);
+      Object.keys(previous).forEach(function(k){ room[k] = previous[k]; });
+      rmRenderDash();
+      if (typeof showAppToast === 'function') showAppToast('更新失败，已恢复修改前的内容');
     });
   } else {
     rmSaveLocalRooms();
@@ -5557,12 +5585,10 @@ function rmJoinByCode(){
 
   rmTcbReady.then(function(ready){
     if (ready && rmDb){
-      return rmCloudRequest(rmDb.collection('rooms').where({ code: code }).get(), '查找旧版房间').then(function(res){
-        var doc = res.data && res.data[0];
-        if (!doc) return null;
-        rmUpsertLocalRoom(doc._id, doc);
-        rmRememberRoom(doc._id);
-        return doc._id;
+      return rmRoomGateway('join', { code: code, type: 'legacy' }, '加入旧版房间').then(function(result){
+        rmUpsertLocalRoom(result.docId, result.room);
+        rmRememberRoom(result.docId);
+        return result.docId;
       });
     } else {
       var room = ROOMS.find(function(r){ return r.code === code; });
@@ -6062,61 +6088,6 @@ function spinnerSpin(){
     if (leaveBtn) leaveBtn.textContent = room && rmIsRoomOwner(room) ? '取消房间' : '退出房间';
   };
 
-  function persistTypedRoom(room, patch){
-    Object.keys(patch).forEach(function(k){ room[k] = patch[k]; });
-    if (rmDb && room.docId && room.docId.indexOf('local-') !== 0){
-      var cloudPatch = {};
-      Object.keys(patch).forEach(function(k){
-        if (k === 'members' || k === 'meetup') return;
-        if (k === 'nextMemberId') cloudPatch[k] = rmDb.command.max(Number(patch[k]) || 1);
-        else cloudPatch[k] = k === 'ledger' ? rmDb.command.set(patch[k]) : patch[k];
-      });
-      var ref = rmDb.collection('rooms').doc(room.docId);
-      var baseWrite = Object.keys(cloudPatch).length
-        ? rmCloudRequest(ref.update(cloudPatch), '更新房间')
-        : Promise.resolve();
-      var member = patch.members
-        ? patch.members.find(function(item){ return item.uid === window.rmMyUid; }) || null
-        : undefined;
-      var point = patch.meetup
-        ? (patch.meetup.people || []).find(function(person){ return person.uid === window.rmMyUid; }) || null
-        : undefined;
-      return baseWrite
-        .then(function(){ return member === undefined ? null : rmWriteOwnRoomMember(ref, member, '登记房间成员'); })
-        .then(function(){ return point === undefined ? null : rmWriteOwnMeetupPoint(ref, point, '登记碰面成员'); });
-    }
-    rmSaveLocalRooms();
-    return Promise.resolve();
-  }
-
-  function registerSelf(room, type, name){
-    var uid = window.rmMyUid;
-    var members = (room.members || []).slice();
-    var duplicate = members.some(function(m){ return m.name === name && m.uid && m.uid !== uid; });
-    if (duplicate) return Promise.reject(new Error('房间里已经有人使用“' + name + '”，请在名字后加一个数字或昵称区分。'));
-
-    var mine = members.find(function(m){ return m.uid === uid; });
-    var nextId = room.nextMemberId || 1;
-    if (mine){
-      mine.name = name;
-    } else {
-      members.push({ id: glMakeSharedId('member'), uid: uid, name: name, color: GL_COLORS[members.length % GL_COLORS.length] });
-      nextId += 1;
-    }
-    var patch = { members: members, nextMemberId: nextId };
-
-    if (type === 'midpoint'){
-      var meetup = room.meetup || { people: [] };
-      var people = (meetup.people || []).slice();
-      var myPoint = people.find(function(p){ return p.uid === uid; });
-      if (myPoint) myPoint.name = name;
-      else people.push({ uid: uid, name: name, address: '', lat: null, lng: null, color: LOC_COLORS[people.length % LOC_COLORS.length] });
-      patch.meetup = { people: people };
-    }
-    saveNickname(name);
-    return persistTypedRoom(room, patch).then(function(){ return room; });
-  }
-
   function applyTypedRoomDoc(docId, type, doc){
     if (!doc) return;
     var room = rmUpsertLocalRoom(docId, doc);
@@ -6139,7 +6110,7 @@ function spinnerSpin(){
     typedPullBusy = true;
     typedPullStartedAt = now;
     var requestToken = ++typedPullToken;
-    var request = rmCloudRequest(rmDb.collection('rooms').doc(docId).get(), '自动刷新房间');
+    var request = rmCloudRequest(rmMemberRoomQuery(docId).get(), '自动刷新房间');
     Promise.resolve(request).then(function(res){
       if (requestToken !== typedPullToken || rmCurrentRoomId !== docId) return;
       var doc = res.data && res.data[0];
@@ -6172,7 +6143,7 @@ function spinnerSpin(){
     typedPollTimer = setInterval(function(){ pullTypedRoom(docId, type); }, 2000);
     pullTypedRoom(docId, type); /* 进入房间立即校准一次，不依赖 watch 的首个事件 */
     try {
-      rmWatcher = rmDb.collection('rooms').doc(docId).watch({
+      rmWatcher = rmMemberRoomQuery(docId).watch({
         onChange: function(snapshot){
           var doc = snapshot.docs && snapshot.docs[0];
           if (!doc){ rmHandleRoomDeleted(docId, type); return; }
@@ -6243,12 +6214,8 @@ function spinnerSpin(){
 
   function addCloudRoomUnique(type, name, attempts){
     var roomData = makeRoomData(type, name);
-    return rmCloudRequest(rmDb.collection('rooms').where({ code: roomData.code }).get(), '检查房间码').then(function(res){
-      if (res.data && res.data.length){
-        if (attempts > 1) return addCloudRoomUnique(type, name, attempts - 1);
-        throw new Error('房间码生成冲突，请再点一次创建');
-      }
-      return rmCloudRequest(rmDb.collection('rooms').add(roomData), '创建房间').then(function(result){ return { docId: result.id, data: roomData }; });
+    return rmRoomGateway('create', { room: roomData }, '创建房间').then(function(result){
+      return { docId: result.docId, data: result.room };
     });
   }
 
@@ -6275,19 +6242,33 @@ function spinnerSpin(){
       .then(function(){ setBusy(type, false); });
   }
 
-  function findTypedRoom(type, code){
+  function findTypedRoom(type, code, name){
     return rmTcbReady.then(function(ready){
       if (ready && rmDb){
-        return rmCloudRequest(rmDb.collection('rooms').where({ code: code }).get(), '查找房间').then(function(res){
-          var doc = res.data && res.data[0];
-          if (!doc) return null;
-          var docId = doc._id;
-          return { docId: docId, room: rmUpsertLocalRoom(docId, doc) };
+        return rmRoomGateway('join', { code: code, type: type, name: name }, '加入房间').then(function(result){
+          return { docId: result.docId, room: rmUpsertLocalRoom(result.docId, result.room) };
         });
       }
       if (rmTcbError || CLOUDBASE_ENV_ID !== '你的环境ID') throw (rmTcbError || new Error('CloudBase 尚未连接成功'));
       var room = ROOMS.find(function(r){ return r.code === code; });
-      return room ? { docId: room.docId, room: room } : null;
+      if (!room) return null;
+      if (room.toolType !== type) return { docId: room.docId, room: room };
+      var members = (room.members || []).slice();
+      var duplicate = members.some(function(member){ return member.name === name && member.uid && member.uid !== window.rmMyUid; });
+      if (duplicate) throw new Error('房间里已经有人使用“' + name + '”，请换一个昵称');
+      var mine = members.find(function(member){ return member.uid === window.rmMyUid; });
+      if (mine) mine.name = name;
+      else members.push({ id: glMakeSharedId('member'), uid: window.rmMyUid, name: name, color: GL_COLORS[members.length % GL_COLORS.length] });
+      room.members = members;
+      room.nextMemberId = Math.max(Number(room.nextMemberId) || 1, members.length + 1);
+      if (type === 'midpoint'){
+        var meetup = room.meetup || { people: [] };
+        var people = (meetup.people || []).filter(function(person){ return person.uid !== window.rmMyUid; });
+        people.push({ uid: window.rmMyUid, name: name, address: '', lat: null, lng: null, color: LOC_COLORS[people.length % LOC_COLORS.length] });
+        room.meetup = { people: people };
+      }
+      rmSaveLocalRooms();
+      return { docId: room.docId, room: room };
     });
   }
 
@@ -6301,13 +6282,14 @@ function spinnerSpin(){
     if (!name){ setError(type, '请先填写你自己的名字。'); nameInput.focus(); return; }
     if (code.length !== 6){ setError(type, '请输入完整的 6 位房间码。'); codeInput.focus(); return; }
     setBusy(type, true, 'join');
-    findTypedRoom(type, code).then(function(found){
+    findTypedRoom(type, code, name).then(function(found){
       if (!found) throw new Error('没有找到房间码“' + code + '”');
       if (found.room.toolType !== type){
         var actual = found.room.toolType === 'midpoint' ? '碰面码' : (found.room.toolType === 'ledger' ? '账本码' : '旧版综合房间码');
         throw new Error('这是' + actual + '，不能加入当前的' + c.label + '功能');
       }
-      return registerSelf(found.room, type, name).then(function(){ return found; });
+      saveNickname(name);
+      return found;
     }).then(function(found){
       codeInput.value = '';
       rmRememberRoom(found.docId);
