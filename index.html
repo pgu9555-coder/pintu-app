@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- deployment build: 2026-08-02-ledger-sync-v2 -->
+<!-- deployment build: 2026-08-02-ledger-sync-v4 -->
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -54,6 +54,20 @@
   var rmDb = null;
   var rmTcbApp = null;
   var rmTcbError = null;
+  /* CloudBase Web SDK 的部分数据库失败会“resolve 一个带 code/message 的对象”，
+     而不是 reject Promise。统一把这种结果转成真正异常，避免界面误报“已同步”。 */
+  function rmRequireCloudSuccess(result, label){
+    if (result && typeof result === 'object' && result.code && !/^(0|OK|SUCCESS)$/i.test(String(result.code))){
+      var err = new Error((label ? label + '：' : '') + (result.message || result.errorMessage || result.code));
+      err.code = result.code;
+      err.requestId = result.requestId || null;
+      throw err;
+    }
+    return result;
+  }
+  function rmCloudRequest(promise, label){
+    return Promise.resolve(promise).then(function(result){ return rmRequireCloudSuccess(result, label); });
+  }
   window.rmBackendStatus = { state: 'starting', error: null };
   /* 我的身份 id：优先用云端匿名登录 uid（登录成功后覆盖），拿不到时用这个设备级随机 id 兜底 */
   window.rmMyUid = (function(){
@@ -1699,8 +1713,9 @@ function mpMyName(){
 function mpRoomWrite(room, people){
   room.meetup = { people: people };
   if (rmDb && room.docId && room.docId.indexOf('local-') !== 0){
-    rmDb.collection('rooms').doc(room.docId).update({ meetup: room.meetup }).catch(function(err){
+    rmCloudRequest(rmDb.collection('rooms').doc(room.docId).update({ meetup: rmDb.command.set(room.meetup) }), '写入碰面位置').catch(function(err){
       console.warn('[碰面同步] 写入云端失败：', err);
+      if (typeof showAppToast === 'function') showAppToast('位置暂未同步，正在等待网络恢复');
     });
   } else if (typeof rmSaveLocalRooms === 'function') {
     rmSaveLocalRooms();
@@ -4072,7 +4087,7 @@ function glFlushCloudSync(roomDocId){
   setRoomBadge('syncing', '● 正在同步');
   var roomRef = rmDb.collection('rooms').doc(roomDocId);
   var writtenLedger = payload;
-  glPromiseTimeout(roomRef.get(), 7000, '读取共享账本').then(function(res){
+  glPromiseTimeout(rmCloudRequest(roomRef.get(), '读取共享账本'), 7000, '读取共享账本').then(function(res){
     if (state.cancelled || attemptToken !== state.attemptToken) return Promise.reject({ staleAttempt: true });
     var doc = res.data && res.data[0];
     if (!doc){
@@ -4084,7 +4099,9 @@ function glFlushCloudSync(roomDocId){
     writtenLedger.revision = Math.max(Number(payload.revision || 0), Number(writtenLedger.revision || 0));
     writtenLedger.updatedAt = Math.max(Number(payload.updatedAt || 0), Number(writtenLedger.updatedAt || 0));
     writtenLedger.updatedBy = payload.updatedBy || writtenLedger.updatedBy || null;
-    return glPromiseTimeout(roomRef.update({ ledger: writtenLedger }), 7000, '写入共享账本');
+    /* set 命令会替换整个 ledger 字段；普通嵌套 update 无法把初始 null
+       改成对象，CloudBase 会返回 Cannot create field ... in element {ledger:null}。 */
+    return glPromiseTimeout(rmCloudRequest(roomRef.update({ ledger: rmDb.command.set(writtenLedger) }), '写入共享账本'), 7000, '写入共享账本');
   }).then(function(){
     if (state.cancelled || attemptToken !== state.attemptToken) return;
     state.inFlight = false;
@@ -4693,7 +4710,9 @@ function glComputeSettlement(trip){
     });
   });
 
-  var nodes = Object.keys(balance).map(function(id){ return { id: Number(id), value: balance[id] }; })
+  /* 云端协作成员使用全局唯一字符串 id；旧的本地行程仍可能是数字 id。
+     保留 balance 的原始键，并让 glMemberById 用字符串比较兼容两种格式。 */
+  var nodes = Object.keys(balance).map(function(id){ return { id: id, value: balance[id] }; })
     .filter(function(node){ return node.value !== 0; })
     .sort(function(a, b){ return Math.abs(b.value) - Math.abs(a.value); });
 
@@ -4998,12 +5017,12 @@ function rmCancelRoom(room, options){
   if (isLocal || !rmDb){ finish(); return; }
   var ref = rmDb.collection('rooms').doc(room.docId);
   if (isOwner){
-    ref.remove().then(finish).catch(fail);
+    rmCloudRequest(ref.remove(), '解散房间').then(finish).catch(fail);
     return;
   }
   if (!canLeaveMembership){ finish(); return; }
   /* 退出前重新读取最新成员，避免用旧页面数据覆盖别人刚加入的成员。 */
-  ref.get().then(function(res){
+  rmCloudRequest(ref.get(), '读取房间').then(function(res){
     var latest = res.data && res.data[0];
     if (!latest){ finish(); return null; }
     var patch = {
@@ -5012,7 +5031,8 @@ function rmCancelRoom(room, options){
     if (latest.meetup && latest.meetup.people){
       patch.meetup = { people: latest.meetup.people.filter(function(p){ return p.uid !== window.rmMyUid; }) };
     }
-    return ref.update(patch).then(finish);
+    if (patch.meetup) patch.meetup = rmDb.command.set(patch.meetup);
+    return rmCloudRequest(ref.update(patch), '退出房间').then(finish);
   }).catch(fail);
 }
 
@@ -5099,7 +5119,7 @@ function rmRenderHomeRoomList(){
     var ids = rmGetMyRoomIds();
     if (ids.length === 0){ ROOMS = []; paint(); return; }
     Promise.all(ids.map(function(id){
-      return rmDb.collection('rooms').doc(id).get().then(function(res){
+      return rmCloudRequest(rmDb.collection('rooms').doc(id).get(), '刷新房间').then(function(res){
         var doc = res.data && res.data[0];
         return doc ? { docId: id, state: 'found', data: doc } : { docId: id, state: 'missing' };
       }).catch(function(err){ return { docId: id, state: 'error', error: err }; });
@@ -5290,7 +5310,7 @@ document.getElementById('rmBtnCreate').addEventListener('click', function(){
 
   rmTcbReady.then(function(ready){
     if (ready && rmDb){
-      return rmDb.collection('rooms').add(roomData).then(function(res){
+      return rmCloudRequest(rmDb.collection('rooms').add(roomData), '创建旧版房间').then(function(res){
         var docId = res.id;
         rmUpsertLocalRoom(docId, roomData);
         rmRememberRoom(docId);
@@ -5360,7 +5380,7 @@ function rmRenderDash(){
 function rmUpdateRoom(room, patch){
   Object.keys(patch).forEach(function(k){ room[k] = patch[k]; });
   if (room.docId && room.docId.indexOf('local-') !== 0 && rmDb){
-    rmDb.collection('rooms').doc(room.docId).update(patch).catch(function(err){
+    rmCloudRequest(rmDb.collection('rooms').doc(room.docId).update(patch), '更新旧版房间').catch(function(err){
       console.warn('[房间更新] 写入云端失败：', err);
     });
   } else {
@@ -5419,7 +5439,7 @@ function rmJoinByCode(){
 
   rmTcbReady.then(function(ready){
     if (ready && rmDb){
-      return rmDb.collection('rooms').where({ code: code }).get().then(function(res){
+      return rmCloudRequest(rmDb.collection('rooms').where({ code: code }).get(), '查找旧版房间').then(function(res){
         var doc = res.data && res.data[0];
         if (!doc) return null;
         rmUpsertLocalRoom(doc._id, doc);
@@ -5479,7 +5499,7 @@ function rmOpenLedger(){
       var exists = trip.members.some(function(tm){ return (rm.uid && tm.uid === rm.uid) || tm.name === rm.name; });
       if (!exists){
         var stamp = glMutationStamp();
-        trip.members.push({ id: trip.nextMemberId++, uid: rm.uid || null, name: rm.name, color: rm.color, createdAt: stamp, updatedAt: stamp, updatedBy: window.rmMyUid || null });
+        trip.members.push({ id: isCloud ? glMakeSharedId('member') : trip.nextMemberId++, uid: rm.uid || null, name: rm.name, color: rm.color, createdAt: stamp, updatedAt: stamp, updatedBy: window.rmMyUid || null });
       }
     });
   } else {
@@ -5487,15 +5507,12 @@ function rmOpenLedger(){
     room.members.forEach(function(rm){
       if (!trip.members.some(function(tm){ return tm.name === rm.name; })){
         var stamp = glMutationStamp();
-        trip.members.push({ id: trip.nextMemberId++, uid: rm.uid || null, name: rm.name, color: rm.color, createdAt: stamp, updatedAt: stamp, updatedBy: window.rmMyUid || null });
+        trip.members.push({ id: isCloud ? glMakeSharedId('member') : trip.nextMemberId++, uid: rm.uid || null, name: rm.name, color: rm.color, createdAt: stamp, updatedAt: stamp, updatedBy: window.rmMyUid || null });
       }
     });
     if (!trip.name) trip.name = room.name;
     if (isCloud){
       room.ledger = glSerializeLedger(trip);
-      rmDb.collection('rooms').doc(room.docId).update({ ledger: room.ledger }).catch(function(err){
-        console.warn('[账本同步] 初始化云端账本失败：', err);
-      });
     }
   }
 
@@ -5930,7 +5947,11 @@ function spinnerSpin(){
   function persistTypedRoom(room, patch){
     Object.keys(patch).forEach(function(k){ room[k] = patch[k]; });
     if (rmDb && room.docId && room.docId.indexOf('local-') !== 0){
-      return rmDb.collection('rooms').doc(room.docId).update(patch);
+      var cloudPatch = {};
+      Object.keys(patch).forEach(function(k){
+        cloudPatch[k] = (k === 'meetup' || k === 'ledger') ? rmDb.command.set(patch[k]) : patch[k];
+      });
+      return rmCloudRequest(rmDb.collection('rooms').doc(room.docId).update(cloudPatch), '更新房间');
     }
     rmSaveLocalRooms();
     return Promise.resolve();
@@ -5986,7 +6007,7 @@ function spinnerSpin(){
     typedPullBusy = true;
     typedPullStartedAt = now;
     var requestToken = ++typedPullToken;
-    var request = rmDb.collection('rooms').doc(docId).get();
+    var request = rmCloudRequest(rmDb.collection('rooms').doc(docId).get(), '自动刷新房间');
     Promise.resolve(request).then(function(res){
       if (requestToken !== typedPullToken || rmCurrentRoomId !== docId) return;
       var doc = res.data && res.data[0];
@@ -6067,24 +6088,35 @@ function spinnerSpin(){
 
   function makeRoomData(type, name){
     var member = { id: glMakeSharedId('member'), uid: window.rmMyUid, name: name, color: GL_COLORS[0] };
-    return {
-      name: name + (type === 'midpoint' ? '发起的碰面' : '发起的账本'),
+    var roomName = name + (type === 'midpoint' ? '发起的碰面' : '发起的账本');
+    var data = {
+      name: roomName,
       code: rmGenCode(), toolType: type, members: [member], nextMemberId: 2,
       ownerUid: window.rmMyUid,
       tripId: null, ledger: null,
       meetup: type === 'midpoint' ? { people: [{ uid: window.rmMyUid, name: name, address: '', lat: null, lng: null, color: LOC_COLORS[0] }] } : { people: [] },
       createdAt: new Date()
     };
+    if (type === 'ledger'){
+      var now = Date.now();
+      data.ledger = {
+        name: roomName, nameUpdatedAt: now,
+        members: [{ id: member.id, uid: member.uid, name: member.name, color: member.color, createdAt: now, updatedAt: now, updatedBy: window.rmMyUid }],
+        expenses: [], memberTombstones: {}, expenseTombstones: {},
+        nextMemberId: 2, nextExpenseId: 1, revision: now, updatedAt: now, updatedBy: window.rmMyUid
+      };
+    }
+    return data;
   }
 
   function addCloudRoomUnique(type, name, attempts){
     var roomData = makeRoomData(type, name);
-    return rmDb.collection('rooms').where({ code: roomData.code }).get().then(function(res){
+    return rmCloudRequest(rmDb.collection('rooms').where({ code: roomData.code }).get(), '检查房间码').then(function(res){
       if (res.data && res.data.length){
         if (attempts > 1) return addCloudRoomUnique(type, name, attempts - 1);
         throw new Error('房间码生成冲突，请再点一次创建');
       }
-      return rmDb.collection('rooms').add(roomData).then(function(result){ return { docId: result.id, data: roomData }; });
+      return rmCloudRequest(rmDb.collection('rooms').add(roomData), '创建房间').then(function(result){ return { docId: result.id, data: roomData }; });
     });
   }
 
@@ -6114,7 +6146,7 @@ function spinnerSpin(){
   function findTypedRoom(type, code){
     return rmTcbReady.then(function(ready){
       if (ready && rmDb){
-        return rmDb.collection('rooms').where({ code: code }).get().then(function(res){
+        return rmCloudRequest(rmDb.collection('rooms').where({ code: code }).get(), '查找房间').then(function(res){
           var doc = res.data && res.data[0];
           if (!doc) return null;
           var docId = doc._id;
