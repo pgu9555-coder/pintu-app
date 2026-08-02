@@ -4912,7 +4912,8 @@ function rmCancelRoom(room, options){
   var finish = function(){
     room._cancelBusy = false;
     rmRemoveRoomLocally(room, isOwner ? '房间已取消' : '已退出房间');
-    rmGoHome();
+    if (options.stayOnTrips && typeof rmShowTripsTab === 'function') rmShowTripsTab();
+    else rmGoHome();
   };
   var fail = function(err){
     room._cancelBusy = false;
@@ -5012,7 +5013,7 @@ function rmRenderHomeRoomList(){
       });
       card.querySelector('.rm-room-del').addEventListener('click', function(e){
         e.stopPropagation();
-        rmCancelRoom(room);
+        rmCancelRoom(room, { stayOnTrips: true });
       });
       list.appendChild(card);
     });
@@ -5037,7 +5038,7 @@ function rmRenderHomeRoomList(){
         else if (r.state === 'missing'){
           var stale = ROOMS.find(function(room){ return room.docId === r.docId; });
           rmForgetRoom(r.docId);
-          if (stale) rmDetachRoomMirror(r.docId, stale);
+          rmDetachRoomMirror(r.docId, stale);
           ROOMS = ROOMS.filter(function(room){ return room.docId !== r.docId; });
         } else hadError = true;
       });
