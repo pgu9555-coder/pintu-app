@@ -30,6 +30,21 @@ assert.doesNotMatch(
 );
 
 assert.match(source, /rmRoomGateway\(\s*['"]getRoom['"]/, "room reads must use roomGateway");
+assert.match(source, /mpDecisionWrite\([^)]*['"]publishDecisionCandidates['"]/, "shared decision candidates must use the guarded decision writer");
+assert.match(source, /mpDecisionWrite\([^)]*['"]setDecisionVote['"]/, "shared decision votes must use the guarded decision writer");
+assert.match(source, /mpDecisionWrite\([^)]*['"]confirmDecisionCandidate['"]/, "shared decision confirmation must use the guarded decision writer");
+assert.match(
+  source,
+  /room\.meetup\s*=\s*Object\.assign\(\{\},\s*room\.meetup\s*\|\|\s*\{\},\s*\{\s*people:\s*people\s*\}\)/,
+  "updating a meetup point must preserve the current shared decision"
+);
+assert.match(
+  source,
+  /if\s*\(result\s*&&\s*result\.meetup\)\s*\{[\s\S]*?currentDecision[\s\S]*?incomingDecision\.revision[\s\S]*?room\.meetup\s*=\s*nextMeetup/,
+  "meetup writes must reconcile the server meetup response"
+);
+assert.match(source, /incomingRevision\s*<\s*currentRevision/, "late shared-decision responses must not overwrite newer UI state");
+assert.match(source, /https:\/\/uri\.amap\.com\/navigation\?to=/, "confirmed destinations must open AMap navigation");
 assert.match(
   source,
   /function\s+rmRenderHomeRoomList\s*\(\)\s*\{\s*var\s+refreshToken\s*=\s*\+\+rmHomeRefreshToken;[\s\S]*?if\s*\(refreshToken\s*!==\s*rmHomeRefreshToken\)\s*return;/,

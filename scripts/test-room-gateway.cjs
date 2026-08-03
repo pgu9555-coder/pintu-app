@@ -350,6 +350,146 @@ async function main() {
   assert.equal(delayedOldMembershipPoint.code, "STALE_MEMBERSHIP");
   assert.equal(rooms.get(midpointDocId).meetup.people.some((item) => item.address === "不应写入"), false);
 
+  /* Shared decision: all writes are membership-, round-, and revision-bound. */
+  const ownerDecisionEpoch = rooms.get(midpointDocId).members.find((item) => item.uid === "mid-owner").membershipEpoch;
+  const decisionCandidates = [
+    { id: "forged-client-id", name: "候选商场", lat: 22.54000001, lng: 113.98000001, typeStr: "购物中心", dist: 320, isMall: true, isDrink: false },
+    { id: "also-forged", name: "候选咖啡", lat: 22.55, lng: 113.99, typeStr: "咖啡厅", dist: 610, isMall: false, isDrink: true }
+  ];
+  const outsiderPublish = await call("decision-outsider", {
+    action: "publishDecisionCandidates", docId: midpointDocId, membershipEpoch: "epoch_decision_outsider_123", candidates: decisionCandidates
+  });
+  assert.equal(outsiderPublish.code, "ROOM_NOT_FOUND", "outsiders must not publish candidates");
+  const wrongTypeDecision = await call("idempotent-owner", {
+    action: "publishDecisionCandidates", docId: idempotentFirst.data.docId,
+    membershipEpoch: idempotentFirst.data.room.members[0].membershipEpoch, candidates: decisionCandidates
+  });
+  assert.equal(wrongTypeDecision.code, "WRONG_ROOM_TYPE");
+  const emptyDecision = await call("mid-owner", {
+    action: "publishDecisionCandidates", docId: midpointDocId, membershipEpoch: ownerDecisionEpoch, candidates: []
+  });
+  assert.equal(emptyDecision.code, "INVALID_DECISION", "an empty candidate list must not erase the shared decision");
+  const publishedDecision = await call("mid-owner", {
+    action: "publishDecisionCandidates", docId: midpointDocId, membershipEpoch: ownerDecisionEpoch, candidates: decisionCandidates
+  });
+  assert.equal(publishedDecision.ok, true);
+  assert.equal(publishedDecision.data.decision.candidates.length, 2);
+  assert.notEqual(publishedDecision.data.decision.candidates[0].id, "forged-client-id", "server must derive candidate ids");
+  assert.match(publishedDecision.data.decision.roundId, /^round_/);
+  const candidateOne = publishedDecision.data.decision.candidates[0];
+  const candidateTwo = publishedDecision.data.decision.candidates[1];
+  const outsiderVote = await call("decision-outsider", {
+    action: "setDecisionVote", docId: midpointDocId, membershipEpoch: "epoch_decision_outsider_123",
+    roundId: publishedDecision.data.decision.roundId, revision: publishedDecision.data.decision.revision,
+    candidateId: candidateOne.id, value: "want"
+  });
+  assert.equal(outsiderVote.code, "ROOM_NOT_FOUND", "outsiders must not vote");
+  const outsiderConfirm = await call("decision-outsider", {
+    action: "confirmDecisionCandidate", docId: midpointDocId, membershipEpoch: "epoch_decision_outsider_123",
+    roundId: publishedDecision.data.decision.roundId, revision: publishedDecision.data.decision.revision,
+    candidateId: candidateOne.id
+  });
+  assert.equal(outsiderConfirm.code, "ROOM_NOT_FOUND", "outsiders must not confirm a destination");
+  const staleDecisionPublish = await call("mid-owner", {
+    action: "publishDecisionCandidates", docId: midpointDocId, membershipEpoch: ownerDecisionEpoch,
+    roundId: "round_stale_decision_1234567890", revision: 0, candidates: decisionCandidates
+  });
+  assert.equal(staleDecisionPublish.code, "STALE_DECISION");
+  const memberVote = await call("mid-member", {
+    action: "setDecisionVote", docId: midpointDocId, membershipEpoch: newMemberEpoch,
+    roundId: publishedDecision.data.decision.roundId, revision: publishedDecision.data.decision.revision,
+    candidateId: candidateOne.id, uid: "mid-owner", value: "want"
+  });
+  assert.equal(memberVote.ok, true);
+  assert.deepEqual(memberVote.data.decision.votes[0].uid, "mid-member", "client uid must never choose whose vote is written");
+  const ownerVote = await call("mid-owner", {
+    action: "setDecisionVote", docId: midpointDocId, membershipEpoch: ownerDecisionEpoch,
+    roundId: publishedDecision.data.decision.roundId, revision: publishedDecision.data.decision.revision,
+    candidateId: candidateOne.id, uid: "mid-member", value: "no"
+  });
+  assert.equal(ownerVote.ok, true);
+  assert.equal(ownerVote.data.decision.votes.filter((vote) => vote.candidateId === candidateOne.id).length, 2, "two same-round votes based on the same old revision must merge");
+  const staleEpochVote = await call("mid-member", {
+    action: "setDecisionVote", docId: midpointDocId, membershipEpoch: oldMemberEpoch,
+    roundId: ownerVote.data.decision.roundId, revision: ownerVote.data.decision.revision, candidateId: candidateTwo.id, value: "ok"
+  });
+  assert.equal(staleEpochVote.code, "STALE_MEMBERSHIP");
+  const nonOwnerConfirm = await call("mid-member", {
+    action: "confirmDecisionCandidate", docId: midpointDocId, membershipEpoch: newMemberEpoch,
+    roundId: ownerVote.data.decision.roundId, revision: ownerVote.data.decision.revision, candidateId: candidateOne.id
+  });
+  assert.equal(nonOwnerConfirm.code, "NOT_OWNER");
+  const blankConfirm = await call("mid-owner", {
+    action: "confirmDecisionCandidate", docId: midpointDocId, membershipEpoch: ownerDecisionEpoch,
+    roundId: ownerVote.data.decision.roundId, revision: ownerVote.data.decision.revision, candidateId: ""
+  });
+  assert.equal(blankConfirm.code, "INVALID_DECISION", "confirming requires a real server-issued candidate id");
+  const confirmed = await call("mid-owner", {
+    action: "confirmDecisionCandidate", docId: midpointDocId, membershipEpoch: ownerDecisionEpoch,
+    roundId: ownerVote.data.decision.roundId, revision: ownerVote.data.decision.revision, candidateId: candidateOne.id
+  });
+  assert.equal(confirmed.ok, true);
+  assert.equal(confirmed.data.decision.state, "confirmed");
+  const lockedVote = await call("mid-member", {
+    action: "setDecisionVote", docId: midpointDocId, membershipEpoch: newMemberEpoch,
+    roundId: confirmed.data.decision.roundId, revision: confirmed.data.decision.revision, candidateId: candidateTwo.id, value: "ok"
+  });
+  assert.equal(lockedVote.code, "DECISION_CONFIRMED");
+  const lockedPublish = await call("mid-owner", {
+    action: "publishDecisionCandidates", docId: midpointDocId, membershipEpoch: ownerDecisionEpoch,
+    roundId: confirmed.data.decision.roundId, revision: confirmed.data.decision.revision, candidates: [decisionCandidates[0]]
+  });
+  assert.equal(lockedPublish.code, "DECISION_CONFIRMED");
+  const reopened = await call("mid-owner", {
+    action: "reopenDecision", docId: midpointDocId, membershipEpoch: ownerDecisionEpoch,
+    roundId: confirmed.data.decision.roundId, revision: confirmed.data.decision.revision
+  });
+  assert.equal(reopened.ok, true);
+  assert.equal(reopened.data.decision.state, "open");
+  assert.notEqual(reopened.data.decision.roundId, confirmed.data.decision.roundId, "reopening must rotate the decision round");
+  assert.equal(reopened.data.decision.votes.length, 0, "a new decision round starts with fresh votes");
+  const freshRoundVote = await call("mid-member", {
+    action: "setDecisionVote", docId: midpointDocId, membershipEpoch: newMemberEpoch,
+    roundId: reopened.data.decision.roundId, revision: reopened.data.decision.revision, candidateId: candidateOne.id, value: "want"
+  });
+  assert.equal(freshRoundVote.ok, true);
+  const voteForSoonRemovedCandidate = await call("mid-owner", {
+    action: "setDecisionVote", docId: midpointDocId, membershipEpoch: ownerDecisionEpoch,
+    roundId: reopened.data.decision.roundId, revision: reopened.data.decision.revision, candidateId: candidateTwo.id, value: "ok"
+  });
+  assert.equal(voteForSoonRemovedCandidate.ok, true);
+  const refreshedCandidates = await call("mid-owner", {
+    action: "publishDecisionCandidates", docId: midpointDocId, membershipEpoch: ownerDecisionEpoch,
+    roundId: voteForSoonRemovedCandidate.data.decision.roundId, revision: voteForSoonRemovedCandidate.data.decision.revision, candidates: [decisionCandidates[0]]
+  });
+  assert.equal(refreshedCandidates.ok, true);
+  assert.equal(refreshedCandidates.data.decision.votes.length, 1, "retained-candidate votes survive while removed-candidate votes are discarded");
+  assert.notEqual(refreshedCandidates.data.decision.roundId, reopened.data.decision.roundId, "publishing candidates starts a new round");
+  const delayedOldRoundVote = await call("mid-member", {
+    action: "setDecisionVote", docId: midpointDocId, membershipEpoch: newMemberEpoch,
+    roundId: reopened.data.decision.roundId, revision: reopened.data.decision.revision, candidateId: candidateOne.id, value: "no"
+  });
+  assert.equal(delayedOldRoundVote.code, "STALE_DECISION", "late writes from a prior round must not pollute refreshed candidates");
+  const leaveWithVote = await call("mid-member", { action: "leave", docId: midpointDocId });
+  assert.equal(leaveWithVote.ok, true);
+  assert.equal(rooms.get(midpointDocId).meetup.decision.votes.some((vote) => vote.uid === "mid-member"), false, "leaving clears that user's votes");
+  rooms.get(midpointDocId).meetup.decision.votes.push({ candidateId: candidateOne.id, uid: "removed-member", value: "want", updatedAt: stamp + 99 });
+  const sanitizedDecisionRead = await call("mid-owner", { action: "getRoom", docId: midpointDocId });
+  assert.equal(sanitizedDecisionRead.ok, true);
+  assert.equal(sanitizedDecisionRead.data.room.meetup.decision.votes.some((vote) => vote.uid === "removed-member"), false, "room reads must hide votes from inactive members");
+  const invalidDecision = await call("mid-owner", {
+    action: "publishDecisionCandidates", docId: midpointDocId, membershipEpoch: ownerDecisionEpoch,
+    roundId: refreshedCandidates.data.decision.roundId, revision: refreshedCandidates.data.decision.revision,
+    candidates: Array.from({ length: 13 }, (_, index) => ({ name: `超限${index}`, lat: 20 + index / 100, lng: 110, typeStr: "餐厅", dist: 1, isMall: false, isDrink: false }))
+  });
+  assert.equal(invalidDecision.code, "INVALID_DECISION");
+  const invalidCandidate = await call("mid-owner", {
+    action: "publishDecisionCandidates", docId: midpointDocId, membershipEpoch: ownerDecisionEpoch,
+    roundId: refreshedCandidates.data.decision.roundId, revision: refreshedCandidates.data.decision.revision,
+    candidates: [{ name: "x".repeat(81), lat: "22.54", lng: 113.98, typeStr: "餐厅", dist: -1, isMall: false, isDrink: false }]
+  });
+  assert.equal(invalidCandidate.code, "INVALID_DECISION", "invalid text, coordinate type, and range must be rejected");
+
   const legacyCreated = await call("legacy-owner", {
     action: "create",
     room: { name: "旧版测试", members: [{ name: "甲" }, { name: "乙" }] }

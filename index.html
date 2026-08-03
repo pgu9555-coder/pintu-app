@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- deployment build: 2026-08-02-launch-qa-v8 -->
+<!-- deployment build: 2026-08-04-shared-decisions-v1 -->
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -9,6 +9,7 @@
 <meta name="color-scheme" content="light">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <meta name="format-detection" content="telephone=no">
+<meta name="pintu-build" content="2026-08-04-shared-decisions-v1">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
@@ -243,6 +244,18 @@
     ).then(function(result){
       rmClearPendingMeetup(room.docId, mutationAt);
       var localRoom = (typeof ROOMS !== 'undefined' && ROOMS.find) ? ROOMS.find(function(item){ return item.docId === room.docId; }) : null;
+      if (result && result.meetup){
+        var currentMeetup = (localRoom && localRoom.meetup) || room.meetup || {};
+        var currentDecision = currentMeetup.decision;
+        var incomingDecision = result.meetup.decision;
+        var nextMeetup = result.meetup;
+        if (currentDecision && (!incomingDecision || Number(incomingDecision.revision || 0) < Number(currentDecision.revision || 0))){
+          nextMeetup = Object.assign({}, result.meetup, { decision: currentDecision });
+        }
+        room.meetup = nextMeetup;
+        if (localRoom) localRoom.meetup = nextMeetup;
+        if (typeof mpRoomRef !== 'undefined' && mpRoomRef && mpRoomRef.docId === room.docId) mpRoomRef = localRoom || room;
+      }
       if (result && result.members){
         room.members = result.members;
         if (localRoom) localRoom.members = result.members;
@@ -435,6 +448,26 @@
   .mp-room-edit:active{transform:scale(.97);background:var(--blue-soft);}
   .mp-room-del{flex-shrink:0;border:none;background:transparent;color:var(--ink-soft);font-size:16px;cursor:pointer;padding:2px 4px;}
   .mp-room-empty{font-size:12px;color:#B9B3A2;text-align:center;padding:12px 0;}
+  .mp-decision{margin:0 0 18px;padding:14px;background:var(--paper-raised);border:1px solid var(--blue);border-radius:16px;overflow:hidden;}
+  .mp-decision-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:10px;}
+  .mp-decision-title{font-weight:700;color:var(--ink);font-size:16px;}
+  .mp-decision-sub{font-size:12px;color:var(--ink-soft);margin-top:3px;}
+  .mp-decision-list{display:flex;flex-direction:column;gap:9px;}
+  .mp-decision-item{padding:11px;border:1px solid var(--line);background:var(--paper);border-radius:12px;}
+  .mp-decision-item.top{border-color:var(--green);box-shadow:0 0 0 1px var(--green-soft);}
+  .mp-decision-place{display:flex;align-items:flex-start;gap:8px;}
+  .mp-decision-place-main{flex:1;min-width:0;font-size:14px;font-weight:650;color:var(--ink);}
+  .mp-decision-meta{font-size:11px;color:var(--ink-soft);margin-top:3px;}
+  .mp-decision-badge{flex:0 0 auto;color:var(--green-deep);background:var(--green-soft);border-radius:999px;padding:3px 7px;font-size:10px;font-weight:700;}
+  .mp-vote-counts{display:flex;flex-wrap:wrap;gap:7px;margin:9px 0;font-size:11px;color:var(--ink-soft);}
+  .mp-vote-controls{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;}
+  .mp-vote-btn,.mp-confirm-btn{min-height:40px;border:1px solid var(--line);border-radius:10px;background:var(--paper-raised);font:600 12px inherit;color:var(--ink);touch-action:manipulation;}
+  .mp-vote-btn.active{background:var(--blue-soft);border-color:var(--blue);color:var(--blue);}
+  .mp-vote-btn:disabled{opacity:.55;}
+  .mp-confirm-btn{width:100%;margin-top:9px;border-color:var(--green);color:var(--green-deep);}
+  .mp-final-decision{margin-top:10px;padding:12px;border-radius:12px;background:var(--green-soft);color:var(--green-deep);}
+  .mp-final-title{font-weight:700;font-size:14px;}.mp-final-name{font-size:16px;font-weight:750;margin:5px 0 8px;}
+  .mp-final-actions{display:flex;gap:8px;flex-wrap:wrap;}.mp-final-actions button,.mp-final-actions a{min-height:40px;padding:0 11px;display:inline-flex;align-items:center;border:1px solid var(--green);border-radius:10px;background:var(--paper-raised);color:var(--green-deep);font:600 12px inherit;text-decoration:none;}
   /* 房间协作模式下，地址建议框需要以“我的出发点”为定位基准。
      没有 position:relative 时，手机上结果会被定位到整页之外。 */
   .mp-mine{position:relative;margin-top:6px;padding-top:14px;border-top:1px dashed var(--line);}
@@ -1336,6 +1369,8 @@
           </div>
         </div>
 
+        <section class="mp-decision" id="mpDecisionPanel" style="display:none;" aria-live="polite"></section>
+
         <button class="btn-main" id="btnCalc" onclick="mpCalcDispatch()" style="background:var(--blue); margin-bottom: 24px;">
           计算中心点 & 搜索周边设施
         </button>
@@ -1669,6 +1704,7 @@ function openMidpoint(roomMode){
     if (panel) panel.style.display = 'block';
     if (btn) btn.textContent = '算公平中点 & 找去处';
     mpRenderRoomPanel(mpRoomRef);
+    mpRenderDecisionPanel(mpRoomRef);
     mpLoadMineEditor(mpRoomRef);
   } else {
     if (stand) stand.style.display = 'block';
@@ -1697,7 +1733,7 @@ function mpMyName(){
 
 /* 把最新的出发点列表写进房间（云端），房间监听会实时推给所有成员 */
 function mpRoomWrite(room, people){
-  room.meetup = { people: people };
+  room.meetup = Object.assign({}, room.meetup || {}, { people: people });
   if (rmDb && room.docId && room.docId.indexOf('local-') !== 0){
     var mine = people.find(function(person){ return person.uid === window.rmMyUid; }) || null;
     var mutationAt = rmNextMeetupMutationAt();
@@ -1881,7 +1917,175 @@ function mpOnRoomSync(room){
   if (room.docId !== mpRoomRef.docId) return;
   mpRoomRef = room;
   var view = document.getElementById('viewMidpoint');
-  if (view && view.classList.contains('show')) mpRenderRoomPanel(room);
+  if (view && view.classList.contains('show')) { mpRenderRoomPanel(room); mpRenderDecisionPanel(room); }
+}
+
+/* Shared decision is entirely room-backed. The panel intentionally does not
+   depend on this device having run a local POI search. */
+function mpDecisionFor(room){
+  return room && room.meetup && room.meetup.decision && typeof room.meetup.decision === 'object' ? room.meetup.decision : null;
+}
+function mpDecisionVersion(room){
+  var decision = mpDecisionFor(room) || {};
+  return { roundId: decision.roundId || '', revision: Number(decision.revision || 0) };
+}
+function mpDecisionOwner(room){
+  if (typeof rmIsRoomOwner === 'function') return rmIsRoomOwner(room);
+  return !!(room && room.ownerUid && room.ownerUid === window.rmMyUid);
+}
+function mpDecisionCandidatesFromPois(pois){
+  return (pois || []).filter(function(p){ return p && p.name && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng)); }).slice(0, 12).map(function(p){
+    return { name: String(p.name), lat: Number(p.lat), lng: Number(p.lng), typeStr: String(p.typeStr || ''), dist: Math.max(0, Math.round(Number(p.dist) || 0)), isMall: !!p.isMall, isDrink: !!p.isDrink };
+  });
+}
+function mpLocalCandidateId(candidate){
+  var source = [String(candidate.name || '').trim().toLowerCase(), Number(candidate.lat).toFixed(6), Number(candidate.lng).toFixed(6)].join('|');
+  var hash = 2166136261;
+  for (var i = 0; i < source.length; i += 1){ hash ^= source.charCodeAt(i); hash = Math.imul(hash, 16777619); }
+  return 'local-poi-' + (hash >>> 0).toString(16).padStart(8, '0');
+}
+function mpLocalRoundId(){
+  return 'local-round-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 9);
+}
+var mpDecisionPendingVotes = new Set();
+function mpApplyDecisionResponse(room, result){
+  if (!room || !result || !result.meetup) return;
+  var currentRevision = Number((mpDecisionFor(mpRoomRef) || {}).revision || 0);
+  var incomingRevision = Number((result.meetup.decision || {}).revision || 0);
+  if (incomingRevision < currentRevision) return;
+  var data = Object.assign({}, room, { meetup: result.meetup });
+  if (typeof rmUpsertLocalRoom === 'function') mpRoomRef = rmUpsertLocalRoom(room.docId, data);
+  else { room.meetup = result.meetup; mpRoomRef = room; }
+  mpRenderDecisionPanel(mpRoomRef);
+}
+function mpReconcileDecision(room){
+  if (!room || !rmDb || room.docId.indexOf('local-') === 0 || typeof rmReadRoom !== 'function') return;
+  rmReadRoom(room.docId, '同步共同决定').then(function(doc){
+    if (!doc) return;
+    if (typeof rmUpsertLocalRoom === 'function') mpRoomRef = rmUpsertLocalRoom(room.docId, doc);
+    else mpRoomRef = doc;
+    mpRenderDecisionPanel(mpRoomRef);
+  }).catch(function(){});
+}
+function mpDecisionWrite(room, action, payload, label){
+  if (!room) return Promise.reject(new Error('房间不存在'));
+  if (room.docId.indexOf('local-') === 0){
+    return Promise.resolve({ local: true, meetup: room.meetup });
+  }
+  var version = mpDecisionVersion(room);
+  return rmRoomGateway(action, Object.assign({ docId: room.docId, membershipEpoch: rmMembershipEpochForRoom(room), roundId: version.roundId, revision: version.revision }, payload || {}), label);
+}
+function mpPublishDecisionCandidates(room, pois){
+  var candidates = mpDecisionCandidatesFromPois(pois);
+  if (!room || candidates.length === 0) return;
+  var decision = mpDecisionFor(room);
+  if (decision && decision.state === 'confirmed') { if (typeof showAppToast === 'function') showAppToast('地点已确定；请由房主重新选择后再发布新候选'); return; }
+  if (room.docId.indexOf('local-') === 0){
+    var now = Date.now(), candidateIds = new Set();
+    var localCandidates = candidates.map(function(p){
+      var id = mpLocalCandidateId(p); candidateIds.add(id);
+      var previous = decision && (decision.candidates || []).find(function(c){ return c.id === id; });
+      return Object.assign({ id: id, createdBy: window.rmMyUid, createdAt: previous && previous.createdAt || now, updatedAt: now }, p);
+    });
+    room.meetup = room.meetup || { people: [] };
+    room.meetup.decision = { roundId: mpLocalRoundId(), revision: Number(decision && decision.revision || 0) + 1, state: 'open', candidates: localCandidates, votes: ((decision && decision.votes) || []).filter(function(v){ return candidateIds.has(v.candidateId); }), confirmedCandidateId: null, confirmedAt: null, confirmedBy: null };
+    if (typeof rmSaveLocalRooms === 'function') rmSaveLocalRooms();
+    mpRenderDecisionPanel(room);
+    if (typeof showAppToast === 'function') showAppToast('候选地点已保存到本机');
+    return;
+  }
+  mpDecisionWrite(room, 'publishDecisionCandidates', { candidates: candidates }, '发布共同候选').then(function(result){
+    mpApplyDecisionResponse(room, result);
+    if (typeof showAppToast === 'function') showAppToast('已发布给房间成员一起决定');
+  }).catch(function(err){
+    mpReconcileDecision(room);
+    var message = err && err.code === 'STALE_DECISION' ? '候选列表刚被更新，请重新计算后再发布' : ((err && err.message) || '候选发布失败，已同步最新状态');
+    if (typeof showAppToast === 'function') showAppToast(message);
+  });
+}
+function mpSetDecisionVote(candidateId, value){
+  var room = mpRoomRef;
+  var decision = mpDecisionFor(room);
+  if (!room || !decision || decision.state === 'confirmed' || mpDecisionPendingVotes.has(candidateId)) return;
+  var current = (decision.votes || []).find(function(v){ return v.candidateId === candidateId && v.uid === window.rmMyUid; });
+  var nextValue = current && current.value === value ? '' : value;
+  if (room.docId.indexOf('local-') === 0){
+    decision.votes = (decision.votes || []).filter(function(v){ return !(v.candidateId === candidateId && v.uid === window.rmMyUid); });
+    if (nextValue) decision.votes.push({ candidateId: candidateId, uid: window.rmMyUid, value: nextValue, updatedAt: Date.now() });
+    decision.revision = Number(decision.revision || 0) + 1;
+    if (typeof rmSaveLocalRooms === 'function') rmSaveLocalRooms();
+    mpRenderDecisionPanel(room); return;
+  }
+  mpDecisionPendingVotes.add(candidateId);
+  mpRenderDecisionPanel(room);
+  mpDecisionWrite(room, 'setDecisionVote', { candidateId: candidateId, value: nextValue }, '保存共同投票').then(function(result){
+    mpDecisionPendingVotes.delete(candidateId);
+    mpApplyDecisionResponse(room, result);
+  }).catch(function(err){
+    mpDecisionPendingVotes.delete(candidateId);
+    mpReconcileDecision(room);
+    mpRenderDecisionPanel(mpRoomRef || room);
+    if (typeof showAppToast === 'function') showAppToast((err && err.message) || '投票未保存，已同步最新状态');
+  });
+}
+function mpConfirmDecision(candidateId){
+  var room = mpRoomRef; if (!room || !mpDecisionOwner(room)) return;
+  if (room.docId.indexOf('local-') === 0){
+    var localDecision = mpDecisionFor(room);
+    if (localDecision && (localDecision.candidates || []).some(function(c){ return c.id === candidateId; })){ localDecision.confirmedCandidateId = candidateId; localDecision.confirmedAt = Date.now(); localDecision.confirmedBy = window.rmMyUid; localDecision.state = 'confirmed'; localDecision.revision = Number(localDecision.revision || 0) + 1; if (typeof rmSaveLocalRooms === 'function') rmSaveLocalRooms(); mpRenderDecisionPanel(room); if (typeof showAppToast === 'function') showAppToast('地点已保存到本机'); }
+    return;
+  }
+  mpDecisionWrite(room, 'confirmDecisionCandidate', { candidateId: candidateId }, '确定地点').then(function(result){
+    mpApplyDecisionResponse(room, result);
+    if (typeof showAppToast === 'function') showAppToast('地点已确定，已通知所有成员');
+  }).catch(function(err){ mpReconcileDecision(room); if (typeof showAppToast === 'function') showAppToast((err && err.message) || '确定失败，已同步最新状态'); });
+}
+function mpReopenDecision(){
+  var room = mpRoomRef; if (!room || !mpDecisionOwner(room)) return;
+  if (room.docId.indexOf('local-') === 0){ var d = mpDecisionFor(room); if (d) { d.roundId = mpLocalRoundId(); d.state = 'open'; d.votes = []; d.confirmedCandidateId = null; d.confirmedAt = null; d.confirmedBy = null; d.revision = Number(d.revision || 0) + 1; rmSaveLocalRooms(); mpRenderDecisionPanel(room); } return; }
+  mpDecisionWrite(room, 'reopenDecision', {}, '重新选择地点').then(function(result){ mpApplyDecisionResponse(room, result); }).catch(function(err){ mpReconcileDecision(room); if (typeof showAppToast === 'function') showAppToast((err && err.message) || '重新选择失败，已同步最新状态'); });
+}
+function mpCopyDecisionName(name){
+  copyTextToClipboard(name).then(function(){ if (typeof showAppToast === 'function') showAppToast('地点名称已复制'); });
+}
+function mpRenderDecisionPanel(room){
+  var panel = document.getElementById('mpDecisionPanel');
+  var decision = mpDecisionFor(room);
+  if (!panel) return;
+  if (!mpRoomMode || !decision || !(decision.candidates || []).length) { panel.style.display = 'none'; panel.innerHTML = ''; return; }
+  var members = (room.members || []).filter(function(m){ return m && m.uid; });
+  var memberIds = new Set(members.map(function(m){ return m.uid; }));
+  var candidateIds = new Set((decision.candidates || []).map(function(c){ return c.id; }));
+  var votes = (decision.votes || []).filter(function(v){ return v && memberIds.has(v.uid) && candidateIds.has(v.candidateId) && /^(want|ok|no)$/.test(v.value || ''); });
+  var voteUsers = new Set(votes.map(function(v){ return v.uid; }));
+  var rows = decision.candidates.map(function(candidate){
+    var counts = { want: 0, ok: 0, no: 0 };
+    votes.filter(function(v){ return v.candidateId === candidate.id; }).forEach(function(v){ if (counts[v.value] != null) counts[v.value] += 1; });
+    return { candidate: candidate, counts: counts, total: counts.want + counts.ok + counts.no, score: counts.want * 2 + counts.ok - counts.no * 2 };
+  }).sort(function(a, b){ return b.score - a.score || a.counts.no - b.counts.no || b.counts.want - a.counts.want || b.total - a.total || a.candidate.name.localeCompare(b.candidate.name, 'zh-CN'); });
+  var confirmed = rows.find(function(row){ return row.candidate.id === decision.confirmedCandidateId; });
+  var html = '<div class="mp-decision-head"><div><div class="mp-decision-title">大家一起选</div><div class="mp-decision-sub">已有 ' + voteUsers.size + ' / ' + members.length + ' 位成员参与</div></div></div>';
+  if (confirmed){
+    var c = confirmed.candidate;
+    html += '<div class="mp-final-decision"><div class="mp-final-title">最终决定</div><div class="mp-final-name">' + appEscapeHtml(c.name) + '</div><div class="mp-final-actions"><button type="button" data-copy="' + appEscapeHtml(c.name) + '">复制地点</button><a href="https://uri.amap.com/navigation?to=' + encodeURIComponent(c.lng + ',' + c.lat + ',' + c.name) + '&mode=car&policy=1&src=pintu&coordinate=gaode&callnative=1" target="_blank" rel="noopener">高德导航</a>' + (mpDecisionOwner(room) ? '<button type="button" data-reopen="1">重新选择</button>' : '') + '</div></div>';
+  }
+  html += '<div class="mp-decision-list">' + rows.map(function(row, index){
+    var c = row.candidate, mine = votes.find(function(v){ return v.candidateId === c.id && v.uid === window.rmMyUid; }), votePending = mpDecisionPendingVotes.has(c.id), disabled = decision.state === 'confirmed' || votePending;
+    var isConsensusLeader = index === 0 && !confirmed && row.total > 0;
+    return '<div class="mp-decision-item' + (isConsensusLeader ? ' top' : '') + '"' + (votePending ? ' aria-busy="true"' : '') + '><div class="mp-decision-place"><div class="mp-decision-place-main">' + appEscapeHtml(c.name) + '<div class="mp-decision-meta">' + appEscapeHtml(c.typeStr || '附近地点') + ' · 距中点约 ' + c.dist + ' 米</div></div>' + (isConsensusLeader ? '<span class="mp-decision-badge">当前共识最高</span>' : '') + '</div><div class="mp-vote-counts"><span>想去 ' + row.counts.want + '</span><span>可以 ' + row.counts.ok + '</span><span>不想去 ' + row.counts.no + '</span></div><div class="mp-vote-controls">' + ['want|想去','ok|可以','no|不想去'].map(function(pair){ var p = pair.split('|'), active = !!(mine && mine.value === p[0]); return '<button type="button" class="mp-vote-btn' + (active ? ' active' : '') + '" data-vote="' + p[0] + '" data-candidate="' + c.id + '" aria-pressed="' + String(active) + '"' + (disabled ? ' disabled' : '') + '>' + p[1] + '</button>'; }).join('') + '</div>' + (!disabled && mpDecisionOwner(room) ? '<button type="button" class="mp-confirm-btn" data-confirm="' + c.id + '">确定这个地点</button>' : '') + '</div>';
+  }).join('') + '</div>';
+  panel.innerHTML = html; panel.style.display = 'block';
+  panel.querySelectorAll('[data-vote]').forEach(function(button){ button.addEventListener('click', function(){ mpSetDecisionVote(button.dataset.candidate, button.dataset.vote); }); });
+  panel.querySelectorAll('[data-confirm]').forEach(function(button){ button.addEventListener('click', function(){ mpConfirmDecision(button.dataset.confirm); }); });
+  var reopen = panel.querySelector('[data-reopen]'); if (reopen) reopen.addEventListener('click', mpReopenDecision);
+  var copy = panel.querySelector('[data-copy]'); if (copy) copy.addEventListener('click', function(){ mpCopyDecisionName(copy.dataset.copy); });
+}
+
+function mpRecordSwipeDecision(poi, dir){
+  var decision = mpDecisionFor(mpRoomRef);
+  if (!mpRoomMode || !decision || decision.state === 'confirmed' || !poi) return;
+  var candidate = (decision.candidates || []).find(function(c){ return c.name === poi.name && Math.abs(Number(c.lat) - Number(poi.lat)) < 0.00001 && Math.abs(Number(c.lng) - Number(poi.lng)) < 0.00001; });
+  if (candidate) mpSetDecisionVote(candidate.id, dir > 0 ? 'want' : 'no');
 }
 
 /* 绑定"我的出发点"输入框：地址联想 + 定位按钮 + 放下按钮（只需绑定一次） */
@@ -2348,6 +2552,7 @@ async function renderMidpointResult(coordsList) {
 
     // —— 美食盲盒：把这 3 个商圈 + 8 个餐饮拼成滑一滑的牌堆 ——
     window.foodSwipeDeck = malls.slice(0, 3).concat(foods.slice(0, 8));
+    if (mpRoomMode && mpRoomRef) mpPublishDecisionCandidates(mpRoomRef, window.foodSwipeDeck);
     const fbEntry = document.getElementById('foodSwipeEntry');
     if (fbEntry && window.foodSwipeDeck.length > 0) {
       document.getElementById('fbCount').textContent = window.foodSwipeDeck.length;
@@ -2618,6 +2823,7 @@ function flyOutCardEl(card, dir){
   var poi = swipeDeck[swipeIndex];
   card.style.transform = 'translate(' + (dir * 520) + 'px, 0) rotate(' + (dir * 28) + 'deg)';
   card.style.opacity = '0';
+  if (poi && typeof mpRecordSwipeDecision === 'function') mpRecordSwipeDecision(poi, dir);
   if (dir > 0 && poi) likedPois.push(poi);
   swipeIndex++;
   setTimeout(renderSwipeStack, 260);
@@ -3233,6 +3439,7 @@ function flyOutCardEl(card, dir){
   var poi = swipeDeck[swipeIndex];
   card.style.transform = 'translate(' + (dir * 520) + 'px, 0) rotate(' + (dir * 28) + 'deg)';
   card.style.opacity = '0';
+  if (poi && typeof mpRecordSwipeDecision === 'function') mpRecordSwipeDecision(poi, dir);
   if (dir > 0 && poi) likedPois.push(poi);
   swipeIndex++;
   setTimeout(renderSwipeStack, 260);

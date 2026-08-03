@@ -12,6 +12,8 @@ const MAX_LEDGER_MEMBERS = 500;
 const MAX_LEDGER_EXPENSES = 1000;
 const MAX_TOMBSTONES = 2000;
 const MAX_MEMBERSHIP_HISTORY = 500;
+const MAX_DECISION_CANDIDATES = 12;
+const MAX_DECISION_VOTES_PER_CANDIDATE = MAX_LEDGER_MEMBERS;
 const JOIN_WINDOW_MS = 5 * 60 * 1000;
 const MAX_JOIN_ATTEMPTS_PER_WINDOW = 20;
 const joinAttemptBuckets = new Map();
@@ -367,6 +369,124 @@ function normalizeMemberEpochs(source) {
   return normalized;
 }
 
+function decisionCandidateId(name, lat, lng) {
+  /* Coordinates are rounded before hashing so equivalent AMap values get the
+     same id even when different WebViews serialize floating point values
+     slightly differently. */
+  const normalized = `${name.toLocaleLowerCase("zh-CN")}\n${lat.toFixed(6)}\n${lng.toFixed(6)}`;
+  return `poi_${crypto.createHash("sha256").update(normalized).digest("hex").slice(0, 24)}`;
+}
+
+function newDecisionRoundId() {
+  return `round_${Date.now().toString(36)}_${crypto.randomBytes(10).toString("hex")}`;
+}
+
+function validDecisionRoundId(value) {
+  const id = cleanText(value, 80);
+  return /^round_[A-Za-z0-9_-]{16,80}$/.test(id) ? id : "";
+}
+
+function normalizeDecisionCandidate(source, uid, now, existing) {
+  if (!isPlainObject(source)) inputError("候选地点数据无效");
+  if (typeof source.name !== "string" || source.name.trim().length > 80 || typeof source.typeStr !== "string" || source.typeStr.trim().length > 120 ||
+    typeof source.lat !== "number" || typeof source.lng !== "number" || typeof source.dist !== "number") inputError("候选地点字段无效");
+  const name = cleanText(source.name, 80);
+  const lat = Number(source.lat);
+  const lng = Number(source.lng);
+  const typeStr = cleanText(source.typeStr, 120);
+  const dist = Math.floor(Number(source.dist));
+  if (!name || !Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+    inputError("候选地点坐标或名称无效");
+  }
+  if (!Number.isFinite(dist) || dist < 0 || dist > 100000) inputError("候选地点距离无效");
+  if (typeof source.isMall !== "boolean" || typeof source.isDrink !== "boolean") inputError("候选地点类型无效");
+  const id = decisionCandidateId(name, lat, lng);
+  return {
+    id,
+    name,
+    lat: Number(lat.toFixed(6)),
+    lng: Number(lng.toFixed(6)),
+    typeStr,
+    dist,
+    isMall: source.isMall,
+    isDrink: source.isDrink,
+    createdBy: existing && validUid(existing.createdBy) ? existing.createdBy : uid,
+    createdAt: existing && Number.isFinite(Number(existing.createdAt)) ? Math.floor(Number(existing.createdAt)) : now,
+    updatedAt: now
+  };
+}
+
+function validDecisionCandidate(source) {
+  try {
+    if (!isPlainObject(source)) return null;
+    if (typeof source.name !== "string" || source.name.trim().length > 80 || typeof source.typeStr !== "string" || source.typeStr.trim().length > 120 ||
+      typeof source.lat !== "number" || typeof source.lng !== "number" || typeof source.dist !== "number") return null;
+    const name = cleanText(source.name, 80);
+    const lat = Number(source.lat);
+    const lng = Number(source.lng);
+    const typeStr = cleanText(source.typeStr, 120);
+    const dist = Math.floor(Number(source.dist));
+    if (!name || !Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180 ||
+      !Number.isFinite(dist) || dist < 0 || dist > 100000 || typeof source.isMall !== "boolean" || typeof source.isDrink !== "boolean") return null;
+    const id = decisionCandidateId(name, lat, lng);
+    return {
+      id, name, lat: Number(lat.toFixed(6)), lng: Number(lng.toFixed(6)), typeStr, dist,
+      isMall: source.isMall, isDrink: source.isDrink,
+      createdBy: validUid(source.createdBy) ? source.createdBy : "",
+      createdAt: Math.max(0, Math.floor(Number(source.createdAt) || 0)),
+      updatedAt: Math.max(0, Math.floor(Number(source.updatedAt) || 0))
+    };
+  } catch (_) { return null; }
+}
+
+function normalizedMeetupDecision(meetup, room) {
+  const source = meetup && isPlainObject(meetup.decision) ? meetup.decision : {};
+  const activeUids = room ? new Set(activeTopLevelMemberUids(room)) : null;
+  const candidates = [];
+  const candidateIds = new Set();
+  (Array.isArray(source.candidates) ? source.candidates : []).slice(0, MAX_DECISION_CANDIDATES).forEach((item) => {
+    const candidate = validDecisionCandidate(item);
+    if (candidate && !candidateIds.has(candidate.id)) { candidates.push(candidate); candidateIds.add(candidate.id); }
+  });
+  const votes = [];
+  const seenVotes = new Set();
+  const maxVotes = candidates.length * MAX_DECISION_VOTES_PER_CANDIDATE;
+  (Array.isArray(source.votes) ? source.votes : []).slice(0, maxVotes).forEach((vote) => {
+    if (!isPlainObject(vote) || !candidateIds.has(vote.candidateId) || !validUid(vote.uid) ||
+      (activeUids && !activeUids.has(vote.uid)) || !/^(want|ok|no)$/.test(vote.value || "")) return;
+    const key = `${vote.candidateId}\n${vote.uid}`;
+    if (seenVotes.has(key)) return;
+    seenVotes.add(key);
+    votes.push({ candidateId: vote.candidateId, uid: vote.uid, value: vote.value, updatedAt: Math.max(0, Math.floor(Number(vote.updatedAt) || 0)) });
+  });
+  const confirmedCandidateId = candidateIds.has(source.confirmedCandidateId) ? source.confirmedCandidateId : null;
+  const roundId = validDecisionRoundId(source.roundId);
+  const revision = Math.max(0, Math.floor(Number(source.revision) || 0));
+  return {
+    roundId,
+    revision,
+    state: confirmedCandidateId ? "confirmed" : "open",
+    candidates,
+    votes,
+    confirmedCandidateId,
+    confirmedAt: confirmedCandidateId ? Math.max(0, Math.floor(Number(source.confirmedAt) || 0)) : null,
+    confirmedBy: confirmedCandidateId && validUid(source.confirmedBy) ? source.confirmedBy : null
+  };
+}
+
+function requireCurrentMembership(room, uid, suppliedEpoch) {
+  const incoming = validMembershipEpoch(suppliedEpoch);
+  const stored = validMembershipEpoch(normalizeMemberEpochs(room.memberEpochs)[membershipVersionKey(uid)]);
+  if (!incoming || !stored || incoming !== stored) return false;
+  return (Array.isArray(room.members) ? room.members : []).some((member) => member && member.uid === uid);
+}
+
+function decisionRoundMatches(event, decision) {
+  const expectedRoundId = validDecisionRoundId(event && event.roundId);
+  if (!decision.roundId) return !expectedRoundId;
+  return expectedRoundId === decision.roundId;
+}
+
 /* 轻量的单实例节流用于挡住误操作和普通脚本；8 位随机码提供主要的抗猜测空间。 */
 function consumeJoinAttempt(uid) {
   const now = Date.now();
@@ -548,7 +668,14 @@ async function getRoom(event, uid) {
   if (!isActiveRoomMember(room, uid)) {
     return success({ room: null });
   }
-  return success({ room: { ...room, _id: room._id || docId } });
+  let safeRoom = { ...room, _id: room._id || docId };
+  if (roomTypeFor(room) === "midpoint" && room.meetup && isPlainObject(room.meetup)) {
+    safeRoom = {
+      ...safeRoom,
+      meetup: { ...room.meetup, decision: normalizedMeetupDecision(room.meetup, room) }
+    };
+  }
+  return success({ room: safeRoom });
 }
 
 async function joinRoom(event, uid) {
@@ -831,6 +958,168 @@ async function setMeetupPoint(event, uid) {
   }, 5);
 }
 
+function decisionResponse(docId, meetup) {
+  return success({ docId, meetup, decision: meetup.decision || normalizedMeetupDecision(meetup) });
+}
+
+async function publishDecisionCandidates(event, uid) {
+  const docId = cleanText(event.docId, 80);
+  if (!docId) return failure("ROOM_REQUIRED", "缺少房间编号");
+  if (!Array.isArray(event.candidates) || event.candidates.length === 0 || event.candidates.length > MAX_DECISION_CANDIDATES) {
+    return failure("INVALID_DECISION", "候选地点需为 1 至 12 个");
+  }
+  const now = Date.now();
+  return db.runTransaction(async (transaction) => {
+    const ref = transaction.collection(ROOM_COLLECTION).doc(docId);
+    const response = requireDbSuccess(await ref.get(), "读取协作碰面房间");
+    const room = response && response.data ? response.data : null;
+    if (!isActiveRoomMember(room, uid)) return failure("ROOM_NOT_FOUND", "房间已结束或你已退出");
+    if (roomTypeFor(room) !== "midpoint") return failure("WRONG_ROOM_TYPE", "这个房间不是协作碰面房间");
+    if (!requireCurrentMembership(room, uid, event.membershipEpoch)) return failure("STALE_MEMBERSHIP", "成员身份已更新，请刷新房间后重试");
+
+    const meetup = room.meetup && isPlainObject(room.meetup) ? room.meetup : { people: [] };
+    const currentDecision = normalizedMeetupDecision(meetup, room);
+    if (!decisionRoundMatches(event, currentDecision)) return failure("STALE_DECISION", "共同决定已更新，请刷新后重试");
+    if (currentDecision.state === "confirmed") return failure("DECISION_CONFIRMED", "地点已确定，请让房主先重新选择");
+    const existingById = new Map(currentDecision.candidates.map((candidate) => [candidate.id, candidate]));
+    let candidates;
+    try {
+      candidates = event.candidates.map((candidate) => {
+        const name = cleanText(candidate && candidate.name, 80);
+        const lat = Number(candidate && candidate.lat);
+        const lng = Number(candidate && candidate.lng);
+        return normalizeDecisionCandidate(candidate, uid, now, existingById.get(decisionCandidateId(name, lat, lng)));
+      });
+    } catch (error) {
+      if (error && error.publicCode) return failure("INVALID_DECISION", error.message);
+      throw error;
+    }
+    const ids = new Set();
+    if (candidates.some((candidate) => ids.has(candidate.id) || !ids.add(candidate.id))) {
+      return failure("INVALID_DECISION", "候选地点不能重复");
+    }
+    const votes = currentDecision.votes.filter((vote) => ids.has(vote.candidateId));
+    const confirmedCandidateId = ids.has(currentDecision.confirmedCandidateId) ? currentDecision.confirmedCandidateId : null;
+    const decision = {
+      roundId: newDecisionRoundId(),
+      revision: currentDecision.revision + 1,
+      state: "open",
+      candidates,
+      votes,
+      confirmedCandidateId,
+      confirmedAt: confirmedCandidateId ? currentDecision.confirmedAt : null,
+      confirmedBy: confirmedCandidateId ? currentDecision.confirmedBy : null
+    };
+    const nextMeetup = { ...meetup, decision };
+    const updated = requireDbSuccess(await ref.update({ meetup: nextMeetup }), "发布共同候选");
+    if (!updated || updated.updated !== 1) throw new Error("发布共同候选失败");
+    return decisionResponse(docId, nextMeetup);
+  }, 5);
+}
+
+async function setDecisionVote(event, uid) {
+  const docId = cleanText(event.docId, 80);
+  const candidateId = cleanText(event.candidateId, 64);
+  const value = event.value == null || event.value === "" || event.value === "clear" ? "" : cleanText(event.value, 8);
+  if (!docId) return failure("ROOM_REQUIRED", "缺少房间编号");
+  if (!candidateId || !/^(?:poi_)?[A-Za-z0-9_-]{8,64}$/.test(candidateId) || (value && !/^(want|ok|no)$/.test(value))) {
+    return failure("INVALID_DECISION", "投票数据无效");
+  }
+  const now = Date.now();
+  return db.runTransaction(async (transaction) => {
+    const ref = transaction.collection(ROOM_COLLECTION).doc(docId);
+    const response = requireDbSuccess(await ref.get(), "读取协作碰面房间");
+    const room = response && response.data ? response.data : null;
+    if (!isActiveRoomMember(room, uid)) return failure("ROOM_NOT_FOUND", "房间已结束或你已退出");
+    if (roomTypeFor(room) !== "midpoint") return failure("WRONG_ROOM_TYPE", "这个房间不是协作碰面房间");
+    if (!requireCurrentMembership(room, uid, event.membershipEpoch)) return failure("STALE_MEMBERSHIP", "成员身份已更新，请刷新房间后重试");
+    const meetup = room.meetup && isPlainObject(room.meetup) ? room.meetup : { people: [] };
+    const decision = normalizedMeetupDecision(meetup, room);
+    if (!decision.roundId || !decisionRoundMatches(event, decision)) return failure("STALE_DECISION", "共同决定已更新，请刷新后重试");
+    if (!decision.candidates.some((candidate) => candidate.id === candidateId)) return failure("CANDIDATE_NOT_FOUND", "这个候选地点已更新，请刷新后再投票");
+    if (decision.confirmedCandidateId) return failure("DECISION_CONFIRMED", "地点已确定，如需调整请由房主重新选择");
+    const votes = decision.votes.filter((vote) => !(vote.candidateId === candidateId && vote.uid === uid));
+    if (value) votes.push({ candidateId, uid, value, updatedAt: now });
+    if (votes.length > decision.candidates.length * MAX_DECISION_VOTES_PER_CANDIDATE) {
+      return failure("INVALID_DECISION", "投票数量超过上限");
+    }
+    const nextMeetup = { ...meetup, decision: { ...decision, revision: decision.revision + 1, votes } };
+    const updated = requireDbSuccess(await ref.update({ meetup: nextMeetup }), "保存投票");
+    if (!updated || updated.updated !== 1) throw new Error("保存投票失败");
+    return decisionResponse(docId, nextMeetup);
+  }, 5);
+}
+
+async function confirmDecisionCandidate(event, uid) {
+  const docId = cleanText(event.docId, 80);
+  const candidateId = event.candidateId == null || event.candidateId === "" ? "" : cleanText(event.candidateId, 64);
+  if (!docId) return failure("ROOM_REQUIRED", "缺少房间编号");
+  if (!/^poi_[a-f0-9]{24}$/.test(candidateId)) return failure("INVALID_DECISION", "请选择一个有效的候选地点");
+  return db.runTransaction(async (transaction) => {
+    const ref = transaction.collection(ROOM_COLLECTION).doc(docId);
+    const response = requireDbSuccess(await ref.get(), "读取协作碰面房间");
+    const room = response && response.data ? response.data : null;
+    if (!isActiveRoomMember(room, uid)) return failure("ROOM_NOT_FOUND", "房间已结束或你已退出");
+    if (roomTypeFor(room) !== "midpoint") return failure("WRONG_ROOM_TYPE", "这个房间不是协作碰面房间");
+    if (!requireCurrentMembership(room, uid, event.membershipEpoch)) return failure("STALE_MEMBERSHIP", "成员身份已更新，请刷新房间后重试");
+    if (inferredRoomOwnerUid(room, null) !== uid) return failure("NOT_OWNER", "只有房主可以确定地点");
+    const meetup = room.meetup && isPlainObject(room.meetup) ? room.meetup : { people: [] };
+    const decision = normalizedMeetupDecision(meetup, room);
+    if (!decision.roundId || !decisionRoundMatches(event, decision)) return failure("STALE_DECISION", "共同决定已更新，请刷新后重试");
+    if (decision.state === "confirmed") return failure("DECISION_CONFIRMED", "地点已确定，请先重新选择");
+    if (!decision.candidates.some((candidate) => candidate.id === candidateId)) {
+      return failure("CANDIDATE_NOT_FOUND", "这个候选地点已更新，请刷新后重试");
+    }
+    const nextMeetup = {
+      ...meetup,
+      decision: {
+        ...decision,
+        revision: decision.revision + 1,
+        state: "confirmed",
+        confirmedCandidateId: candidateId,
+        confirmedAt: Date.now(),
+        confirmedBy: uid
+      }
+    };
+    const updated = requireDbSuccess(await ref.update({ meetup: nextMeetup }), "确定共同地点");
+    if (!updated || updated.updated !== 1) throw new Error("更新共同决定失败");
+    return decisionResponse(docId, nextMeetup);
+  }, 5);
+}
+
+async function reopenDecision(event, uid) {
+  const docId = cleanText(event.docId, 80);
+  if (!docId) return failure("ROOM_REQUIRED", "缺少房间编号");
+  return db.runTransaction(async (transaction) => {
+    const ref = transaction.collection(ROOM_COLLECTION).doc(docId);
+    const response = requireDbSuccess(await ref.get(), "读取协作碰面房间");
+    const room = response && response.data ? response.data : null;
+    if (!isActiveRoomMember(room, uid)) return failure("ROOM_NOT_FOUND", "房间已结束或你已退出");
+    if (roomTypeFor(room) !== "midpoint") return failure("WRONG_ROOM_TYPE", "这个房间不是协作碰面房间");
+    if (!requireCurrentMembership(room, uid, event.membershipEpoch)) return failure("STALE_MEMBERSHIP", "成员身份已更新，请刷新房间后重试");
+    if (inferredRoomOwnerUid(room, null) !== uid) return failure("NOT_OWNER", "只有房主可以重新选择地点");
+    const meetup = room.meetup && isPlainObject(room.meetup) ? room.meetup : { people: [] };
+    const decision = normalizedMeetupDecision(meetup, room);
+    if (!decision.roundId || !decisionRoundMatches(event, decision)) return failure("STALE_DECISION", "共同决定已更新，请刷新后重试");
+    const nextMeetup = {
+      ...meetup,
+      decision: {
+        roundId: newDecisionRoundId(),
+        revision: decision.revision + 1,
+        state: "open",
+        candidates: decision.candidates,
+        votes: [],
+        confirmedCandidateId: null,
+        confirmedAt: null,
+        confirmedBy: null
+      }
+    };
+    const updated = requireDbSuccess(await ref.update({ meetup: nextMeetup }), "重新选择地点");
+    if (!updated || updated.updated !== 1) throw new Error("重新选择地点失败");
+    return decisionResponse(docId, nextMeetup);
+  }, 5);
+}
+
 async function updateLegacyMembers(event, uid) {
   const docId = cleanText(event.docId, 80);
   const operation = cleanText(event.operation, 12);
@@ -911,9 +1200,14 @@ async function leaveRoom(event, uid) {
       members: (Array.isArray(room.members) ? room.members : []).filter((member) => member.uid !== uid)
     };
     if (room.meetup && Array.isArray(room.meetup.people)) {
+      const currentDecision = normalizedMeetupDecision(room.meetup, room);
       patch.meetup = {
         ...room.meetup,
-        people: room.meetup.people.filter((person) => person.uid !== uid)
+        people: room.meetup.people.filter((person) => person.uid !== uid),
+        decision: {
+          ...currentDecision,
+          votes: currentDecision.votes.filter((vote) => vote.uid !== uid)
+        }
       };
     }
     const updatedResult = requireDbSuccess(await ref.update(patch), "退出房间");
@@ -926,12 +1220,16 @@ exports.main = async (event) => {
   const uid = callerUid();
   if (!uid) return failure("UNAUTHENTICATED", "请先登录后再操作房间");
   try {
-    const action = cleanText(event && event.action, 24);
+    const action = cleanText(event && event.action, 40);
     if (action === "create") return await createRoom(event, uid);
     if (action === "join") return await joinRoom(event, uid);
     if (action === "getRoom") return await getRoom(event, uid);
     if (action === "syncLedger") return await syncLedger(event, uid);
     if (action === "setMeetupPoint") return await setMeetupPoint(event, uid);
+    if (action === "publishDecisionCandidates") return await publishDecisionCandidates(event, uid);
+    if (action === "setDecisionVote") return await setDecisionVote(event, uid);
+    if (action === "confirmDecisionCandidate") return await confirmDecisionCandidate(event, uid);
+    if (action === "reopenDecision") return await reopenDecision(event, uid);
     if (action === "updateLegacyMembers") return await updateLegacyMembers(event, uid);
     if (action === "disband") return await disbandRoom(event, uid);
     if (action === "leave") return await leaveRoom(event, uid);
