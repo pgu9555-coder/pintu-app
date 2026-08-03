@@ -212,6 +212,38 @@ async function main() {
     "two stale devices must converge without losing either expense"
   );
 
+  const forgedUidLedger = clone(rooms.get(docId).ledger);
+  const forgedAt = Date.now() + 1000;
+  forgedUidLedger.members = forgedUidLedger.members.map((item) => ({
+    ...item,
+    uid: `forged-${item.uid || item.id}`,
+    updatedAt: forgedAt,
+    updatedBy: "owner"
+  }));
+  forgedUidLedger.members.push({
+    id: "manual-member",
+    uid: "forged-manual-uid",
+    name: "Manual participant",
+    color: "#0F3D36",
+    createdAt: forgedAt,
+    updatedAt: forgedAt,
+    updatedBy: "owner"
+  });
+  forgedUidLedger.revision = forgedAt;
+  forgedUidLedger.updatedAt = forgedAt;
+  const forgedUidSync = await call("owner", { action: "syncLedger", docId, ledger: forgedUidLedger });
+  assert.equal(forgedUidSync.ok, true);
+  assert.equal(forgedUidSync.data.ledger.members.find((item) => item.id === ownerMember.id).uid, "owner");
+  assert.equal(forgedUidSync.data.ledger.members.find((item) => item.id === joinedMember.id).uid, "member");
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(
+      forgedUidSync.data.ledger.members.find((item) => item.id === "manual-member"),
+      "uid"
+    ),
+    false,
+    "a client-created ledger identity must not be allowed to claim an authentication uid"
+  );
+
   const beforeDeniedSync = JSON.stringify(rooms.get(docId).ledger);
   const deniedSync = await call("stranger-3", { action: "syncLedger", docId, ledger: baseLedger });
   assert.equal(deniedSync.code, "ROOM_NOT_FOUND");
@@ -376,7 +408,7 @@ async function main() {
   rooms.set(inferredOwnerDocId, {
     _id: inferredOwnerDocId,
     code: "QWERTY",
-    toolType: "ledger",
+    toolType: "legacy",
     memberUids: ["inferred-owner"],
     members: [],
     ledger: { members: [], expenses: [], memberTombstones: {}, expenseTombstones: {} }
@@ -384,6 +416,97 @@ async function main() {
   const inferredDisband = await call("inferred-owner", { action: "disband", docId: inferredOwnerDocId });
   assert.equal(inferredDisband.ok, true, "legacy rooms must infer their original owner safely");
   assert.equal(rooms.has(inferredOwnerDocId), false);
+
+  const pollutedOwnerDocId = "room-polluted-owner";
+  rooms.set(pollutedOwnerDocId, {
+    _id: pollutedOwnerDocId,
+    code: "PLUTED",
+    toolType: "ledger",
+    memberUids: ["historical", "forged", "active-owner"],
+    members: [{ id: "active-id", uid: "active-owner", name: "Active owner" }],
+    ledger: {
+      members: [{ id: "historical-id", uid: "historical", name: "Historical member" }],
+      expenses: [],
+      memberTombstones: {},
+      expenseTombstones: {}
+    }
+  });
+  for (const unauthorizedUid of ["historical", "forged"]) {
+    const pollutedRead = await call(unauthorizedUid, { action: "getRoom", docId: pollutedOwnerDocId });
+    assert.equal(pollutedRead.data.room, null, "a polluted memberUids entry must not grant read access");
+    const pollutedSync = await call(unauthorizedUid, {
+      action: "syncLedger",
+      docId: pollutedOwnerDocId,
+      ledger: clone(rooms.get(pollutedOwnerDocId).ledger)
+    });
+    assert.equal(pollutedSync.code, "ROOM_NOT_FOUND", "a polluted memberUids entry must not grant ledger writes");
+  }
+  const historicalDisband = await call("historical", { action: "disband", docId: pollutedOwnerDocId });
+  assert.equal(historicalDisband.code, "NOT_OWNER", "ledger history must never confer room ownership");
+  assert.equal(rooms.has(pollutedOwnerDocId), true);
+  const activeOwnerDisband = await call("active-owner", { action: "disband", docId: pollutedOwnerDocId });
+  assert.equal(activeOwnerDisband.ok, true);
+
+  const pollutedJoinDocId = "room-polluted-join";
+  rooms.set(pollutedJoinDocId, {
+    _id: pollutedJoinDocId,
+    code: "JKLMNP",
+    toolType: "ledger",
+    ownerUid: "active-owner",
+    memberUids: ["active-owner", "departed", "forged"],
+    members: [{ id: "active-id", uid: "active-owner", name: "Active owner", color: "#0F3D36" }],
+    memberEpochs: {},
+    ledger: {
+      name: "Polluted room",
+      members: [
+        { id: "active-id", uid: "active-owner", name: "Active owner", color: "#0F3D36" },
+        { id: "departed-id", uid: "departed", name: "Departed", color: "#B8842A" }
+      ],
+      expenses: [],
+      memberTombstones: {},
+      expenseTombstones: {},
+      nextMemberId: 3,
+      nextExpenseId: 1
+    }
+  });
+  const cleanedJoin = await call("new-member", {
+    action: "join",
+    code: "JKLMNP",
+    type: "ledger",
+    name: "New member"
+  });
+  assert.equal(cleanedJoin.ok, true);
+  assert.deepEqual(
+    [...rooms.get(pollutedJoinDocId).memberUids].sort(),
+    ["active-owner", "new-member"].sort(),
+    "joining a typed room must clean access ids that are not active top-level members"
+  );
+
+  const pollutedMidpointDocId = "room-polluted-midpoint";
+  rooms.set(pollutedMidpointDocId, {
+    _id: pollutedMidpointDocId,
+    code: "MNPQRS",
+    toolType: "midpoint",
+    ownerUid: "mid-active-owner",
+    memberUids: ["mid-active-owner", "mid-departed"],
+    members: [{ id: "mid-active-id", uid: "mid-active-owner", name: "Active midpoint owner" }],
+    memberEpochs: {},
+    meetup: { people: [] }
+  });
+  const pollutedMidpointRead = await call("mid-departed", {
+    action: "getRoom",
+    docId: pollutedMidpointDocId
+  });
+  assert.equal(pollutedMidpointRead.data.room, null);
+  const pollutedPoint = await call("mid-departed", {
+    action: "setMeetupPoint",
+    docId: pollutedMidpointDocId,
+    membershipEpoch: "epoch_mid_departed_123456",
+    mutationAt: Date.now(),
+    person: { name: "Departed", address: "Should not save", lat: 22.5, lng: 113.9 }
+  });
+  assert.equal(pollutedPoint.code, "ROOM_NOT_FOUND", "a polluted memberUids entry must not grant meetup writes");
+  assert.equal(rooms.get(pollutedMidpointDocId).meetup.people.length, 0);
 
   const orphanJoinDocId = "room-orphan-join";
   rooms.set(orphanJoinDocId, {

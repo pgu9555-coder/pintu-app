@@ -26,7 +26,6 @@
 - 纯 HTML / CSS / 原生 JavaScript，**无框架、无构建步骤**
 - [高德地图 JS API 2.0](https://lbs.amap.com/) — 定位、地址联想、POI 搜索、地图绘制
 - [腾讯云开发 CloudBase](https://tcb.cloud.tencent.com/) — 匿名登录 + 云函数门禁 + 文档型数据库 + 约 2 秒自动同步
-- 结算图片分享使用原生 Canvas，无第三方依赖
 
 ---
 

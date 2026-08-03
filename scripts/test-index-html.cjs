@@ -36,4 +36,37 @@ assert.match(
   "home room refreshes must ignore stale gateway responses"
 );
 
+assert.doesNotMatch(
+  source,
+  /闪电分账|\bopenSplit\b|\bviewSplit\b/,
+  "removed flash-split feature must not leave UI or routing code behind"
+);
+assert.match(
+  source,
+  /\.tool-grid\s*\{[^}]*grid-template-columns\s*:\s*1fr/i,
+  "home tools must use the approved single-column layout"
+);
+
+const homeMatch = source.match(
+  /<div class="view show" id="viewHome">([\s\S]*?)<!--\s*=+\s*VIEW: 行程 tab/
+);
+assert.ok(homeMatch, "could not isolate the home view");
+const home = homeMatch[1];
+const homeCards = [...home.matchAll(/<div class="tool-card"[^>]*>/g)];
+assert.equal(homeCards.length, 3, "home must contain exactly three tool cards");
+assert.deepEqual(
+  [...home.matchAll(/<div class="tool-card"[^>]*onclick="([^"]+)"/g)].map((match) => match[1]),
+  ["openMidpoint()", "openSpinner()", "openGroupLedger()"],
+  "home tool order or click handlers changed"
+);
+homeCards.forEach((match) => {
+  assert.match(match[0], /role="button"/, "tool card is missing button semantics");
+  assert.match(match[0], /tabindex="0"/, "tool card is missing keyboard focus");
+});
+assert.equal(
+  (home.match(/class="tool-arrow" aria-hidden="true"/g) || []).length,
+  3,
+  "each home tool card needs one decorative arrow"
+);
+
 console.log(`index.html checks passed (${inlineScripts.length} inline scripts).`);

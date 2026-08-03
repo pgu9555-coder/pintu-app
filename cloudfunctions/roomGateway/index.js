@@ -40,6 +40,45 @@ function cleanText(value, maxLength) {
   return String(value || "").trim().slice(0, maxLength);
 }
 
+function validUid(value) {
+  return typeof value === "string" && value.length > 0;
+}
+
+function uniqueUids(values) {
+  return Array.from(new Set(values.filter(validUid)));
+}
+
+function roomTypeFor(room) {
+  return room.toolType || room.roomType || "legacy";
+}
+
+function activeTopLevelMemberUids(room) {
+  const members = Array.isArray(room.members) ? room.members : [];
+  return uniqueUids(members.map((member) => member && member.uid));
+}
+
+/* A typed room's top-level members are its active identities. Ledger members
+   are historical billing records and must never grant access or ownership. */
+function inferredRoomOwnerUid(room, fallbackUid) {
+  if (validUid(room.ownerUid)) return room.ownerUid;
+  const activeUids = activeTopLevelMemberUids(room);
+  if (roomTypeFor(room) === "ledger" || roomTypeFor(room) === "midpoint") {
+    return activeUids[0] || (validUid(fallbackUid) ? fallbackUid : null);
+  }
+  const existingUids = Array.isArray(room.memberUids) ? uniqueUids(room.memberUids) : [];
+  return existingUids[0] || activeUids[0] || (validUid(fallbackUid) ? fallbackUid : null);
+}
+
+function isActiveRoomMember(room, uid) {
+  if (!room || !validUid(uid)) return false;
+  if (room.ownerUid === uid) return true;
+  const type = roomTypeFor(room);
+  if (type === "ledger" || type === "midpoint") {
+    return activeTopLevelMemberUids(room).includes(uid);
+  }
+  return Array.isArray(room.memberUids) && room.memberUids.includes(uid);
+}
+
 function inputError(message) {
   const error = new Error(message);
   error.publicCode = "INVALID_LEDGER";
@@ -254,6 +293,27 @@ function mergeLedgers(incoming, current) {
     updatedBy: Number(incoming.updatedAt || 0) >= Number(current.updatedAt || 0)
       ? (incoming.updatedBy || null)
       : (current.updatedBy || null)
+  };
+}
+
+function enforceTrustedLedgerMemberUids(ledger, currentLedger, room) {
+  const trustedById = new Map();
+  (currentLedger.members || []).forEach((member) => {
+    if (member && validUid(member.uid)) trustedById.set(String(member.id), member.uid);
+  });
+  (Array.isArray(room.members) ? room.members : []).forEach((member) => {
+    if (member && validUid(member.uid)) trustedById.set(String(member.id), member.uid);
+  });
+
+  return {
+    ...ledger,
+    members: (ledger.members || []).map((member) => {
+      const sanitized = { ...member };
+      delete sanitized.uid;
+      const trustedUid = trustedById.get(String(member.id));
+      if (trustedUid) sanitized.uid = trustedUid;
+      return sanitized;
+    })
   };
 }
 
@@ -485,7 +545,7 @@ async function getRoom(event, uid) {
   const room = response && Array.isArray(response.data) ? response.data[0] : response && response.data;
   /* Do not reveal whether an unknown room exists. A missing room and a room the caller
      has not joined intentionally return the same empty result. */
-  if (!room || !Array.isArray(room.memberUids) || !room.memberUids.includes(uid)) {
+  if (!isActiveRoomMember(room, uid)) {
     return success({ room: null });
   }
   return success({ room: { ...room, _id: room._id || docId } });
@@ -539,18 +599,18 @@ async function joinRoom(event, uid) {
     const currentLedgerMembers = normalizedCurrentLedger
       ? normalizedCurrentLedger.members
       : (current.ledger && Array.isArray(current.ledger.members) ? current.ledger.members : []);
-    const memberUids = Array.from(new Set([...existingMemberUids, uid]));
-    const inferredOwnerUid = current.ownerUid || existingMemberUids[0]
-      || (currentMembers.find((member) => member && member.uid) || {}).uid
-      || (currentLedgerMembers.find((member) => member && member.uid) || {}).uid
-      || uid;
+    const inferredOwnerUid = inferredRoomOwnerUid(current, uid);
+    const trustedExistingUids = currentType === "midpoint" || currentType === "ledger"
+      ? activeTopLevelMemberUids(current)
+      : existingMemberUids;
+    const memberUids = uniqueUids([...trustedExistingUids, inferredOwnerUid, uid]);
     const patch = { memberUids };
     if (!current.ownerUid) patch.ownerUid = inferredOwnerUid;
     let updated = { ...current, memberUids, ownerUid: inferredOwnerUid };
 
     if (currentType === "midpoint" || currentType === "ledger") {
       const members = currentMembers;
-      const wasActiveMember = existingMemberUids.includes(uid);
+      const wasActiveMember = currentMembers.some((member) => member && member.uid === uid);
       const memberEpochs = normalizeMemberEpochs(current.memberEpochs);
       const memberEpochKey = membershipVersionKey(uid);
       if (!wasActiveMember && !Object.prototype.hasOwnProperty.call(memberEpochs, memberEpochKey)
@@ -647,14 +707,19 @@ async function syncLedger(event, uid) {
     const ref = transaction.collection(ROOM_COLLECTION).doc(docId);
     const response = requireDbSuccess(await ref.get(), "读取共享账本");
     const room = response && response.data ? response.data : null;
-    if (!room || !Array.isArray(room.memberUids) || !room.memberUids.includes(uid)) {
+    if (!isActiveRoomMember(room, uid)) {
       return failure("ROOM_NOT_FOUND", "房间已结束或你已退出");
     }
     const type = room.toolType || room.roomType || "legacy";
     if (type !== "ledger" && type !== "legacy") return failure("WRONG_ROOM_TYPE", "这个房间不是共享账本");
 
     const current = normalizeLedger(room.ledger || {}, now, true);
-    const merged = normalizeLedger(mergeLedgers(incoming, current), now, true);
+    const mergedWithUntrustedUids = mergeLedgers(incoming, current);
+    const merged = normalizeLedger(
+      enforceTrustedLedgerMemberUids(mergedWithUntrustedUids, current, room),
+      now,
+      true
+    );
     validateLedgerReferences(merged);
     const stamp = Math.max(now, Number(current.revision || 0), Number(current.updatedAt || 0)) + 1;
     merged.revision = stamp;
@@ -682,7 +747,7 @@ async function setMeetupPoint(event, uid) {
     const ref = transaction.collection(ROOM_COLLECTION).doc(docId);
     const response = requireDbSuccess(await ref.get(), "读取碰面房间");
     const room = response && response.data ? response.data : null;
-    if (!room || !Array.isArray(room.memberUids) || !room.memberUids.includes(uid)) {
+    if (!isActiveRoomMember(room, uid)) {
       return failure("ROOM_NOT_FOUND", "房间已结束或你已退出");
     }
     const type = room.toolType || room.roomType || "legacy";
@@ -776,7 +841,7 @@ async function updateLegacyMembers(event, uid) {
     const ref = transaction.collection(ROOM_COLLECTION).doc(docId);
     const response = requireDbSuccess(await ref.get(), "读取旧版房间");
     const room = response && response.data ? response.data : null;
-    if (!room || !Array.isArray(room.memberUids) || !room.memberUids.includes(uid)) {
+    if (!isActiveRoomMember(room, uid)) {
       return failure("ROOM_NOT_FOUND", "房间已结束或你已退出");
     }
     const type = room.toolType || room.roomType || "legacy";
@@ -817,10 +882,7 @@ async function disbandRoom(event, uid) {
   );
   const room = response && Array.isArray(response.data) ? response.data[0] : response && response.data;
   if (!room) return success({ removed: true });
-  const inferredOwnerUid = room.ownerUid
-    || (Array.isArray(room.memberUids) ? room.memberUids[0] : null)
-    || ((Array.isArray(room.members) ? room.members : []).find((member) => member && member.uid) || {}).uid
-    || ((room.ledger && Array.isArray(room.ledger.members) ? room.ledger.members : []).find((member) => member && member.uid) || {}).uid;
+  const inferredOwnerUid = inferredRoomOwnerUid(room, null);
   if (inferredOwnerUid !== uid) return failure("NOT_OWNER", "只有房主可以解散房间");
   const removed = requireDbSuccess(
     await db.collection(ROOM_COLLECTION).doc(docId).remove(),
@@ -838,12 +900,9 @@ async function leaveRoom(event, uid) {
     const response = requireDbSuccess(await ref.get(), "读取房间");
     const room = response && response.data ? response.data : null;
     if (!room) return success({ removed: true });
-    const inferredOwnerUid = room.ownerUid
-      || (Array.isArray(room.memberUids) ? room.memberUids[0] : null)
-      || ((Array.isArray(room.members) ? room.members : []).find((member) => member && member.uid) || {}).uid
-      || ((room.ledger && Array.isArray(room.ledger.members) ? room.ledger.members : []).find((member) => member && member.uid) || {}).uid;
+    const inferredOwnerUid = inferredRoomOwnerUid(room, null);
     if (inferredOwnerUid === uid) return failure("OWNER_MUST_DISBAND", "房主需要取消并解散房间");
-    if (!Array.isArray(room.memberUids) || !room.memberUids.includes(uid)) {
+    if (!isActiveRoomMember(room, uid)) {
       return success({ removed: true });
     }
 

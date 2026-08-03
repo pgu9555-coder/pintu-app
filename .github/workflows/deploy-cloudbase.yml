@@ -13,11 +13,18 @@ on:
       - scripts/apply-cloudbase-security.cjs
       - scripts/apply-cloudbase-function-security.cjs
       - scripts/migrate-room-members.cjs
+      - scripts/test-migrate-room-members.cjs
       - scripts/test-room-gateway.cjs
       - scripts/test-index-html.cjs
       - scripts/test-security-config.cjs
       - .github/workflows/deploy-cloudbase.yml
   workflow_dispatch:
+    inputs:
+      run_membership_migration:
+        description: "Run the one-time room membership backfill before deployment"
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -66,6 +73,7 @@ jobs:
       - name: Test room gateway access rules
         run: |
           node scripts/test-room-gateway.cjs
+          node scripts/test-migrate-room-members.cjs
           node scripts/test-index-html.cjs
           node scripts/test-security-config.cjs
 
@@ -84,10 +92,12 @@ jobs:
         run: node scripts/apply-cloudbase-function-security.cjs
 
       - name: Backfill room member access lists
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_membership_migration == true }}
         env:
           TCB_SECRET_ID: ${{ secrets.TCB_SECRET_ID }}
           TCB_SECRET_KEY: ${{ secrets.TCB_SECRET_KEY }}
           CLOUDBASE_ENV_ID: pintu-d4g77ecn24b674fa0
+          RUN_ROOM_MEMBERSHIP_MIGRATION: "1"
         run: node scripts/migrate-room-members.cjs
 
       - name: Apply and verify database security rules
