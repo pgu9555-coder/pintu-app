@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- deployment build: 2026-08-04-persistent-auto-join-v1 -->
+<!-- deployment build: 2026-08-04-launch-audit-v2 -->
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -9,7 +9,7 @@
 <meta name="color-scheme" content="light">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <meta name="format-detection" content="telephone=no">
-<meta name="pintu-build" content="2026-08-04-persistent-auto-join-v1">
+<meta name="pintu-build" content="2026-08-04-launch-audit-v2">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
@@ -295,20 +295,26 @@
       return v;
     } catch(e){ return 'dev-anon'; }
   })();
-  var rmTcbReady = (function(){
+  var rmTcbReady = null;
+  function rmEnsureTcbReady(){
     if (CLOUDBASE_ENV_ID === "你的环境ID") {
       window.rmBackendStatus.state = 'unconfigured';
       return Promise.resolve(false);
     }
+    if (rmDb) return Promise.resolve(true);
+    if (rmTcbReady && window.rmBackendStatus.state === 'starting') return rmTcbReady;
+    rmTcbError = null;
+    window.rmBackendStatus = { state: 'starting', error: null };
     try {
       var cloudbaseSdk = window.cloudbase || window.tcb;
       if (!cloudbaseSdk) throw new Error('CloudBase SDK 没有加载成功');
       rmTcbApp = cloudbaseSdk.init({ env: CLOUDBASE_ENV_ID });
       var auth = rmTcbApp.auth({ persistence: "local" });
-      return auth.getLoginState().then(function(state){
+      var loginRequest = auth.getLoginState().then(function(state){
         if (state) return true;
         return auth.signInAnonymously().then(function(){ return true; });
-      }).then(function(){
+      });
+      rmTcbReady = rmGatewayTimeout(loginRequest, 30000, 'CloudBase 登录').then(function(){
         rmDb = rmTcbApp.database();
         window.rmBackendStatus.state = 'connected';
         try {
@@ -322,13 +328,16 @@
         console.warn('[房间后端] 腾讯云开发登录失败：', e);
         return false;
       });
+      return rmTcbReady;
     } catch (e) {
       rmTcbError = e;
       window.rmBackendStatus = { state: 'init_failed', error: (e && e.message) || String(e) };
       console.warn('[房间后端] 腾讯云开发初始化失败：', e);
-      return Promise.resolve(false);
+      rmTcbReady = Promise.resolve(false);
+      return rmTcbReady;
     }
-  })();
+  }
+  rmTcbReady = rmEnsureTcbReady();
   rmTcbReady.then(function(ready){ if (ready) rmFlushPendingMeetups(); });
   window.addEventListener('online', rmFlushPendingMeetups);
   window.addEventListener('focus', rmFlushPendingMeetups);
@@ -2260,6 +2269,13 @@ function bindAddressAutocompleteUI(inputEl, boxEl) {
   let lastTips = [];
   let boxPointerActive = false;
 
+  /* A location request may still be pending when the user picks or types a
+     different address.  Every user-originated value change advances this
+     counter so late geolocation callbacks cannot put old data back. */
+  if (!Number.isSafeInteger(Number(inputEl.dataset.locationGeneration))) {
+    inputEl.dataset.locationGeneration = '0';
+  }
+
   function showSearchMessage(message) {
     boxEl.innerHTML = '';
     const messageEl = document.createElement('div');
@@ -2306,6 +2322,9 @@ function bindAddressAutocompleteUI(inputEl, boxEl) {
 
       const selectTip = (e) => {
         e.preventDefault();
+        clearTimeout(timer);
+        requestId += 1;
+        inputEl.dataset.locationGeneration = String(Number(inputEl.dataset.locationGeneration || 0) + 1);
         inputEl.value = formatSelectedAddress(tip);
         inputEl.dataset.lat = tip.location.lat;
         inputEl.dataset.lng = tip.location.lng;
@@ -2366,6 +2385,10 @@ function bindAddressAutocompleteUI(inputEl, boxEl) {
   }
 
   inputEl.addEventListener('input', () => {
+    /* 焦点会先把上一次候选重新展开；一旦用户开始输入新关键词，
+       立即收起旧候选，等当前搜索返回后再展示，避免误点旧地址。 */
+    boxEl.style.display = 'none';
+    inputEl.dataset.locationGeneration = String(Number(inputEl.dataset.locationGeneration || 0) + 1);
     delete inputEl.dataset.lat;
     delete inputEl.dataset.lng;
     delete inputEl.dataset.selectedSearchName;
@@ -2419,9 +2442,12 @@ function reverseGeocodePosition(lng, lat, fallbackAddress) {
 
 function geolocateMe(inputEl) {
   if (typeof window.AMap === 'undefined') { showAppToast('地图服务暂时不可用，请稍后刷新重试'); return; }
+  var locationGeneration = Number(inputEl.dataset.locationGeneration || 0) + 1;
+  inputEl.dataset.locationGeneration = String(locationGeneration);
   inputEl.value = "正在定位...";
   const geolocation = new AMap.Geolocation({ enableHighAccuracy: true, timeout: 10000 });
   geolocation.getCurrentPosition(function(status, result){
+    if (Number(inputEl.dataset.locationGeneration || 0) !== locationGeneration) return;
     if(status === 'complete'){
       const lat = typeof result.position.getLat === 'function' ? result.position.getLat() : result.position.lat;
       const lng = typeof result.position.getLng === 'function' ? result.position.getLng() : result.position.lng;
@@ -2430,6 +2456,7 @@ function geolocateMe(inputEl) {
       delete inputEl.dataset.selectedSearchName;
       inputEl.value = '正在获取具体地址...';
       reverseGeocodePosition(lng, lat, result.formattedAddress || '').then(function(address) {
+        if (Number(inputEl.dataset.locationGeneration || 0) !== locationGeneration) return;
         inputEl.value = address;
       });
     } else {
@@ -2653,7 +2680,6 @@ function drawBaseMap(points, center) {
 
   const cm = new AMap.Marker({
     position: [center.lng, center.lat], map: amapInstance,
-    icon: '//a.amap.com/jsapi_demos/static/demo-center/icons/poi-marker-red.png',
     label: { content: '📍绝对公平中点', direction: 'bottom' }, zIndex: 999
   });
   allMapMarkers.push(cm);
@@ -2724,6 +2750,13 @@ var swipeDeck = [];
 var swipeIndex = 0;
 var likedPois = [];
 var swipeDragX = 0;
+var swipeTransitionBusy = false;
+var swipeDeckGeneration = 0;
+
+function resetSwipeTransition(){
+  swipeTransitionBusy = false;
+  swipeDeckGeneration += 1;
+}
 
 /* 首页直接点"美食盲盒"时：如果还没算过中点，提示先去算 */
 function tryOpenFoodSwipeFromHome(){
@@ -2743,6 +2776,7 @@ function openFoodSwipe(){
   swipeDeck = window.foodSwipeDeck.slice();
   swipeIndex = 0;
   likedPois = [];
+  resetSwipeTransition();
   hideAllViews();
   document.getElementById('viewFoodSwipe').classList.add('show');
   window.scrollTo(0, 0);
@@ -2753,6 +2787,7 @@ function openFoodSwipe(){
 }
 
 function closeFoodSwipe(){
+  resetSwipeTransition();
   hideAllViews();
   document.getElementById('viewMidpoint').classList.add('show');
   window.scrollTo(0, 0);
@@ -2761,6 +2796,7 @@ function closeFoodSwipe(){
 function restartFoodSwipe(){
   swipeIndex = 0;
   likedPois = [];
+  resetSwipeTransition();
   document.getElementById('fbSummary').style.display = 'none';
   document.getElementById('swipeStage').style.display = 'block';
   document.getElementById('swipeActions').style.display = 'flex';
@@ -3459,25 +3495,34 @@ function bindFlipCard(card, poi){
 
 /* ---------- 覆盖：底部 ✕ / ♥ 按钮 与 飞出逻辑，改成认 .fc-card ---------- */
 function swipeAction(dir){
-  if (swipeIndex >= swipeDeck.length) return;
+  if (swipeTransitionBusy || swipeIndex >= swipeDeck.length) return;
   var topCard = document.querySelector('#swipeStage .fc-card:last-child');
   if (!topCard) return;
   topCard.style.transition = 'transform .3s ease, opacity .3s ease';
   flyOutCardEl(topCard, dir);
 }
 function flyOutTopCard(dir){
+  if (swipeTransitionBusy) return;
   var topCard = document.querySelector('#swipeStage .fc-card:last-child');
   if (!topCard) return;
   flyOutCardEl(topCard, dir);
 }
 function flyOutCardEl(card, dir){
+  if (swipeTransitionBusy || !card || card.dataset.swipeExiting === 'true') return;
+  swipeTransitionBusy = true;
+  card.dataset.swipeExiting = 'true';
+  var transitionGeneration = swipeDeckGeneration;
   var poi = swipeDeck[swipeIndex];
   card.style.transform = 'translate(' + (dir * 520) + 'px, 0) rotate(' + (dir * 28) + 'deg)';
   card.style.opacity = '0';
   if (poi && typeof mpRecordSwipeDecision === 'function') mpRecordSwipeDecision(poi, dir);
   if (dir > 0 && poi) likedPois.push(poi);
   swipeIndex++;
-  setTimeout(renderSwipeStack, 260);
+  setTimeout(function(){
+    if (transitionGeneration !== swipeDeckGeneration) return;
+    swipeTransitionBusy = false;
+    renderSwipeStack();
+  }, 260);
 }
 
 /* ---------- 心动清单点开：底部弹层看详情，不再是整页跳转 ---------- */
@@ -3718,6 +3763,19 @@ var glSelectedPayerId = null;
 var glSelectedSplitIds = [];
 var glSplitSelectionTouched = false;
 var glCurrentStep = 1;
+var GL_MAX_EXPENSE_CENTS = 1000000000000;
+
+function glAmountToCents(value){
+  var amount = Number(value);
+  var cents = Math.round(amount * 100);
+  if (!Number.isFinite(amount) || amount <= 0 || !Number.isSafeInteger(cents) || cents <= 0 || cents > GL_MAX_EXPENSE_CENTS) return null;
+  return cents;
+}
+
+function glShowInvalidAmount(amountEl){
+  alert('请输入大于 0 且不超过 ¥10,000,000,000.00 的有效金额');
+  amountEl.focus();
+}
 
 /* ---------- 本地持久化：把行程账本存进 localStorage，刷新/重开都不丢 ----------
    账本目前是纯本机数据（没接后端），只用 localStorage 就够了：
@@ -4403,9 +4461,9 @@ function glAddExpense(){
   var descEl = document.getElementById('glExpDesc');
   var amountEl = document.getElementById('glExpAmount');
   var desc = descEl.value.trim();
-  var amount = parseFloat(amountEl.value);
+  var amountCents = glAmountToCents(amountEl.value);
   if (!desc){ descEl.focus(); return; }
-  if (!(amount > 0)){ amountEl.focus(); return; }
+  if (amountCents === null){ glShowInvalidAmount(amountEl); return; }
   if (glSelectedPayerId === null){ alert('选一下这笔是谁付的钱'); return; }
   if (glSelectedSplitIds.length === 0){ alert('至少要有一个人参与平摊这笔支出'); return; }
   var expenseId = trip.roomDocId
@@ -4416,7 +4474,7 @@ function glAddExpense(){
   trip.expenses.push({
     id: expenseId,
     desc: desc,
-    amountCents: Math.round(amount * 100),
+    amountCents: amountCents,
     payerId: glSelectedPayerId,
     splitIds: glSelectedSplitIds.slice(),
     createdAt: stamp,
@@ -4485,15 +4543,15 @@ function glOpenExpenseEditor(expenseId){
     var descInput = modal.querySelector('#glEditExpenseDesc');
     var amountInput = modal.querySelector('#glEditExpenseAmount');
     var desc = descInput.value.trim();
-    var amount = Number(amountInput.value);
+    var amountCents = glAmountToCents(amountInput.value);
     if (!desc){ descInput.focus(); return; }
-    if (!isFinite(amount) || amount <= 0){ amountInput.focus(); return; }
+    if (amountCents === null){ glShowInvalidAmount(amountInput); return; }
     if (payerId == null){ alert('请选择付款人'); return; }
     if (splitIds.length === 0){ alert('至少要有一个人参与平摊'); return; }
     var currentExpense = trip.expenses.find(function(e){ return String(e.id) === String(expenseId); });
     if (!currentExpense){ glCloseEditor(); showAppToast('这笔支出已被其他设备删除'); return; }
     currentExpense.desc = desc;
-    currentExpense.amountCents = Math.round(amount * 100);
+    currentExpense.amountCents = amountCents;
     currentExpense.payerId = payerId;
     currentExpense.splitIds = splitIds.slice();
     currentExpense.updatedAt = glMutationStamp();
@@ -4976,7 +5034,7 @@ function rmRenderHomeRoomList(){
     rmUpdateTripsEmptyState();
   }
 
-  rmTcbReady.then(function(ready){
+  rmEnsureTcbReady().then(function(ready){
     if (refreshToken !== rmHomeRefreshToken) return;
     if (!ready || !rmDb){ paint(); return; }
     var ids = rmGetMyRoomIds();
@@ -5143,7 +5201,7 @@ function rmEnterRoom(docId){
   document.getElementById('viewRoom').classList.add('show');
   window.scrollTo(0, 0);
 
-  rmTcbReady.then(function(ready){
+  rmEnsureTcbReady().then(function(ready){
     if (rmLegacyPullToken !== enterToken || rmCurrentRoomId !== docId) return;
     if (!ready || !rmDb){ rmShowDash(); return; }
     rmStartLegacyRoomSync(docId);
@@ -5218,7 +5276,7 @@ document.getElementById('rmBtnCreate').addEventListener('click', function(){
   var btn = this;
   btn.disabled = true;
 
-  rmTcbReady.then(function(ready){
+  rmEnsureTcbReady().then(function(ready){
     if (ready && rmDb){
       return rmRoomGateway('create', { room: roomData }, '创建旧版房间').then(function(result){
         var docId = result.docId;
@@ -5372,7 +5430,7 @@ function rmJoinByCode(){
   var btn = document.getElementById('heroJoinBtn');
   btn.disabled = true; btn.textContent = '查找中…';
 
-  rmTcbReady.then(function(ready){
+  rmEnsureTcbReady().then(function(ready){
     if (ready && rmDb){
       return rmRoomGateway('join', { code: code, type: 'legacy' }, '加入旧版房间').then(function(result){
         rmUpsertLocalRoom(result.docId, result.room);
@@ -5998,7 +6056,7 @@ function spinnerSpin(){
     setError(type, '');
     if (!name){ setError(type, '请先填写你自己的名字。'); nameInput.focus(); return; }
     setBusy(type, true, 'create');
-    rmTcbReady.then(function(ready){
+    rmEnsureTcbReady().then(function(ready){
       saveNickname(name);
       if (ready && rmDb) return addCloudRoomUnique(type, name, 3);
       if (rmTcbError || CLOUDBASE_ENV_ID !== '你的环境ID') throw (rmTcbError || new Error('CloudBase 尚未连接成功'));
@@ -6015,7 +6073,7 @@ function spinnerSpin(){
   }
 
   function findTypedRoom(type, code, name){
-    return rmTcbReady.then(function(ready){
+    return rmEnsureTcbReady().then(function(ready){
       if (ready && rmDb){
         return rmRoomGateway('join', { code: code, type: type, name: name }, '加入房间').then(function(result){
           return { docId: result.docId, room: rmUpsertLocalRoom(result.docId, result.room) };
@@ -6088,7 +6146,7 @@ function spinnerSpin(){
   }
 
   function findAnyTypedRoom(code, name){
-    return rmTcbReady.then(function(ready){
+    return rmEnsureTcbReady().then(function(ready){
       if (ready && rmDb){
         return rmRoomGateway('join', { code: code, type: 'auto', name: name }, '加入房间').then(function(result){
           return { docId: result.docId, room: rmUpsertLocalRoom(result.docId, result.room) };

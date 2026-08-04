@@ -104,4 +104,29 @@ assert.match(source, /schemaVersion:\s*3[\s\S]*?policy:\s*['"]owner-disband-only
 assert.match(source, /document\.execCommand\(['"]copy['"]\)\s*===\s*true/, "clipboard fallback must verify that copying actually succeeded");
 assert.match(source, /function\s+copyRoomCode\s*\(/, "room code copying needs reliable success/failure feedback");
 
+assert.match(source, /var\s+GL_MAX_EXPENSE_CENTS\s*=\s*1000000000000\s*;/, "ledger client cap must match roomGateway's 1e12-cent cap");
+assert.match(
+  source,
+  /function\s+glAmountToCents\s*\(value\)\s*\{[\s\S]*?Number\.isFinite\(amount\)[\s\S]*?amount\s*<=\s*0[\s\S]*?Number\.isSafeInteger\(cents\)[\s\S]*?cents\s*>\s*GL_MAX_EXPENSE_CENTS/,
+  "ledger amounts must be finite, positive safe-integer cents within the backend cap"
+);
+assert.match(source, /function\s+glAddExpense\s*\([\s\S]*?glAmountToCents\(amountEl\.value\)[\s\S]*?glShowInvalidAmount\(amountEl\)/, "new expenses must reject invalid amounts before local insertion");
+assert.match(source, /glSaveExpenseEdit[\s\S]*?glAmountToCents\(amountInput\.value\)[\s\S]*?glShowInvalidAmount\(amountInput\)/, "expense edits must reject invalid amounts before saving");
+
+assert.match(source, /inputEl\.dataset\.locationGeneration\s*=\s*String\(Number\(inputEl\.dataset\.locationGeneration\s*\|\|\s*0\)\s*\+\s*1\)/, "typing or selecting an address must advance the location generation");
+assert.match(source, /function\s+geolocateMe\s*\(inputEl\)\s*\{[\s\S]*?var\s+locationGeneration\s*=[\s\S]*?getCurrentPosition\(function\(status, result\)\{[\s\S]*?locationGeneration\)\s*return;[\s\S]*?reverseGeocodePosition[\s\S]*?locationGeneration\)\s*return;/, "stale geolocation and reverse-geocode callbacks must not overwrite a newer address");
+assert.match(source, /const\s+selectTip\s*=\s*\(e\)\s*=>\s*\{[\s\S]*?clearTimeout\(timer\);[\s\S]*?requestId\s*\+=\s*1;[\s\S]*?boxEl\.style\.display\s*=\s*['"]none['"]/, "selecting an address must cancel pending autocomplete responses");
+assert.match(source, /inputEl\.addEventListener\(['"]input['"][\s\S]*?boxEl\.style\.display\s*=\s*['"]none['"][\s\S]*?searchAddress\(inputEl\.value\.trim\(\),\s*350\)/, "typing a new query must hide cached suggestions until matching results arrive");
+
+assert.match(source, /var\s+swipeTransitionBusy\s*=\s*false\s*;/, "swipe flow needs a transition busy state");
+assert.match(source, /function\s+swipeAction\s*\(dir\)\s*\{\s*if\s*\(swipeTransitionBusy\s*\|\|\s*swipeIndex\s*>=\s*swipeDeck\.length\)\s*return;/, "rapid swipe button taps must be ignored while a card exits");
+assert.match(source, /function\s+flyOutCardEl\s*\(card, dir\)\s*\{\s*if\s*\(swipeTransitionBusy\s*\|\|\s*!card\s*\|\|\s*card\.dataset\.swipeExiting\s*===\s*['"]true['"]\)\s*return;[\s\S]*?swipeTransitionBusy\s*=\s*false;[\s\S]*?renderSwipeStack\(\);/, "swipe flow must unlock only after its exit animation completes");
+assert.match(source, /function\s+openFoodSwipe\s*\([\s\S]*?resetSwipeTransition\(\);[\s\S]*?function\s+restartFoodSwipe\s*\([\s\S]*?resetSwipeTransition\(\);/, "re-entering or restarting the swipe deck must reset transition state");
+
+assert.match(source, /function\s+rmEnsureTcbReady\s*\(\)[\s\S]*?rmGatewayTimeout\(loginRequest,\s*30000,\s*['"]CloudBase 登录['"]\)/, "CloudBase authentication must time out instead of leaving room controls busy forever");
+assert.match(source, /rmTcbError\s*=\s*null;[\s\S]*?rmBackendStatus\s*=\s*\{\s*state:\s*['"]starting['"]/, "a later room action must be able to start a fresh CloudBase login attempt");
+assert.match(source, /function\s+createTyped\s*\([\s\S]*?rmEnsureTcbReady\(\)\.then/, "typed room creation must use retryable bounded backend initialization");
+assert.match(source, /function\s+findAnyTypedRoom\s*\([\s\S]*?rmEnsureTcbReady\(\)\.then/, "universal room join must use retryable bounded backend initialization");
+assert.doesNotMatch(source, /a\.amap\.com\/jsapi_demos/, "map markers must not depend on the unreliable AMap demo-assets host");
+
 console.log(`index.html checks passed (${inlineScripts.length} inline scripts).`);
