@@ -1,0 +1,13 @@
+{
+  "pages": [
+    "pages/web/index"
+  ],
+  "window": {
+    "navigationBarTitleText": "拼途",
+    "navigationBarBackgroundColor": "#ffffff",
+    "navigationBarTextStyle": "black",
+    "backgroundColor": "#ffffff"
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json"
+}

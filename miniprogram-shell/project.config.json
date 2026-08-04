@@ -1,0 +1,9 @@
+{
+  "appid": "wxe1fe19432c29e3cd",
+  "projectname": "pintu-miniprogram-shell",
+  "compileType": "miniprogram",
+  "setting": {
+    "es6": true,
+    "minified": true
+  }
+}
