@@ -1,0 +1,42 @@
+<view class="page">
+  <view class="title">拼途</view>
+  <view class="muted">一起出发，把见面和账目留在同一个房间。</view>
+
+  <view class="card">
+    <view class="gold section-title">统一加入</view>
+    <input class="input" placeholder="你的名字" value="{{name}}" maxlength="24" bindinput="nameInput" />
+    <input class="input" placeholder="8 位房间码" value="{{code}}" maxlength="8" bindinput="codeInput" />
+    <button class="btn" bindtap="join" loading="{{busy}}" disabled="{{busy}}">{{busy ? '加入中…' : '加入房间'}}</button>
+  </view>
+
+  <view class="card">
+    <view class="section-title">开始一趟协作</view>
+    <view class="tool" bindtap="openMidpoint">
+      <view class="tool-icon">⌖</view>
+      <view class="tool-copy">
+        <view>协作碰面</view>
+        <view class="muted">共享出发点，估算参考中点并共同选去处</view>
+      </view>
+      <text>›</text>
+    </view>
+    <view class="tool" bindtap="openLedger">
+      <view class="tool-icon">¥</view>
+      <view class="tool-copy">
+        <view>共享账本</view>
+        <view class="muted">记录支出，自动分摊结算</view>
+      </view>
+      <text>›</text>
+    </view>
+    <view class="tool" bindtap="openSpinner">
+      <view class="tool-icon">◌</view>
+      <view class="tool-copy">
+        <view>幸运转盘</view>
+        <view class="muted">转起来，再公布答案</view>
+      </view>
+      <text>›</text>
+    </view>
+  </view>
+
+  <button class="btn gold" bindtap="openTrips">查看最近房间</button>
+  <button class="privacy-link" bindtap="openPrivacy">隐私保护指引</button>
+</view>

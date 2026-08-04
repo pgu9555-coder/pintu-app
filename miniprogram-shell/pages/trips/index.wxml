@@ -1,0 +1,22 @@
+<view class="page">
+  <view class="title">最近房间</view>
+  <view class="muted">这里保存本机入口；云端房间会一直存在，直到房主主动解散。</view>
+
+  <view wx:if="{{!rooms.length}}" class="card muted">还没有最近房间，可从首页创建或输入房间码加入。</view>
+
+  <view
+    wx:for="{{rooms}}"
+    wx:key="docId"
+    class="card trip-row"
+    bindtap="open"
+    data-id="{{item.docId}}"
+    data-type="{{item.room.toolType}}"
+  >
+    <view class="trip-icon">{{item.typeIcon}}</view>
+    <view class="trip-copy">
+      <view class="trip-name">{{item.room.name}}</view>
+      <view class="muted">{{item.typeLabel}} · 房间码 {{item.room.code}}</view>
+    </view>
+    <button class="remove-button" catchtap="remove" data-id="{{item.docId}}">移除</button>
+  </view>
+</view>

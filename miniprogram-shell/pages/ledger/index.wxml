@@ -1,0 +1,77 @@
+<view class="page">
+  <block wx:if="{{!room}}">
+    <view class="card">
+      <view class="title">共享账本</view>
+      <view class="muted">一起记录支出，自动计算结算。</view>
+      <input class="input" placeholder="你的名字" value="{{name}}" maxlength="24" bindinput="nameInput" />
+      <button class="btn" bindtap="create" loading="{{busy}}" disabled="{{busy}}">创建账本房间</button>
+      <input class="input" placeholder="8 位账本码" value="{{code}}" maxlength="8" bindinput="codeInput" />
+      <button class="btn gold" bindtap="join" loading="{{busy}}" disabled="{{busy}}">加入账本</button>
+    </view>
+  </block>
+
+  <block wx:else>
+    <view class="card">
+      <view class="title">{{ledger.name || room.name}}</view>
+      <view class="muted">房间码 {{room.code}} · {{syncText}}</view>
+      <view class="room-actions">
+        <button class="btn gold compact" bindtap="copyCode" disabled="{{busy}}">复制房间码</button>
+        <button class="btn compact" open-type="share" disabled="{{busy}}">邀请成员</button>
+      </view>
+    </view>
+
+    <view class="card">
+      <view class="section-title">成员</view>
+      <view wx:for="{{ledger.members}}" wx:key="id" class="member-row">
+        <view>{{item.name}}</view>
+        <view wx:if="{{!item.uid}}" class="member-actions">
+          <button class="text-btn" catchtap="renameMember" data-id="{{item.id}}" disabled="{{busy}}">改名</button>
+          <button class="text-btn delete-btn" catchtap="removeMember" data-id="{{item.id}}" disabled="{{busy}}">移除</button>
+        </view>
+      </view>
+      <input class="input" placeholder="成员名字" value="{{memberName}}" maxlength="24" bindinput="memberInput" />
+      <button class="btn" bindtap="addMember" loading="{{busy}}" disabled="{{busy}}">添加成员</button>
+    </view>
+
+    <view class="card">
+      <view class="section-title">{{editingId ? '编辑支出' : '记录支出'}}</view>
+      <input class="input" placeholder="例如：晚餐" value="{{desc}}" bindinput="descInput" />
+      <input class="input" type="digit" placeholder="金额（元）" value="{{amount}}" bindinput="amountInput" />
+      <picker range="{{memberNamesArray}}" value="{{payerIndex}}" bindchange="payerChange" disabled="{{busy}}">
+        <view class="input">付款人：{{memberNamesArray[payerIndex] || '请先添加成员'}}</view>
+      </picker>
+      <view class="muted split-label">分摊成员</view>
+      <checkbox-group bindchange="splitChange">
+        <label wx:for="{{ledger.members}}" wx:key="id" class="check">
+          <checkbox value="{{item.id}}" checked="{{item.checked}}" disabled="{{busy}}" />{{item.name}}
+        </label>
+      </checkbox-group>
+      <button class="btn" bindtap="saveExpense" loading="{{busy}}" disabled="{{busy}}">{{editingId ? '保存修改' : '添加支出'}}</button>
+      <button wx:if="{{editingId}}" class="btn gold" bindtap="cancelEdit" disabled="{{busy}}">取消编辑</button>
+    </view>
+
+    <view class="card">
+      <view class="summary-row">
+        <view class="section-title">支出</view>
+        <view class="total">合计 ¥ {{totalYuan}}</view>
+      </view>
+      <view wx:if="{{!ledger.expenses.length}}" class="muted">还没有支出</view>
+      <view wx:for="{{ledger.expenses}}" wx:key="id" class="expense">
+        <view class="expense-top"><view>{{item.desc}}</view><view class="gold">¥ {{item.amountYuan}}</view></view>
+        <view class="muted">{{item.payerName}} 付 · {{item.splitNames}} 分摊</view>
+        <view class="expense-actions">
+          <button class="text-btn" catchtap="editExpense" data-id="{{item.id}}" disabled="{{busy}}">修改</button>
+          <button class="text-btn delete-btn" catchtap="deleteExpense" data-id="{{item.id}}" disabled="{{busy}}">删除</button>
+        </view>
+      </view>
+    </view>
+
+    <view class="card">
+      <view class="section-title">结算建议</view>
+      <view wx:for="{{settlements}}" wx:key="key"><view>{{item.from}} → {{item.to}} <text class="gold">¥ {{item.yuan}}</text></view></view>
+      <view wx:if="{{!settlements.length}}" class="muted">已结清</view>
+    </view>
+
+    <button class="btn danger" bindtap="exitRoom" loading="{{busy}}" disabled="{{busy}}">{{isOwner ? '解散房间' : '退出房间'}}</button>
+  </block>
+</view>

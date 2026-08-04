@@ -17,6 +17,8 @@ on:
       - scripts/test-room-gateway.cjs
       - scripts/test-index-html.cjs
       - scripts/test-security-config.cjs
+      - scripts/test-miniprogram-native.cjs
+      - "miniprogram-shell/**"
       - .github/workflows/deploy-cloudbase.yml
   workflow_dispatch:
     inputs:
@@ -76,6 +78,7 @@ jobs:
           node scripts/test-migrate-room-members.cjs
           node scripts/test-index-html.cjs
           node scripts/test-security-config.cjs
+          node scripts/test-miniprogram-native.cjs
 
       - name: Deploy room access gateway
         run: tcb fn deploy roomGateway --force --yes

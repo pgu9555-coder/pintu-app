@@ -1,13 +1,8 @@
 {
-  "pages": [
-    "pages/web/index"
-  ],
-  "window": {
-    "navigationBarTitleText": "拼途",
-    "navigationBarBackgroundColor": "#ffffff",
-    "navigationBarTextStyle": "black",
-    "backgroundColor": "#ffffff"
-  },
-  "style": "v2",
-  "sitemapLocation": "sitemap.json"
+  "pages": ["pages/home/index", "pages/midpoint/index", "pages/ledger/index", "pages/spinner/index", "pages/trips/index"],
+  "window": {"navigationBarTitleText":"\u62fc\u9014", "navigationBarBackgroundColor":"#F7F1E6", "navigationBarTextStyle":"black", "backgroundColor":"#F7F1E6"},
+  "permission": {"scope.userLocation": {"desc":"\u7528\u4e8e\u9009\u62e9\u672c\u4eba\u51fa\u53d1\u5730\u5e76\u4f30\u7b97\u53c2\u8003\u4e2d\u70b9"}},
+  "requiredPrivateInfos": ["chooseLocation"],
+  "tabBar": {"color":"#78847D", "selectedColor":"#143D35", "backgroundColor":"#FFFDF8", "list":[{"pagePath":"pages/home/index", "text":"\u9996\u9875"},{"pagePath":"pages/trips/index", "text":"\u884c\u7a0b"}]},
+  "style": "v2", "sitemapLocation": "sitemap.json"
 }

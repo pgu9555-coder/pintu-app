@@ -1,0 +1,8 @@
+.section-title { font-size: 32rpx; font-weight: 700; margin-bottom: 10rpx; }
+.tool { display:flex; align-items:center; gap:20rpx; min-height:96rpx; padding:22rpx 0; border-bottom:1rpx solid #E6DBC8; }
+.tool:last-child { border:0; }
+.tool > text { margin-left:auto; font-size:42rpx; }
+.tool-copy { flex:1; min-width:0; }
+.tool-icon { width:72rpx; height:72rpx; display:flex; align-items:center; justify-content:center; border-radius:18rpx; background:#E5EEE8; color:#143D35; font-size:38rpx; }
+.privacy-link { margin:8rpx auto 0; padding:8rpx 24rpx; min-width:0; line-height:48rpx; background:transparent; color:#78847D; font-size:24rpx; }
+.privacy-link::after { border:0; }

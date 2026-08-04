@@ -1,0 +1,24 @@
+.section-title { font-size:32rpx; font-weight:700; margin-bottom:16rpx; }
+.midpoint-map { width:100%; height:420rpx; border-radius:18rpx; overflow:hidden; }
+.room-actions { display:flex; gap:16rpx; margin-top:8rpx; }
+.room-actions .compact { flex:1; min-width:0; }
+.midpoint-note { margin-top:16rpx; line-height:1.6; }
+.section-heading, .candidate-topline, .candidate-actions, .vote-row { display:flex; align-items:center; }
+.section-heading { justify-content:space-between; }
+.section-heading .section-title { margin-bottom:0; }
+.decision-status, .confirmed-tag { color:#fff; background:#143D35; border-radius:999rpx; }
+.decision-status { display:inline-block; padding:8rpx 18rpx; margin-bottom:12rpx; font-size:24rpx; }
+.empty-decision { padding:16rpx 0 4rpx; }
+.candidate-topline { gap:12rpx; justify-content:space-between; }
+.candidate-name { font-size:30rpx; font-weight:700; flex:1; min-width:0; }
+.confirmed-tag { padding:4rpx 12rpx; font-size:21rpx; flex-shrink:0; }
+.candidate-address { margin-top:6rpx; line-height:1.45; }
+.vote-summary { color:#52675F; font-size:24rpx; margin-top:14rpx; }
+.vote-row { flex-wrap:wrap; gap:12rpx; margin-top:16rpx; }
+.vote-option, .text-action { margin:0; padding:0 18rpx; line-height:58rpx; font-size:24rpx; border-radius:12rpx; }
+.vote-option { color:#143D35; background:#F3EBDD; border:1rpx solid #E2D4BD; }
+.vote-option.selected { color:#fff; background:#143D35; border-color:#143D35; }
+.vote-option.clear { color:#78847D; background:#FFFDF8; }
+.candidate-actions { gap:16rpx; margin-top:16rpx; }
+.text-action { color:#143D35; background:transparent; border:0; text-decoration:underline; }
+.confirm-action { color:#B8842A; }

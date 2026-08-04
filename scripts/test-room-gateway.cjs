@@ -3,6 +3,9 @@ const Module = require("node:module");
 const path = require("node:path");
 
 let currentUid = null;
+let currentWxContext = null;
+let nextModerationSuggestion = "pass";
+const moderationCalls = [];
 let nextId = 1;
 const rooms = new Map();
 
@@ -85,9 +88,28 @@ const fakeCloudbase = {
   }
 };
 
+const fakeWxCloud = {
+  DYNAMIC_CURRENT_ENV: Symbol("dynamic-current-env"),
+  init() {},
+  openapi: {
+    security: {
+      async msgSecCheck(options) {
+        moderationCalls.push(clone(options));
+        const suggest = nextModerationSuggestion;
+        nextModerationSuggestion = "pass";
+        return { result: { suggest } };
+      }
+    }
+  },
+  getWXContext() {
+    return currentWxContext || {};
+  }
+};
+
 const originalLoad = Module._load;
 Module._load = function patchedLoad(request, parent, isMain) {
   if (request === "@cloudbase/node-sdk") return fakeCloudbase;
+  if (request === "wx-server-sdk") return fakeWxCloud;
   return originalLoad.call(this, request, parent, isMain);
 };
 
@@ -97,12 +119,121 @@ Module._load = originalLoad;
 
 async function call(uid, data) {
   currentUid = uid;
+  currentWxContext = null;
+  return gateway.main(data || {});
+}
+
+async function callWx(openid, data, appid = "wx-test-pintu") {
+  currentUid = null;
+  currentWxContext = openid ? { OPENID: openid, APPID: appid } : {};
   return gateway.main(data || {});
 }
 
 async function main() {
   const spoofed = await call(null, { action: "create", userInfo: { uid: "forged" }, room: {} });
   assert.equal(spoofed.code, "UNAUTHENTICATED", "client-supplied uid must never be trusted");
+
+  const miniSpoofed = await callWx(null, { action: "create", userInfo: { uid: "forged-wx" }, room: {} });
+  assert.equal(miniSpoofed.code, "UNAUTHENTICATED", "a forged mini-program event identity must never be trusted");
+
+  const wxOwnerUid = "wx:wx-test-pintu:openid-owner";
+  const wxMemberUid = "wx:wx-test-pintu:openid-member";
+  const wxCreated = await callWx("openid-owner", {
+    action: "create",
+    room: { toolType: "ledger", name: "微信账本", members: [{ id: "wx-owner", name: "微信房主" }] }
+  });
+  assert.equal(wxCreated.ok, true, "a trusted WeChat OPENID can create a room");
+  assert.deepEqual(wxCreated.data.room.memberUids, [wxOwnerUid]);
+  assert.equal(wxCreated.data.viewer.uid, wxOwnerUid);
+  assert.equal(wxCreated.data.viewer.isOwner, true);
+  assert.equal(wxCreated.data.room.schemaVersion, 4);
+  assert.equal(wxCreated.data.room.accessPlatform, "wechat-mini-program");
+  assert.ok(wxCreated.data.viewer.memberId);
+  assert.ok(wxCreated.data.viewer.membershipEpoch);
+  assert.equal(moderationCalls.some((call) => call.openid === "openid-owner" && call.version === 2), true);
+  const wxDocId = wxCreated.data.docId;
+  const wxJoined = await callWx("openid-member", {
+    action: "join", type: "ledger", code: wxCreated.data.room.code, name: "微信成员"
+  });
+  assert.equal(wxJoined.ok, true, "a second WeChat OPENID can join by room code");
+  assert.equal(wxJoined.data.viewer.uid, wxMemberUid);
+  assert.equal(wxJoined.data.viewer.isOwner, false);
+  const wxRead = await callWx("openid-member", { action: "getRoom", docId: wxDocId });
+  assert.equal(wxRead.ok, true, "a joined WeChat identity can read the room");
+  assert.equal(wxRead.data.room.members.some((member) => member.uid === wxMemberUid), true);
+  assert.equal(wxRead.data.viewer.uid, wxMemberUid, "room reads return only the authenticated caller viewer");
+  const wxLedger = clone(wxRead.data.room.ledger);
+  wxLedger.name = "微信同步账本";
+  wxLedger.nameUpdatedAt = Date.now();
+  wxLedger.updatedAt = wxLedger.nameUpdatedAt;
+  wxLedger.revision = wxLedger.nameUpdatedAt;
+  const wxSynced = await callWx("openid-member", {
+    action: "syncLedger", docId: wxDocId, ledger: wxLedger, membershipEpoch: wxRead.data.viewer.membershipEpoch
+  });
+  assert.equal(wxSynced.ok, true, "a joined WeChat identity can sync a ledger");
+  const wxOwnerRead = await callWx("openid-owner", { action: "getRoom", docId: wxDocId });
+  assert.equal(wxOwnerRead.data.room.ledger.name, "微信同步账本", "WeChat writes are shared between OPENIDs");
+  const wxOutsiderRead = await callWx("openid-outsider", { action: "getRoom", docId: wxDocId });
+  assert.equal(wxOutsiderRead.data.room, null, "different WeChat OPENIDs remain isolated from private rooms");
+  assert.equal(wxOutsiderRead.data.viewer, null);
+  const wxForgedIdentity = await callWx("openid-outsider", {
+    action: "getRoom", docId: wxDocId, userInfo: { uid: wxOwnerUid }
+  });
+  assert.equal(wxForgedIdentity.data.room, null, "event.userInfo cannot impersonate a WeChat room owner");
+  const forgedPlatformRead = await call(wxOwnerUid, {
+    action: "getRoom", docId: wxDocId, accessPlatform: "wechat-mini-program"
+  });
+  assert.equal(forgedPlatformRead.data.room, null, "event platform fields cannot expose a mini-program room to web callers");
+  const forgedPlatformJoin = await call("web-joiner", {
+    action: "join", code: wxCreated.data.room.code, type: "ledger", name: "Web forged platform", accessPlatform: "wechat-mini-program"
+  });
+  assert.equal(forgedPlatformJoin.code, "ROOM_NOT_FOUND");
+  const forgedPlatformWrite = await call(wxOwnerUid, {
+    action: "syncLedger", docId: wxDocId, ledger: wxLedger, membershipEpoch: wxCreated.data.viewer.membershipEpoch,
+    accessPlatform: "wechat-mini-program"
+  });
+  assert.equal(forgedPlatformWrite.code, "ROOM_NOT_FOUND", "web writes must not cross into a mini-program room");
+  const platformRequestId = "platform_idempotency_123";
+  const wxIdempotent = await callWx("openid-idempotent", {
+    action: "create", clientRequestId: platformRequestId,
+    room: { toolType: "ledger", name: "平台幂等", members: [{ name: "平台房主" }] }
+  });
+  const crossPlatformRetry = await call("wx:wx-test-pintu:openid-idempotent", {
+    action: "create", clientRequestId: platformRequestId,
+    room: { toolType: "ledger", name: "平台幂等", members: [{ name: "平台房主" }] },
+    accessPlatform: "wechat-mini-program"
+  });
+  assert.equal(crossPlatformRetry.ok, true);
+  assert.notEqual(crossPlatformRetry.data.docId, wxIdempotent.data.docId, "create idempotency must not reuse a room from another platform");
+  assert.equal(crossPlatformRetry.data.room.accessPlatform, "web");
+
+  const wxMidpoint = await callWx("openid-owner", {
+    action: "create", room: { toolType: "midpoint", name: "微信碰面", members: [{ name: "微信房主" }] }
+  });
+  nextModerationSuggestion = "risky";
+  const riskyCandidates = await callWx("openid-owner", {
+    action: "publishDecisionCandidates", docId: wxMidpoint.data.docId, membershipEpoch: wxMidpoint.data.viewer.membershipEpoch,
+    candidates: [{ name: "危险候选", lat: 22.5, lng: 113.9, typeStr: "餐厅", dist: 1, isMall: false, isDrink: false }]
+  });
+  assert.equal(riskyCandidates.code, "CONTENT_REJECTED", "candidate text must fail closed when mini-program moderation flags it");
+  const wxLegacy = await callWx("openid-owner", {
+    action: "create", room: { name: "微信旧房间", members: [{ name: "甲" }, { name: "乙" }] }
+  });
+  nextModerationSuggestion = "risky";
+  const riskyLegacyAdd = await callWx("openid-owner", {
+    action: "updateLegacyMembers", docId: wxLegacy.data.docId, operation: "add", name: "危险成员"
+  });
+  assert.equal(riskyLegacyAdd.code, "CONTENT_REJECTED", "legacy member additions must fail closed when moderation flags them");
+  assert.equal(rooms.get(wxLegacy.data.docId).members.length, 2);
+
+  const beforeRiskyCreate = rooms.size;
+  nextModerationSuggestion = "risky";
+  const riskyCreate = await callWx("openid-risky", {
+    action: "create",
+    room: { toolType: "ledger", name: "不合规内容", members: [{ name: "风险用户" }] }
+  });
+  assert.equal(riskyCreate.code, "CONTENT_REJECTED", "risky mini-program text must be rejected server-side");
+  assert.equal(rooms.size, beforeRiskyCreate, "rejected content must not create a room");
 
   const created = await call("owner", {
     action: "create",
@@ -114,8 +245,14 @@ async function main() {
   });
   assert.equal(created.ok, true);
   assert.match(created.data.room.code, /^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{8}$/);
+  assert.equal(created.data.docId, `room-code-${created.data.room.code}`, "the room code is reserved by an atomic document id");
+  assert.deepEqual(
+    { uid: created.data.viewer.uid, isOwner: created.data.viewer.isOwner },
+    { uid: "owner", isOwner: true }
+  );
   assert.deepEqual(created.data.room.memberUids, ["owner"]);
-  assert.equal(created.data.room.schemaVersion, 3);
+  assert.equal(created.data.room.schemaVersion, 4);
+  assert.equal(created.data.room.accessPlatform, "web");
   assert.deepEqual(created.data.room.lifecycle.policy, "owner-disband-only");
   assert.equal(typeof created.data.room.lifecycle.createdAtMs, "number");
   assert.equal(Object.hasOwn(created.data.room, "expiresAt"), false);
@@ -124,6 +261,20 @@ async function main() {
   const ownerRead = await call("owner", { action: "getRoom", docId });
   assert.equal(ownerRead.ok, true);
   assert.equal(ownerRead.data.room._id, docId);
+  assert.equal(ownerRead.data.viewer.uid, "owner");
+  const miniForgedWebRead = await callWx("openid-owner", {
+    action: "getRoom", docId, accessPlatform: "web"
+  });
+  assert.equal(miniForgedWebRead.data.room, null, "event platform fields cannot expose a web room to mini-program callers");
+  const miniForgedWebJoin = await callWx("openid-member", {
+    action: "join", code: created.data.room.code, type: "ledger", name: "Mini forged platform", accessPlatform: "web"
+  });
+  assert.equal(miniForgedWebJoin.code, "ROOM_NOT_FOUND");
+  const miniForgedWebWrite = await callWx("openid-owner", {
+    action: "syncLedger", docId, ledger: clone(created.data.room.ledger), membershipEpoch: created.data.viewer.membershipEpoch,
+    accessPlatform: "web"
+  });
+  assert.equal(miniForgedWebWrite.code, "ROOM_NOT_FOUND", "mini-program writes must not cross into a web room");
   const outsiderRead = await call("not-a-member", { action: "getRoom", docId });
   assert.equal(outsiderRead.ok, true);
   assert.equal(outsiderRead.data.room, null, "getRoom must not expose rooms to non-members");
@@ -161,6 +312,8 @@ async function main() {
   assert.equal(joined.data.room.memberUids.includes("member"), true);
   assert.equal(joined.data.room.members.some((item) => item.uid === "member"), true);
   assert.equal(joined.data.room.ledger.members.some((item) => item.uid === "member"), true);
+  const ownerEpoch = created.data.viewer.membershipEpoch;
+  const memberEpoch = joined.data.viewer.membershipEpoch;
   const memberRead = await call("member", { action: "getRoom", docId });
   assert.equal(memberRead.data.room.memberUids.includes("member"), true);
 
@@ -211,12 +364,14 @@ async function main() {
   const ownerSync = await call("owner", {
     action: "syncLedger",
     docId,
+    membershipEpoch: ownerEpoch,
     ledger: { ...clone(baseLedger), expenses: [ownerExpense], revision: stamp, updatedAt: stamp, updatedBy: "owner" }
   });
   assert.equal(ownerSync.ok, true);
   const memberSync = await call("member", {
     action: "syncLedger",
     docId,
+    membershipEpoch: memberEpoch,
     ledger: { ...clone(baseLedger), expenses: [memberExpense], revision: stamp + 1, updatedAt: stamp + 1, updatedBy: "member" }
   });
   assert.equal(memberSync.ok, true);
@@ -245,7 +400,7 @@ async function main() {
   });
   forgedUidLedger.revision = forgedAt;
   forgedUidLedger.updatedAt = forgedAt;
-  const forgedUidSync = await call("owner", { action: "syncLedger", docId, ledger: forgedUidLedger });
+  const forgedUidSync = await call("owner", { action: "syncLedger", docId, membershipEpoch: ownerEpoch, ledger: forgedUidLedger });
   assert.equal(forgedUidSync.ok, true);
   assert.equal(forgedUidSync.data.ledger.members.find((item) => item.id === ownerMember.id).uid, "owner");
   assert.equal(forgedUidSync.data.ledger.members.find((item) => item.id === joinedMember.id).uid, "member");
@@ -265,7 +420,7 @@ async function main() {
 
   const futureLedger = clone(memberSync.data.ledger);
   futureLedger.nameUpdatedAt = Date.now() + 10 * 60 * 1000;
-  const futureSync = await call("owner", { action: "syncLedger", docId, ledger: futureLedger });
+  const futureSync = await call("owner", { action: "syncLedger", docId, membershipEpoch: ownerEpoch, ledger: futureLedger });
   assert.equal(futureSync.code, "INVALID_LEDGER");
   assert.equal(JSON.stringify(rooms.get(docId).ledger), beforeDeniedSync);
 
@@ -280,13 +435,13 @@ async function main() {
     updatedAt: stamp + 2,
     updatedBy: "owner"
   });
-  const invalidReference = await call("owner", { action: "syncLedger", docId, ledger: invalidReferenceLedger });
+  const invalidReference = await call("owner", { action: "syncLedger", docId, membershipEpoch: ownerEpoch, ledger: invalidReferenceLedger });
   assert.equal(invalidReference.code, "INVALID_LEDGER");
   assert.equal(JSON.stringify(rooms.get(docId).ledger), beforeDeniedSync);
 
   const injectedIdLedger = clone(memberSync.data.ledger);
   injectedIdLedger.members[0].id = 'x" onmouseover="alert(1)';
-  const injectedId = await call("owner", { action: "syncLedger", docId, ledger: injectedIdLedger });
+  const injectedId = await call("owner", { action: "syncLedger", docId, membershipEpoch: ownerEpoch, ledger: injectedIdLedger });
   assert.equal(injectedId.code, "INVALID_LEDGER");
   assert.equal(JSON.stringify(rooms.get(docId).ledger), beforeDeniedSync);
 
@@ -295,7 +450,7 @@ async function main() {
     room: { toolType: "midpoint", name: "碰面测试", members: [{ name: "碰面房主" }] }
   });
   assert.equal(midpointCreated.ok, true);
-  assert.equal(midpointCreated.data.room.schemaVersion, 3);
+  assert.equal(midpointCreated.data.room.schemaVersion, 4);
   assert.deepEqual(midpointCreated.data.room.lifecycle.policy, "owner-disband-only");
   assert.equal(typeof midpointCreated.data.room.lifecycle.createdAtMs, "number");
   assert.equal(Object.hasOwn(midpointCreated.data.room, "expiresAt"), false);
@@ -562,7 +717,7 @@ async function main() {
   assert.equal(rooms.get(docId).ledger.members.some((item) => item.uid === "member"), true);
   const leftRead = await call("member", { action: "getRoom", docId });
   assert.equal(leftRead.data.room, null, "a member must lose read access immediately after leaving");
-  const leftSync = await call("member", { action: "syncLedger", docId, ledger: memberSync.data.ledger });
+  const leftSync = await call("member", { action: "syncLedger", docId, membershipEpoch: memberEpoch, ledger: memberSync.data.ledger });
   assert.equal(leftSync.code, "ROOM_NOT_FOUND");
   const rejoined = await call("member", {
     action: "join",
@@ -571,6 +726,30 @@ async function main() {
     name: "成员"
   });
   assert.equal(rejoined.ok, true, "a member can rejoin after leaving with the same room code");
+  const staleRejoinedSync = await call("member", {
+    action: "syncLedger", docId, membershipEpoch: memberEpoch, ledger: memberSync.data.ledger
+  });
+  assert.equal(staleRejoinedSync.code, "STALE_MEMBERSHIP", "a pre-leave ledger write must be rejected after rejoining");
+  const currentRejoinedSync = await call("member", {
+    action: "syncLedger", docId, membershipEpoch: rejoined.data.viewer.membershipEpoch, ledger: memberSync.data.ledger
+  });
+  assert.equal(currentRejoinedSync.ok, true, "the current membership epoch can sync the ledger");
+
+  const oldTypedDocId = "room-old-typed-without-member-uids";
+  rooms.set(oldTypedDocId, {
+    _id: oldTypedDocId,
+    toolType: "ledger",
+    ownerUid: "old-owner",
+    members: [
+      { id: "old-owner-member", uid: "old-owner", name: "Old owner" },
+      { id: "old-member-member", uid: "old-member", name: "Old member" }
+    ],
+    ledger: { members: [], expenses: [], memberTombstones: {}, expenseTombstones: {} }
+  });
+  const oldTypedRead = await call("old-member", { action: "getRoom", docId: oldTypedDocId });
+  assert.equal(oldTypedRead.data.room, null, "rooms without the v4 access platform must fail closed");
+  const oldTypedLeave = await call("old-member", { action: "leave", docId: oldTypedDocId });
+  assert.equal(oldTypedLeave.code, "ROOM_NOT_FOUND", "old rooms cannot be mutated without a trusted platform binding");
 
   const ownerLeave = await call("owner", { action: "leave", docId });
   assert.equal(ownerLeave.code, "OWNER_MUST_DISBAND");
@@ -599,6 +778,7 @@ async function main() {
     _id: inferredOwnerDocId,
     code: "QWERTY",
     toolType: "legacy",
+    accessPlatform: "web",
     memberUids: ["inferred-owner"],
     members: [],
     ledger: { members: [], expenses: [], memberTombstones: {}, expenseTombstones: {} }
@@ -612,6 +792,7 @@ async function main() {
     _id: pollutedOwnerDocId,
     code: "PLUTED",
     toolType: "ledger",
+    accessPlatform: "web",
     memberUids: ["historical", "forged", "active-owner"],
     members: [{ id: "active-id", uid: "active-owner", name: "Active owner" }],
     ledger: {
@@ -642,6 +823,7 @@ async function main() {
     _id: pollutedJoinDocId,
     code: "JKLMNP",
     toolType: "ledger",
+    accessPlatform: "web",
     ownerUid: "active-owner",
     memberUids: ["active-owner", "departed", "forged"],
     members: [{ id: "active-id", uid: "active-owner", name: "Active owner", color: "#0F3D36" }],
@@ -677,6 +859,7 @@ async function main() {
     _id: pollutedMidpointDocId,
     code: "MNPQRS",
     toolType: "midpoint",
+    accessPlatform: "web",
     ownerUid: "mid-active-owner",
     memberUids: ["mid-active-owner", "mid-departed"],
     members: [{ id: "mid-active-id", uid: "mid-active-owner", name: "Active midpoint owner" }],
@@ -704,6 +887,7 @@ async function main() {
     code: "ZXCVBN",
     name: "待认领旧房间",
     toolType: "midpoint",
+    accessPlatform: "web",
     memberUids: [],
     members: [],
     meetup: { people: [] }
@@ -724,6 +908,7 @@ async function main() {
     room: { toolType: "ledger", name: "合并上限测试", members: [{ name: "上限房主" }] }
   });
   const limitDocId = limitCreated.data.docId;
+  const limitOwnerEpoch = limitCreated.data.viewer.membershipEpoch;
   const limitBase = clone(limitCreated.data.room.ledger);
   const firstTombstones = {};
   const secondTombstones = {};
@@ -734,6 +919,7 @@ async function main() {
   const firstLimitSync = await call("limit-owner", {
     action: "syncLedger",
     docId: limitDocId,
+    membershipEpoch: limitOwnerEpoch,
     ledger: { ...clone(limitBase), memberTombstones: firstTombstones, updatedAt: stamp + 20, revision: stamp + 20 }
   });
   assert.equal(firstLimitSync.ok, true);
@@ -741,6 +927,7 @@ async function main() {
   const rejectedLimitSync = await call("limit-owner", {
     action: "syncLedger",
     docId: limitDocId,
+    membershipEpoch: limitOwnerEpoch,
     ledger: { ...clone(limitBase), memberTombstones: secondTombstones, updatedAt: stamp + 21, revision: stamp + 21 }
   });
   assert.equal(rejectedLimitSync.code, "INVALID_LEDGER");

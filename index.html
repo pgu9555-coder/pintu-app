@@ -3999,8 +3999,15 @@ function glFlushCloudSync(roomDocId){
   var attemptToken = ++state.attemptToken;
   setRoomBadge('syncing', '● 正在同步');
   var writtenLedger = payload;
+  var roomForMembership = (typeof ROOMS !== 'undefined' && ROOMS.find)
+    ? ROOMS.find(function(room){ return room && room.docId === roomDocId; })
+    : null;
   glPromiseTimeout(
-    rmRoomGateway('syncLedger', { docId: roomDocId, ledger: payload }, '写入共享账本'),
+    rmRoomGateway('syncLedger', {
+      docId: roomDocId,
+      ledger: payload,
+      membershipEpoch: rmMembershipEpochForRoom(roomForMembership)
+    }, '写入共享账本'),
     7000,
     '写入共享账本'
   ).then(function(result){
@@ -6024,7 +6031,7 @@ function spinnerSpin(){
     var data = {
       name: roomName,
       code: rmGenCode(), toolType: type, members: [member], nextMemberId: 2,
-      schemaVersion: 3, lifecycle: { policy: 'owner-disband-only', createdAtMs: createdAtMs },
+      schemaVersion: 4, lifecycle: { policy: 'owner-disband-only', createdAtMs: createdAtMs },
       ownerUid: window.rmMyUid,
       tripId: null, ledger: null,
       meetup: type === 'midpoint' ? { people: [{ uid: window.rmMyUid, name: name, address: '', lat: null, lng: null, color: LOC_COLORS[0] }] } : { people: [] },

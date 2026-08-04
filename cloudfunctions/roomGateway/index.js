@@ -2,6 +2,7 @@
 
 const crypto = require("node:crypto");
 const cloudbase = require("@cloudbase/node-sdk");
+const wxCloud = require("wx-server-sdk");
 
 const ROOM_COLLECTION = "rooms";
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -19,6 +20,7 @@ const MAX_JOIN_ATTEMPTS_PER_WINDOW = 20;
 const joinAttemptBuckets = new Map();
 const app = cloudbase.init({ env: cloudbase.SYMBOL_CURRENT_ENV });
 const db = app.database();
+wxCloud.init({ env: wxCloud.DYNAMIC_CURRENT_ENV });
 
 function success(data) {
   return { ok: true, data };
@@ -79,6 +81,22 @@ function isActiveRoomMember(room, uid) {
     return activeTopLevelMemberUids(room).includes(uid);
   }
   return Array.isArray(room.memberUids) && room.memberUids.includes(uid);
+}
+
+/* Return only the authenticated caller's own membership. Clients must never
+   infer identity from a nickname or from a UID cached by another WeChat
+   account on the same device. */
+function roomViewer(room, uid) {
+  if (!isActiveRoomMember(room, uid)) return null;
+  const members = Array.isArray(room.members) ? room.members : [];
+  const member = members.find((item) => item && item.uid === uid) || {};
+  return {
+    uid,
+    memberId: member.id || null,
+    name: cleanText(member.name, 24),
+    membershipEpoch: validMembershipEpoch(member.membershipEpoch) || null,
+    isOwner: inferredRoomOwnerUid(room, uid) === uid
+  };
 }
 
 function inputError(message) {
@@ -328,13 +346,116 @@ function validateLedgerReferences(ledger) {
   });
 }
 
+function callerWechatContext() {
+  try {
+    const context = wxCloud.getWXContext() || {};
+    const openid = typeof context.OPENID === "string" ? context.OPENID.trim() : "";
+    const appid = typeof context.APPID === "string" ? context.APPID.trim() : "";
+    return openid && appid ? { openid, appid } : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+/* Derived solely from the trusted invocation context; event fields must never
+   select a room namespace. */
+function callerAccessPlatform() {
+  return callerWechatContext() ? "wechat-mini-program" : "web";
+}
+
+function hasRoomAccessPlatform(room, accessPlatform) {
+  /* Pre-v4 rooms are intentionally inaccessible until explicitly migrated. */
+  return !!room && room.accessPlatform === accessPlatform;
+}
+
 function callerUid() {
+  /* A mini-program call has a platform-authenticated identity.  Never accept
+     an identity from event.userInfo (or any other client supplied field). */
+  const wechat = callerWechatContext();
+  if (wechat) return `wx:${wechat.appid}:${wechat.openid}`;
   try {
     const userInfo = app.auth().getUserInfo() || {};
     return userInfo.uid || null;
   } catch (_) {
     return null;
   }
+}
+
+function publicInputError(code, message) {
+  const error = new Error(message);
+  error.publicCode = code;
+  throw error;
+}
+
+function moderationChunks(values) {
+  const text = values
+    .map((value) => cleanText(value, 1000))
+    .filter(Boolean)
+    .join("\n");
+  if (!text) return [];
+  if (Buffer.byteLength(text, "utf8") > 16 * 1024) {
+    publicInputError("CONTENT_BATCH_TOO_LARGE", "本次修改的文字过多，请分几次保存");
+  }
+  const chunks = [];
+  let chunk = "";
+  for (const character of text) {
+    if (chunk && Buffer.byteLength(chunk + character, "utf8") > 1800) {
+      chunks.push(chunk);
+      chunk = character;
+    } else {
+      chunk += character;
+    }
+  }
+  if (chunk) chunks.push(chunk);
+  return chunks;
+}
+
+async function moderateMiniProgramText(values) {
+  const wechat = callerWechatContext();
+  if (!wechat) return;
+  const checker = wxCloud.openapi && wxCloud.openapi.security && wxCloud.openapi.security.msgSecCheck;
+  if (typeof checker !== "function") {
+    publicInputError("CONTENT_CHECK_UNAVAILABLE", "内容安全服务暂时不可用，请稍后重试");
+  }
+  for (const content of moderationChunks(values)) {
+    let response;
+    try {
+      response = await checker.call(wxCloud.openapi.security, {
+        content,
+        version: 2,
+        scene: 2,
+        openid: wechat.openid
+      });
+    } catch (error) {
+      console.error("[roomGateway:content-check]", error);
+      publicInputError("CONTENT_CHECK_UNAVAILABLE", "内容安全检查暂时不可用，请稍后重试");
+    }
+    const suggestion = response && response.result && response.result.suggest;
+    if (suggestion !== "pass") {
+      publicInputError(
+        suggestion === "risky" || suggestion === "review" ? "CONTENT_REJECTED" : "CONTENT_CHECK_UNAVAILABLE",
+        suggestion === "risky" || suggestion === "review"
+          ? "文字内容需要修改后再提交"
+          : "内容安全检查暂时不可用，请稍后重试"
+      );
+    }
+  }
+}
+
+function changedLedgerTexts(incoming, current) {
+  const texts = [];
+  if (incoming.name !== current.name) texts.push(incoming.name);
+  const currentMembers = new Map((current.members || []).map((member) => [String(member.id), member]));
+  for (const member of incoming.members || []) {
+    const previous = currentMembers.get(String(member.id));
+    if (!previous || previous.name !== member.name) texts.push(member.name);
+  }
+  const currentExpenses = new Map((current.expenses || []).map((expense) => [String(expense.id), expense]));
+  for (const expense of incoming.expenses || []) {
+    const previous = currentExpenses.get(String(expense.id));
+    if (!previous || previous.desc !== expense.desc) texts.push(expense.desc);
+  }
+  return texts;
 }
 
 function randomCode() {
@@ -508,19 +629,18 @@ function sharedMemberId() {
   return `member-${Date.now().toString(36)}-${crypto.randomBytes(5).toString("hex")}`;
 }
 
-async function uniqueCode() {
-  for (let attempt = 0; attempt < 8; attempt += 1) {
-    const code = randomCode();
-    const existing = requireDbSuccess(
-      await db.collection(ROOM_COLLECTION).where({ code }).limit(1).get(),
-      "检查房间码"
-    );
-    if (!existing.data || existing.data.length === 0) return code;
-  }
-  throw new Error("暂时无法生成房间码，请稍后再试");
+function codeForCreate(uid, requestKey, attempt) {
+  const bytes = crypto
+    .createHash("sha256")
+    .update(`${uid}:${requestKey}:${attempt}`)
+    .digest()
+    .subarray(0, 8);
+  let code = "";
+  for (const byte of bytes) code += CODE_CHARS[byte % CODE_CHARS.length];
+  return code;
 }
 
-function normalizeTypedRoom(source, uid) {
+function normalizeTypedRoom(source, uid, accessPlatform) {
   const type = source.toolType === "midpoint" ? "midpoint" : "ledger";
   const inputMember = Array.isArray(source.members) && source.members[0] ? source.members[0] : {};
   const memberName = cleanText(inputMember.name, 24);
@@ -538,7 +658,8 @@ function normalizeTypedRoom(source, uid) {
   const room = {
     name: roomName,
     toolType: type,
-    schemaVersion: 3,
+    schemaVersion: 4,
+    accessPlatform,
     lifecycle: { policy: "owner-disband-only", createdAtMs: now },
     members: [member],
     memberUids: [uid],
@@ -571,7 +692,7 @@ function normalizeTypedRoom(source, uid) {
   return room;
 }
 
-function normalizeLegacyRoom(source, uid) {
+function normalizeLegacyRoom(source, uid, accessPlatform) {
   const name = cleanText(source.name, 60);
   if (!name) throw new Error("请先填写房间名称");
   const sourceMembers = Array.isArray(source.members) ? source.members.slice(0, MAX_ACTIVE_MEMBERS) : [];
@@ -587,6 +708,8 @@ function normalizeLegacyRoom(source, uid) {
   return {
     name,
     toolType: "legacy",
+    schemaVersion: 4,
+    accessPlatform,
     members,
     memberUids: [uid],
     nextMemberId: Math.max(Number(source.nextMemberId) || 1, members.length + 1),
@@ -598,53 +721,63 @@ function normalizeLegacyRoom(source, uid) {
   };
 }
 
-async function createRoom(event, uid) {
+async function createRoom(event, uid, accessPlatform) {
   const source = event && event.room && typeof event.room === "object" ? event.room : {};
   const room = source.toolType === "midpoint" || source.toolType === "ledger"
-    ? normalizeTypedRoom(source, uid)
-    : normalizeLegacyRoom(source, uid);
+    ? normalizeTypedRoom(source, uid, accessPlatform)
+    : normalizeLegacyRoom(source, uid, accessPlatform);
   const clientRequestId = cleanText(event && event.clientRequestId, 80);
   if (clientRequestId && !/^[A-Za-z0-9_-]{8,80}$/.test(clientRequestId)) {
     return failure("INVALID_REQUEST_ID", "创建请求编号无效，请刷新页面后重试");
   }
-  if (clientRequestId) {
-    /* 同一台设备超时重试时使用相同文档编号。事务保证只会创建一次，
-       即使第一次响应丢失，第二次也会拿回已经创建好的同一个房间。 */
-    const docId = `room-${crypto.createHash("sha256").update(`${uid}:${clientRequestId}`).digest("hex").slice(0, 32)}`;
-    const existingResponse = requireDbSuccess(
-      await db.collection(ROOM_COLLECTION).doc(docId).get(),
-      "检查创建请求"
+  await moderateMiniProgramText([
+    room.name,
+    ...(Array.isArray(room.members) ? room.members.map((member) => member && member.name) : [])
+  ]);
+  const requestKey = clientRequestId || `server_${crypto.randomBytes(16).toString("hex")}`;
+
+  /* The room document ID is derived from the public code. That makes code
+     ownership an atomic document creation instead of a query-then-write race.
+     A retry uses the same request key and walks the same deterministic
+     candidates, so it returns the original room without creating a duplicate. */
+  for (let attempt = 0; attempt < 16; attempt += 1) {
+    const code = clientRequestId ? codeForCreate(uid, requestKey, attempt) : randomCode();
+    const oldMatch = requireDbSuccess(
+      await db.collection(ROOM_COLLECTION).where({ code }).limit(1).get(),
+      "检查房间码"
     );
-    const existingRoom = existingResponse && Array.isArray(existingResponse.data)
-      ? existingResponse.data[0]
-      : existingResponse && existingResponse.data;
-    if (existingRoom) {
-      if (existingRoom.ownerUid === uid && existingRoom.createRequestId === clientRequestId) {
-        return success({ docId, room: { ...existingRoom, _id: docId } });
+    const oldRoom = oldMatch && Array.isArray(oldMatch.data) ? oldMatch.data[0] : null;
+    if (oldRoom) {
+      if (hasRoomAccessPlatform(oldRoom, accessPlatform) && oldRoom.ownerUid === uid && oldRoom.createRequestId === requestKey) {
+        const oldDocId = oldRoom._id;
+        return success({ docId: oldDocId, room: oldRoom, viewer: roomViewer(oldRoom, uid) });
       }
-      return failure("CREATE_CONFLICT", "创建请求发生冲突，请刷新页面后重试");
+      continue;
     }
-    room.code = await uniqueCode();
-    room.createRequestId = clientRequestId;
-    return db.runTransaction(async (transaction) => {
+
+    const docId = `room-code-${code}`;
+    const candidate = { ...room, code, createRequestId: requestKey };
+    const result = await db.runTransaction(async (transaction) => {
       const ref = transaction.collection(ROOM_COLLECTION).doc(docId);
       const response = requireDbSuccess(await ref.get(), "检查创建请求");
       const existing = response && response.data ? response.data : null;
       if (existing) {
-        if (existing.ownerUid === uid && existing.createRequestId === clientRequestId) {
-          return success({ docId, room: { ...existing, _id: docId } });
+        if (hasRoomAccessPlatform(existing, accessPlatform) && existing.ownerUid === uid && existing.createRequestId === requestKey) {
+          return { kind: "existing", room: existing };
         }
-        return failure("CREATE_CONFLICT", "创建请求发生冲突，请刷新页面后重试");
+        return { kind: "collision" };
       }
-      requireDbSuccess(await ref.set(room), "创建房间");
-      return success({ docId, room: { ...room, _id: docId } });
+      requireDbSuccess(await ref.set(candidate), "创建房间");
+      return { kind: "created", room: candidate };
     }, 5);
+
+    if (result && result.kind === "collision") continue;
+    if (result && (result.kind === "created" || result.kind === "existing")) {
+      const savedRoom = { ...result.room, _id: docId };
+      return success({ docId, room: savedRoom, viewer: roomViewer(savedRoom, uid) });
+    }
   }
-  room.code = await uniqueCode();
-  const created = requireDbSuccess(await db.collection(ROOM_COLLECTION).add(room), "创建房间");
-  const docId = created.id || created._id;
-  if (!docId) throw new Error("创建房间失败");
-  return success({ docId, room: { ...room, _id: docId } });
+  throw new Error("暂时无法生成房间码，请稍后再试");
 }
 
 async function roomByCode(code) {
@@ -657,7 +790,7 @@ async function roomByCode(code) {
   return rooms[0];
 }
 
-async function getRoom(event, uid) {
+async function getRoom(event, uid, accessPlatform) {
   const docId = cleanText(event && event.docId, 80);
   if (!docId) return failure("ROOM_REQUIRED", "缺少房间编号");
   const response = requireDbSuccess(
@@ -667,8 +800,8 @@ async function getRoom(event, uid) {
   const room = response && Array.isArray(response.data) ? response.data[0] : response && response.data;
   /* Do not reveal whether an unknown room exists. A missing room and a room the caller
      has not joined intentionally return the same empty result. */
-  if (!isActiveRoomMember(room, uid)) {
-    return success({ room: null });
+  if (!hasRoomAccessPlatform(room, accessPlatform) || !isActiveRoomMember(room, uid)) {
+    return success({ room: null, viewer: null });
   }
   let safeRoom = { ...room, _id: room._id || docId };
   if (roomTypeFor(room) === "midpoint" && room.meetup && isPlainObject(room.meetup)) {
@@ -677,10 +810,10 @@ async function getRoom(event, uid) {
       meetup: { ...room.meetup, decision: normalizedMeetupDecision(room.meetup, room) }
     };
   }
-  return success({ room: safeRoom });
+  return success({ room: safeRoom, viewer: roomViewer(safeRoom, uid) });
 }
 
-async function joinRoom(event, uid) {
+async function joinRoom(event, uid, accessPlatform) {
   const code = cleanText(event.code, 8).toUpperCase();
   const expectedType = cleanText(event.type, 16);
   const isAutoJoin = expectedType === "auto";
@@ -690,6 +823,7 @@ async function joinRoom(event, uid) {
   }
   if (!consumeJoinAttempt(uid)) return failure("RATE_LIMITED", "尝试次数过多，请 5 分钟后再试");
   const room = await roomByCode(code);
+  if (room && !hasRoomAccessPlatform(room, accessPlatform)) return failure("ROOM_NOT_FOUND", "没有找到这个房间码");
   if (!room) return failure("ROOM_NOT_FOUND", `没有找到房间码“${code}”`);
   const type = room.toolType || room.roomType || "legacy";
   if (isAutoJoin && type !== "midpoint" && type !== "ledger") {
@@ -706,6 +840,7 @@ async function joinRoom(event, uid) {
   if ((type === "midpoint" || type === "ledger") && !name) {
     return failure("NAME_REQUIRED", "请先填写你自己的名字");
   }
+  await moderateMiniProgramText([name]);
 
   /* 加入涉及 memberUids、成员资料与碰面点等多个字段。放进同一个事务，
      避免网络中断或两个人同时加入时只写成一半。 */
@@ -713,7 +848,7 @@ async function joinRoom(event, uid) {
     const ref = transaction.collection(ROOM_COLLECTION).doc(docId);
     const response = requireDbSuccess(await ref.get(), "读取房间");
     const current = response && response.data ? response.data : null;
-    if (!current || current.code !== code) {
+    if (!hasRoomAccessPlatform(current, accessPlatform) || current.code !== code) {
       return failure("ROOM_NOT_FOUND", `没有找到房间码“${code}”`);
     }
 
@@ -831,15 +966,30 @@ async function joinRoom(event, uid) {
 
     const updatedResult = requireDbSuccess(await ref.update(patch), "加入房间");
     if (!updatedResult || updatedResult.updated !== 1) throw new Error("加入房间失败");
-    return success({ docId, type: currentType, room: updated });
+    return success({ docId, type: currentType, room: updated, viewer: roomViewer(updated, uid) });
   }, 5);
 }
 
-async function syncLedger(event, uid) {
+async function syncLedger(event, uid, accessPlatform) {
   const docId = cleanText(event.docId, 80);
   if (!docId) return failure("ROOM_REQUIRED", "缺少房间编号");
   const now = Date.now();
   const incoming = normalizeLedger(event.ledger, now, false);
+
+  const moderationResponse = requireDbSuccess(
+    await db.collection(ROOM_COLLECTION).doc(docId).get(),
+    "读取共享账本"
+  );
+  const moderationRoom = moderationResponse && Array.isArray(moderationResponse.data)
+    ? moderationResponse.data[0]
+    : moderationResponse && moderationResponse.data;
+  if (hasRoomAccessPlatform(moderationRoom, accessPlatform) && isActiveRoomMember(moderationRoom, uid)) {
+    const moderationType = roomTypeFor(moderationRoom);
+    if (moderationType === "ledger" || moderationType === "legacy") {
+      const currentForModeration = normalizeLedger(moderationRoom.ledger || {}, now, true);
+      await moderateMiniProgramText(changedLedgerTexts(incoming, currentForModeration));
+    }
+  }
 
   /* 账本必须在云端事务里基于最新版本合并。这样两台手机同时新增不同支出时，
      第二次提交看到的不是旧快照，不会把第一台刚写入的支出整体覆盖掉。 */
@@ -847,11 +997,15 @@ async function syncLedger(event, uid) {
     const ref = transaction.collection(ROOM_COLLECTION).doc(docId);
     const response = requireDbSuccess(await ref.get(), "读取共享账本");
     const room = response && response.data ? response.data : null;
-    if (!isActiveRoomMember(room, uid)) {
+    if (!hasRoomAccessPlatform(room, accessPlatform) || !isActiveRoomMember(room, uid)) {
       return failure("ROOM_NOT_FOUND", "房间已结束或你已退出");
     }
     const type = room.toolType || room.roomType || "legacy";
     if (type !== "ledger" && type !== "legacy") return failure("WRONG_ROOM_TYPE", "这个房间不是共享账本");
+
+    if (type === "ledger" && !requireCurrentMembership(room, uid, event.membershipEpoch)) {
+      return failure("STALE_MEMBERSHIP", "成员身份已更新，请刷新房间后重试");
+    }
 
     const current = normalizeLedger(room.ledger || {}, now, true);
     const mergedWithUntrustedUids = mergeLedgers(incoming, current);
@@ -872,7 +1026,7 @@ async function syncLedger(event, uid) {
   }, 5);
 }
 
-async function setMeetupPoint(event, uid) {
+async function setMeetupPoint(event, uid, accessPlatform) {
   const docId = cleanText(event.docId, 80);
   if (!docId) return failure("ROOM_REQUIRED", "缺少房间编号");
   const source = event.person == null ? null : event.person;
@@ -883,11 +1037,24 @@ async function setMeetupPoint(event, uid) {
     return failure("INVALID_POINT", "位置更新时间无效，请校准设备时间后重试");
   }
 
+  if (source) {
+    const moderationResponse = requireDbSuccess(
+      await db.collection(ROOM_COLLECTION).doc(docId).get(),
+      "读取碰面房间"
+    );
+    const moderationRoom = moderationResponse && Array.isArray(moderationResponse.data)
+      ? moderationResponse.data[0]
+      : moderationResponse && moderationResponse.data;
+    if (hasRoomAccessPlatform(moderationRoom, accessPlatform) && isActiveRoomMember(moderationRoom, uid)) {
+      await moderateMiniProgramText([source.name, source.address]);
+    }
+  }
+
   return db.runTransaction(async (transaction) => {
     const ref = transaction.collection(ROOM_COLLECTION).doc(docId);
     const response = requireDbSuccess(await ref.get(), "读取碰面房间");
     const room = response && response.data ? response.data : null;
-    if (!isActiveRoomMember(room, uid)) {
+    if (!hasRoomAccessPlatform(room, accessPlatform) || !isActiveRoomMember(room, uid)) {
       return failure("ROOM_NOT_FOUND", "房间已结束或你已退出");
     }
     const type = room.toolType || room.roomType || "legacy";
@@ -975,17 +1142,28 @@ function decisionResponse(docId, meetup) {
   return success({ docId, meetup, decision: meetup.decision || normalizedMeetupDecision(meetup) });
 }
 
-async function publishDecisionCandidates(event, uid) {
+async function publishDecisionCandidates(event, uid, accessPlatform) {
   const docId = cleanText(event.docId, 80);
   if (!docId) return failure("ROOM_REQUIRED", "缺少房间编号");
   if (!Array.isArray(event.candidates) || event.candidates.length === 0 || event.candidates.length > MAX_DECISION_CANDIDATES) {
     return failure("INVALID_DECISION", "候选地点需为 1 至 12 个");
   }
   const now = Date.now();
+  const moderationResponse = requireDbSuccess(
+    await db.collection(ROOM_COLLECTION).doc(docId).get(),
+    "审核共同候选地点"
+  );
+  const moderationRoom = moderationResponse && Array.isArray(moderationResponse.data)
+    ? moderationResponse.data[0]
+    : moderationResponse && moderationResponse.data;
+  if (hasRoomAccessPlatform(moderationRoom, accessPlatform) && isActiveRoomMember(moderationRoom, uid)) {
+    await moderateMiniProgramText(event.candidates.flatMap((candidate) => [candidate && candidate.name, candidate && candidate.typeStr]));
+  }
   return db.runTransaction(async (transaction) => {
     const ref = transaction.collection(ROOM_COLLECTION).doc(docId);
     const response = requireDbSuccess(await ref.get(), "读取协作碰面房间");
     const room = response && response.data ? response.data : null;
+    if (!hasRoomAccessPlatform(room, accessPlatform)) return failure("ROOM_NOT_FOUND", "房间已结束或你已退出");
     if (!isActiveRoomMember(room, uid)) return failure("ROOM_NOT_FOUND", "房间已结束或你已退出");
     if (roomTypeFor(room) !== "midpoint") return failure("WRONG_ROOM_TYPE", "这个房间不是协作碰面房间");
     if (!requireCurrentMembership(room, uid, event.membershipEpoch)) return failure("STALE_MEMBERSHIP", "成员身份已更新，请刷新房间后重试");
@@ -1030,7 +1208,7 @@ async function publishDecisionCandidates(event, uid) {
   }, 5);
 }
 
-async function setDecisionVote(event, uid) {
+async function setDecisionVote(event, uid, accessPlatform) {
   const docId = cleanText(event.docId, 80);
   const candidateId = cleanText(event.candidateId, 64);
   const value = event.value == null || event.value === "" || event.value === "clear" ? "" : cleanText(event.value, 8);
@@ -1043,6 +1221,7 @@ async function setDecisionVote(event, uid) {
     const ref = transaction.collection(ROOM_COLLECTION).doc(docId);
     const response = requireDbSuccess(await ref.get(), "读取协作碰面房间");
     const room = response && response.data ? response.data : null;
+    if (!hasRoomAccessPlatform(room, accessPlatform)) return failure("ROOM_NOT_FOUND", "房间已结束或你已退出");
     if (!isActiveRoomMember(room, uid)) return failure("ROOM_NOT_FOUND", "房间已结束或你已退出");
     if (roomTypeFor(room) !== "midpoint") return failure("WRONG_ROOM_TYPE", "这个房间不是协作碰面房间");
     if (!requireCurrentMembership(room, uid, event.membershipEpoch)) return failure("STALE_MEMBERSHIP", "成员身份已更新，请刷新房间后重试");
@@ -1063,7 +1242,7 @@ async function setDecisionVote(event, uid) {
   }, 5);
 }
 
-async function confirmDecisionCandidate(event, uid) {
+async function confirmDecisionCandidate(event, uid, accessPlatform) {
   const docId = cleanText(event.docId, 80);
   const candidateId = event.candidateId == null || event.candidateId === "" ? "" : cleanText(event.candidateId, 64);
   if (!docId) return failure("ROOM_REQUIRED", "缺少房间编号");
@@ -1072,6 +1251,7 @@ async function confirmDecisionCandidate(event, uid) {
     const ref = transaction.collection(ROOM_COLLECTION).doc(docId);
     const response = requireDbSuccess(await ref.get(), "读取协作碰面房间");
     const room = response && response.data ? response.data : null;
+    if (!hasRoomAccessPlatform(room, accessPlatform)) return failure("ROOM_NOT_FOUND", "房间已结束或你已退出");
     if (!isActiveRoomMember(room, uid)) return failure("ROOM_NOT_FOUND", "房间已结束或你已退出");
     if (roomTypeFor(room) !== "midpoint") return failure("WRONG_ROOM_TYPE", "这个房间不是协作碰面房间");
     if (!requireCurrentMembership(room, uid, event.membershipEpoch)) return failure("STALE_MEMBERSHIP", "成员身份已更新，请刷新房间后重试");
@@ -1100,13 +1280,14 @@ async function confirmDecisionCandidate(event, uid) {
   }, 5);
 }
 
-async function reopenDecision(event, uid) {
+async function reopenDecision(event, uid, accessPlatform) {
   const docId = cleanText(event.docId, 80);
   if (!docId) return failure("ROOM_REQUIRED", "缺少房间编号");
   return db.runTransaction(async (transaction) => {
     const ref = transaction.collection(ROOM_COLLECTION).doc(docId);
     const response = requireDbSuccess(await ref.get(), "读取协作碰面房间");
     const room = response && response.data ? response.data : null;
+    if (!hasRoomAccessPlatform(room, accessPlatform)) return failure("ROOM_NOT_FOUND", "房间已结束或你已退出");
     if (!isActiveRoomMember(room, uid)) return failure("ROOM_NOT_FOUND", "房间已结束或你已退出");
     if (roomTypeFor(room) !== "midpoint") return failure("WRONG_ROOM_TYPE", "这个房间不是协作碰面房间");
     if (!requireCurrentMembership(room, uid, event.membershipEpoch)) return failure("STALE_MEMBERSHIP", "成员身份已更新，请刷新房间后重试");
@@ -1133,16 +1314,29 @@ async function reopenDecision(event, uid) {
   }, 5);
 }
 
-async function updateLegacyMembers(event, uid) {
+async function updateLegacyMembers(event, uid, accessPlatform) {
   const docId = cleanText(event.docId, 80);
   const operation = cleanText(event.operation, 12);
   if (!docId) return failure("ROOM_REQUIRED", "缺少房间编号");
   if (operation !== "add" && operation !== "remove") return failure("INVALID_OPERATION", "成员操作无效");
+  const requestedName = operation === "add" ? cleanText(event.name, 24) : "";
+  const moderationResponse = requireDbSuccess(
+    await db.collection(ROOM_COLLECTION).doc(docId).get(),
+    "审核旧版成员"
+  );
+  const moderationRoom = moderationResponse && Array.isArray(moderationResponse.data)
+    ? moderationResponse.data[0]
+    : moderationResponse && moderationResponse.data;
+  if (!hasRoomAccessPlatform(moderationRoom, accessPlatform) || !isActiveRoomMember(moderationRoom, uid)) {
+    return failure("ROOM_NOT_FOUND", "房间已结束或你已退出");
+  }
+  if (operation === "add" && requestedName) await moderateMiniProgramText([requestedName]);
 
   return db.runTransaction(async (transaction) => {
     const ref = transaction.collection(ROOM_COLLECTION).doc(docId);
     const response = requireDbSuccess(await ref.get(), "读取旧版房间");
     const room = response && response.data ? response.data : null;
+    if (!hasRoomAccessPlatform(room, accessPlatform)) return failure("ROOM_NOT_FOUND", "房间已结束或你已退出");
     if (!isActiveRoomMember(room, uid)) {
       return failure("ROOM_NOT_FOUND", "房间已结束或你已退出");
     }
@@ -1153,7 +1347,7 @@ async function updateLegacyMembers(event, uid) {
     let nextMemberId = Math.max(Number(room.nextMemberId) || 1, members.length + 1);
 
     if (operation === "add") {
-      const name = cleanText(event.name, 24);
+      const name = requestedName;
       if (!name) return failure("NAME_REQUIRED", "请输入成员名字");
       if (members.length >= MAX_ACTIVE_MEMBERS) return failure("ROOM_FULL", "房间已经达到 50 人上限");
       if (members.some((member) => member && member.name === name)) return failure("DUPLICATE_NAME", `已经有一个叫“${name}”的人了`);
@@ -1175,26 +1369,7 @@ async function updateLegacyMembers(event, uid) {
   }, 5);
 }
 
-async function disbandRoom(event, uid) {
-  const docId = cleanText(event.docId, 80);
-  if (!docId) return failure("ROOM_REQUIRED", "缺少房间编号");
-  const response = requireDbSuccess(
-    await db.collection(ROOM_COLLECTION).doc(docId).get(),
-    "读取房间"
-  );
-  const room = response && Array.isArray(response.data) ? response.data[0] : response && response.data;
-  if (!room) return success({ removed: true });
-  const inferredOwnerUid = inferredRoomOwnerUid(room, null);
-  if (inferredOwnerUid !== uid) return failure("NOT_OWNER", "只有房主可以解散房间");
-  const removed = requireDbSuccess(
-    await db.collection(ROOM_COLLECTION).doc(docId).remove(),
-    "解散房间"
-  );
-  if (!removed || removed.deleted !== 1) throw new Error("解散房间失败");
-  return success({ removed: true });
-}
-
-async function leaveRoom(event, uid) {
+async function disbandRoom(event, uid, accessPlatform) {
   const docId = cleanText(event.docId, 80);
   if (!docId) return failure("ROOM_REQUIRED", "缺少房间编号");
   return db.runTransaction(async (transaction) => {
@@ -1202,14 +1377,34 @@ async function leaveRoom(event, uid) {
     const response = requireDbSuccess(await ref.get(), "读取房间");
     const room = response && response.data ? response.data : null;
     if (!room) return success({ removed: true });
+    if (!hasRoomAccessPlatform(room, accessPlatform)) return failure("ROOM_NOT_FOUND", "房间已结束或你已退出");
+    if (inferredRoomOwnerUid(room, null) !== uid) return failure("NOT_OWNER", "只有房主可以解散房间");
+    const removed = requireDbSuccess(await ref.remove(), "解散房间");
+    if (!removed || removed.deleted !== 1) throw new Error("解散房间失败");
+    return success({ removed: true });
+  }, 5);
+}
+
+async function leaveRoom(event, uid, accessPlatform) {
+  const docId = cleanText(event.docId, 80);
+  if (!docId) return failure("ROOM_REQUIRED", "缺少房间编号");
+  return db.runTransaction(async (transaction) => {
+    const ref = transaction.collection(ROOM_COLLECTION).doc(docId);
+    const response = requireDbSuccess(await ref.get(), "读取房间");
+    const room = response && response.data ? response.data : null;
+    if (!room) return success({ removed: true });
+    if (!hasRoomAccessPlatform(room, accessPlatform)) return failure("ROOM_NOT_FOUND", "房间已结束或你已退出");
     const inferredOwnerUid = inferredRoomOwnerUid(room, null);
     if (inferredOwnerUid === uid) return failure("OWNER_MUST_DISBAND", "房主需要取消并解散房间");
     if (!isActiveRoomMember(room, uid)) {
       return success({ removed: true });
     }
 
+    const currentMemberUids = Array.isArray(room.memberUids)
+      ? room.memberUids
+      : activeTopLevelMemberUids(room);
     const patch = {
-      memberUids: room.memberUids.filter((memberUid) => memberUid !== uid),
+      memberUids: currentMemberUids.filter((memberUid) => memberUid !== uid),
       members: (Array.isArray(room.members) ? room.members : []).filter((member) => member.uid !== uid)
     };
     if (room.meetup && Array.isArray(room.meetup.people)) {
@@ -1229,23 +1424,24 @@ async function leaveRoom(event, uid) {
   }, 5);
 }
 
-exports.main = async (event) => {
+exports.main = async (event, context) => {
   const uid = callerUid();
+  const accessPlatform = callerAccessPlatform();
   if (!uid) return failure("UNAUTHENTICATED", "请先登录后再操作房间");
   try {
     const action = cleanText(event && event.action, 40);
-    if (action === "create") return await createRoom(event, uid);
-    if (action === "join") return await joinRoom(event, uid);
-    if (action === "getRoom") return await getRoom(event, uid);
-    if (action === "syncLedger") return await syncLedger(event, uid);
-    if (action === "setMeetupPoint") return await setMeetupPoint(event, uid);
-    if (action === "publishDecisionCandidates") return await publishDecisionCandidates(event, uid);
-    if (action === "setDecisionVote") return await setDecisionVote(event, uid);
-    if (action === "confirmDecisionCandidate") return await confirmDecisionCandidate(event, uid);
-    if (action === "reopenDecision") return await reopenDecision(event, uid);
-    if (action === "updateLegacyMembers") return await updateLegacyMembers(event, uid);
-    if (action === "disband") return await disbandRoom(event, uid);
-    if (action === "leave") return await leaveRoom(event, uid);
+    if (action === "create") return await createRoom(event, uid, accessPlatform);
+    if (action === "join") return await joinRoom(event, uid, accessPlatform);
+    if (action === "getRoom") return await getRoom(event, uid, accessPlatform);
+    if (action === "syncLedger") return await syncLedger(event, uid, accessPlatform);
+    if (action === "setMeetupPoint") return await setMeetupPoint(event, uid, accessPlatform);
+    if (action === "publishDecisionCandidates") return await publishDecisionCandidates(event, uid, accessPlatform);
+    if (action === "setDecisionVote") return await setDecisionVote(event, uid, accessPlatform);
+    if (action === "confirmDecisionCandidate") return await confirmDecisionCandidate(event, uid, accessPlatform);
+    if (action === "reopenDecision") return await reopenDecision(event, uid, accessPlatform);
+    if (action === "updateLegacyMembers") return await updateLegacyMembers(event, uid, accessPlatform);
+    if (action === "disband") return await disbandRoom(event, uid, accessPlatform);
+    if (action === "leave") return await leaveRoom(event, uid, accessPlatform);
     return failure("UNKNOWN_ACTION", "不支持的房间操作");
   } catch (error) {
     if (error && error.publicCode) return failure(error.publicCode, error.message || "账本数据无效");

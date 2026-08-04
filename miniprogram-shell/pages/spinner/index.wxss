@@ -1,0 +1,10 @@
+.wheel { width:360rpx; height:360rpx; margin:36rpx auto; border-radius:50%; display:flex; align-items:center; justify-content:center; background:conic-gradient(#143D35 0 25%,#B8842A 25% 50%,#E5EEE8 50% 75%,#D6B77A 75%); color:#143D35; font-size:36rpx; font-weight:700; transition:transform 2s cubic-bezier(.1,.8,.2,1); }
+.wheel text { box-sizing:border-box; width:190rpx; min-height:190rpx; border-radius:50%; background:#FFFDF8; display:flex; align-items:center; justify-content:center; text-align:center; padding:20rpx; overflow-wrap:anywhere; }
+.spinning { transform:rotate(1440deg); }
+.participant-input { flex:1; min-width:0; }
+.add-button { flex:0 0 150rpx; margin:12rpx 0; }
+.participant-row { min-height:84rpx; display:flex; align-items:center; justify-content:space-between; border-bottom:1rpx solid #E6DBC8; }
+.participant-row:last-child { border-bottom:0; }
+.remove-name { margin:0; padding:0 18rpx; min-width:0; line-height:56rpx; background:#F3EBDD; color:#9C433A; font-size:24rpx; border-radius:28rpx; }
+.remove-name::after { border:0; }
+.empty { padding:20rpx 0 4rpx; }

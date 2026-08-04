@@ -1,0 +1,23 @@
+<view class="page">
+  <view class="card">
+    <view class="title">幸运转盘</view>
+    <view class="muted">先看两秒动画，再公布随机结果。</view>
+    <view class="wheel {{spinning ? 'spinning' : ''}}">
+      <text>{{result || '转'}}</text>
+    </view>
+    <button class="btn gold" bindtap="spin" disabled="{{spinning}}">{{spinning ? '转动中…' : '开始转动'}}</button>
+  </view>
+
+  <view class="card">
+    <input class="input" maxlength="40" placeholder="决定什么？例如今晚谁买单" value="{{decision}}" bindinput="decisionInput" disabled="{{spinning}}" />
+    <view class="row">
+      <input class="input participant-input" maxlength="24" placeholder="添加参与者" value="{{newName}}" bindinput="nameInput" confirm-type="done" bindconfirm="add" />
+      <button class="btn add-button" bindtap="add" disabled="{{spinning}}">添加</button>
+    </view>
+    <view wx:if="{{!names.length}}" class="muted empty">还没有参与者。</view>
+    <view wx:for="{{names}}" wx:key="*this" class="participant-row">
+      <text>{{item}}</text>
+      <button class="remove-name" bindtap="remove" data-index="{{index}}" disabled="{{spinning}}">删除</button>
+    </view>
+  </view>
+</view>

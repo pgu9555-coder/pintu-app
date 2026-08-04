@@ -30,6 +30,11 @@ assert.doesNotMatch(
 );
 
 assert.match(source, /rmRoomGateway\(\s*['"]getRoom['"]/, "room reads must use roomGateway");
+assert.match(
+  source,
+  /rmRoomGateway\(\s*['"]syncLedger['"]\s*,\s*\{[\s\S]*?membershipEpoch:\s*rmMembershipEpochForRoom\(/,
+  "shared-ledger writes must carry the current membership epoch"
+);
 assert.match(source, /mpDecisionWrite\([^)]*['"]publishDecisionCandidates['"]/, "shared decision candidates must use the guarded decision writer");
 assert.match(source, /mpDecisionWrite\([^)]*['"]setDecisionVote['"]/, "shared decision votes must use the guarded decision writer");
 assert.match(source, /mpDecisionWrite\([^)]*['"]confirmDecisionCandidate['"]/, "shared decision confirmation must use the guarded decision writer");
@@ -100,7 +105,7 @@ assert.match(
 assert.match(home, /tool-icon ledger[\s\S]*?ti-receipt-2/, "the ledger home card needs its own receipt icon");
 assert.match(source, /card\.dataset\.roomType\s*=\s*room\.toolType/, "room cards must expose their type for icon styling");
 assert.match(source, /room\.toolType\s*===\s*['"]midpoint['"]\s*\?\s*['"]map-pin-share['"][\s\S]*?['"]receipt-2['"]/, "midpoint and ledger cards need distinct icons");
-assert.match(source, /schemaVersion:\s*3[\s\S]*?policy:\s*['"]owner-disband-only['"]/, "new local rooms must carry the persistent-room schema marker");
+assert.match(source, /schemaVersion:\s*4[\s\S]*?policy:\s*['"]owner-disband-only['"]/, "new local rooms must carry the persistent-room schema marker");
 assert.match(source, /document\.execCommand\(['"]copy['"]\)\s*===\s*true/, "clipboard fallback must verify that copying actually succeeded");
 assert.match(source, /function\s+copyRoomCode\s*\(/, "room code copying needs reliable success/failure feedback");
 

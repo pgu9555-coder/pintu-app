@@ -1,0 +1,82 @@
+<view class="page">
+  <block wx:if="{{!room}}">
+    <view class="card">
+      <view class="title">协作碰面</view>
+      <view class="muted">填写出发地后获得参考中点，再一起确认实际可达的去处。</view>
+      <input class="input" placeholder="你的名字" value="{{name}}" maxlength="24" bindinput="nameInput" />
+      <button class="btn" bindtap="create" loading="{{busy}}" disabled="{{busy}}">创建碰面房间</button>
+      <input class="input" placeholder="8 位碰面码" value="{{code}}" maxlength="8" bindinput="codeInput" />
+      <button class="btn gold" bindtap="join" loading="{{busy}}" disabled="{{busy}}">加入碰面</button>
+    </view>
+  </block>
+
+  <block wx:else>
+    <view class="card">
+      <view class="title">{{room.name}}</view>
+      <view class="muted">房间码 {{room.code}} · {{syncText}}</view>
+      <view class="room-actions">
+        <button class="btn gold compact" bindtap="copyCode">复制房间码</button>
+        <button class="btn compact" open-type="share">邀请朋友</button>
+      </view>
+    </view>
+
+    <view class="card">
+      <view class="section-title">参考中点</view>
+      <map
+        wx:if="{{center}}"
+        class="midpoint-map"
+        latitude="{{center.latitude}}"
+        longitude="{{center.longitude}}"
+        scale="12"
+        markers="{{markers}}"
+      />
+      <view wx:else class="muted">至少两位成员选择地点后显示参考中点。</view>
+      <view wx:if="{{center}}" class="muted midpoint-note">按坐标估算，请结合实际交通在共同去处里确认可达地点。</view>
+      <button wx:if="{{center}}" class="btn gold" bindtap="openCenter">在地图中打开参考中点</button>
+    </view>
+
+    <view class="card">
+      <view class="section-title">大家的出发地</view>
+      <button class="btn" bindtap="chooseLocation" loading="{{busy}}" disabled="{{busy}}">选择／更新我的位置</button>
+      <block wx:for="{{people}}" wx:key="uid">
+        <view class="divider"></view>
+        <view>{{item.name}}</view>
+        <view class="muted">{{item.address || '尚未选择地点'}}</view>
+      </block>
+    </view>
+
+    <view class="card">
+      <view class="section-heading">
+        <view class="section-title">共同找去处</view>
+        <view class="muted">{{decisionCandidates.length}} / 12</view>
+      </view>
+      <view wx:if="{{decisionConfirmed}}" class="decision-status">已确定共同去处</view>
+      <view wx:else class="muted">从地图选择实际可到达的地点，大家分别表达意愿。</view>
+      <button wx:if="{{!decisionConfirmed}}" class="btn gold" bindtap="addDecisionCandidate" loading="{{busy}}" disabled="{{busy}}">从地图添加候选地点</button>
+
+      <view wx:if="{{!decisionCandidates.length}}" class="empty-decision muted">还没有候选地点，先添加一个实际可达的去处吧。</view>
+      <block wx:for="{{decisionCandidates}}" wx:key="id">
+        <view class="divider"></view>
+        <view class="candidate-topline">
+          <view class="candidate-name">{{item.name}}</view>
+          <view wx:if="{{item.isConfirmed}}" class="confirmed-tag">已确定</view>
+        </view>
+        <view class="muted candidate-address">{{item.typeStr || '地图选择地点'}}</view>
+        <view class="vote-summary">想去 {{item.wantVotes}} · 可以 {{item.okVotes}} · 不去 {{item.noVotes}}</view>
+        <view wx:if="{{!decisionConfirmed}}" class="vote-row">
+          <button class="vote-option {{item.wantSelected ? 'selected' : ''}}" data-candidate-id="{{item.id}}" data-value="want" bindtap="voteDecision" disabled="{{busy}}">想去</button>
+          <button class="vote-option {{item.okSelected ? 'selected' : ''}}" data-candidate-id="{{item.id}}" data-value="ok" bindtap="voteDecision" disabled="{{busy}}">可以</button>
+          <button class="vote-option {{item.noSelected ? 'selected' : ''}}" data-candidate-id="{{item.id}}" data-value="no" bindtap="voteDecision" disabled="{{busy}}">不去</button>
+          <button wx:if="{{item.myVote}}" class="vote-option clear" data-candidate-id="{{item.id}}" data-value="clear" bindtap="voteDecision" disabled="{{busy}}">清除</button>
+        </view>
+        <view class="candidate-actions">
+          <button class="text-action" data-lat="{{item.lat}}" data-lng="{{item.lng}}" data-name="{{item.name}}" data-type="{{item.typeStr}}" bindtap="openCandidate">地图打开</button>
+          <button wx:if="{{isOwner && !decisionConfirmed}}" class="text-action confirm-action" data-candidate-id="{{item.id}}" bindtap="confirmDecision" disabled="{{busy}}">确定这里</button>
+        </view>
+      </block>
+      <button wx:if="{{isOwner && decisionConfirmed}}" class="btn" bindtap="reopenDecision" loading="{{busy}}" disabled="{{busy}}">重新选择共同去处</button>
+    </view>
+
+    <button class="btn danger" bindtap="exitRoom" disabled="{{busy}}">{{isOwner ? '解散房间' : '退出房间'}}</button>
+  </block>
+</view>
