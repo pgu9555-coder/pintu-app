@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- deployment build: 2026-08-04-shared-decisions-v1 -->
+<!-- deployment build: 2026-08-04-persistent-auto-join-v1 -->
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -9,7 +9,7 @@
 <meta name="color-scheme" content="light">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <meta name="format-detection" content="telephone=no">
-<meta name="pintu-build" content="2026-08-04-shared-decisions-v1">
+<meta name="pintu-build" content="2026-08-04-persistent-auto-join-v1">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
@@ -177,7 +177,7 @@
     });
   }
   function rmIsRetryableGatewayError(err){
-    var permanent = ['DUPLICATE_NAME','INVALID_POINT','NAME_REQUIRED','WRONG_ROOM_TYPE','ROOM_NOT_FOUND','NOT_OWNER','STALE_MEMBERSHIP','ROOM_HISTORY_FULL','RATE_LIMITED','INVALID_REQUEST_ID'];
+    var permanent = ['DUPLICATE_NAME','INVALID_POINT','NAME_REQUIRED','WRONG_ROOM_TYPE','ROOM_LEGACY_UNSUPPORTED','ROOM_NOT_FOUND','NOT_OWNER','STALE_MEMBERSHIP','ROOM_HISTORY_FULL','RATE_LIMITED','INVALID_REQUEST_ID'];
     return !err || permanent.indexOf(err.code) === -1;
   }
   function rmNewMembershipEpoch(){
@@ -512,8 +512,17 @@
   .tool-room-active-main{flex:1;min-width:0;}
   .tool-room-active-label{font-size:11px;color:var(--ink-soft);}
   .tool-room-active-code{font-family:'IBM Plex Mono',monospace;font-weight:700;color:var(--blue);letter-spacing:1.4px;font-size:15px;}
-  .tool-room-link{border:none;background:transparent;color:var(--blue);font-family:inherit;font-size:12px;font-weight:700;padding:7px 5px;cursor:pointer;}
+  .tool-room-link{
+    min-width:44px;min-height:40px;border:none;background:transparent;color:var(--blue);
+    font-family:inherit;font-size:12px;font-weight:700;padding:7px 8px;cursor:pointer;
+    display:inline-flex;align-items:center;justify-content:center;position:relative;z-index:1;
+    touch-action:manipulation;-webkit-tap-highlight-color:transparent;
+  }
   .tool-room-error{display:none;color:var(--coral);font-size:11.5px;line-height:1.45;}
+  .home-join-card{margin-bottom:22px;}
+  .home-join-card .tool-room-icon{background:var(--gold-soft);color:var(--gold);}
+  .home-join-card .tool-room-entry{gap:9px;}
+  .home-join-name-row .tool-room-input{width:100%;}
   .tool-grid{display:grid;grid-template-columns:1fr;gap:10px;margin-bottom:26px;}
   .tool-card{
     background:var(--paper-raised);border:1px solid var(--line);
@@ -686,7 +695,7 @@
   /* iPhone / 微信 WebView 中，小于 16px 的输入框会触发页面自动缩放，
      容易让软键盘弹起后的地址结果发生错位。 */
   @media (max-width:600px){
-    .loc-input,.mp-mine-name{font-size:16px;}
+    .loc-input,.mp-mine-name,.tool-room-input{font-size:16px;}
   }
 
   .loc-del{
@@ -1159,6 +1168,8 @@
     width:38px;height:38px;border-radius:12px;flex-shrink:0;background:var(--green-deep);color:var(--paper-raised);
     display:flex;align-items:center;justify-content:center;font-size:16px;
   }
+  .rm-room-card[data-room-type="midpoint"] .rm-room-icon{background:var(--blue-soft);color:var(--blue);}
+  .rm-room-card[data-room-type="ledger"] .rm-room-icon{background:#F0DCE3;color:var(--pink);}
   .rm-room-card .rm-room-info{flex:1;min-width:0;}
   .rm-room-card .rm-room-name{font-weight:700;font-size:14.5px;color:var(--ink);}
   .rm-room-card .rm-room-sub{font-size:11.5px;color:var(--ink-soft);margin-top:2px;}
@@ -1201,6 +1212,26 @@
       </div>
 
       <div class="home-content">
+        <section class="tool-room-card home-join-card" aria-labelledby="homeJoinTitle">
+          <div class="tool-room-head">
+            <div class="tool-room-icon" aria-hidden="true"><i class="ti-ticket"></i></div>
+            <div>
+              <div class="tool-room-title" id="homeJoinTitle">加入房间</div>
+              <div class="tool-room-sub">输入任意碰面码或账本码，自动进入对应功能。</div>
+            </div>
+          </div>
+          <div class="tool-room-entry">
+            <div class="tool-room-row home-join-name-row">
+              <input class="tool-room-input" id="homeJoinName" type="text" maxlength="24" autocomplete="nickname" placeholder="你的名字" aria-label="你的名字">
+            </div>
+            <div class="tool-room-row">
+              <input class="tool-room-input tool-room-code-input" id="homeJoinCode" type="text" maxlength="8" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="8 位房间码" aria-label="8 位房间码">
+              <button class="tool-room-btn" id="homeJoinRoomBtn" type="button">加入</button>
+            </div>
+            <div class="tool-room-error" id="homeJoinError" role="alert" aria-live="polite"></div>
+          </div>
+        </section>
+
         <div class="section-label">用完即走</div>
         <div class="tool-grid">
           <div class="tool-card" role="button" tabindex="0" onclick="openMidpoint()">
@@ -1220,7 +1251,7 @@
             <div class="tool-arrow" aria-hidden="true"><i class="ti-arrow-right"></i></div>
           </div>
           <div class="tool-card" role="button" tabindex="0" onclick="openGroupLedger()">
-            <div class="tool-icon ledger" aria-hidden="true"><i class="ti-users"></i></div>
+            <div class="tool-icon ledger" aria-hidden="true"><i class="ti-receipt-2"></i></div>
             <div class="tool-copy">
               <div class="tool-title">行程账本</div>
               <div class="tool-desc">出去玩几天，各付各的钱<br>最后一键算清谁该转给谁</div>
@@ -1604,7 +1635,7 @@
             <span class="rm-tool-arrow">›</span>
           </div>
           <div class="rm-tool-row" onclick="rmOpenTool('ledger')">
-            <div class="tool-icon ledger"><i class="ti-users"></i></div>
+            <div class="tool-icon ledger"><i class="ti-receipt-2"></i></div>
             <div class="rm-tool-info">
               <div class="rm-tool-name">行程账本</div>
               <div class="rm-tool-desc">成员已自动同步进来，直接开始记支出</div>
@@ -2046,7 +2077,11 @@ function mpReopenDecision(){
   mpDecisionWrite(room, 'reopenDecision', {}, '重新选择地点').then(function(result){ mpApplyDecisionResponse(room, result); }).catch(function(err){ mpReconcileDecision(room); if (typeof showAppToast === 'function') showAppToast((err && err.message) || '重新选择失败，已同步最新状态'); });
 }
 function mpCopyDecisionName(name){
-  copyTextToClipboard(name).then(function(){ if (typeof showAppToast === 'function') showAppToast('地点名称已复制'); });
+  copyTextToClipboard(name).then(function(){
+    if (typeof showAppToast === 'function') showAppToast('地点名称已复制');
+  }).catch(function(){
+    offerManualCopy(name, '请长按下面的地点名称复制：');
+  });
 }
 function mpRenderDecisionPanel(room){
   var panel = document.getElementById('mpDecisionPanel');
@@ -3512,16 +3547,45 @@ function copyTextToClipboard(text){
   return legacyCopy(text);
 }
 function legacyCopy(text){
-  return new Promise(function(resolve){
+  return new Promise(function(resolve, reject){
     var ta = document.createElement('textarea');
     ta.value = text;
     ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
     ta.style.opacity = '0';
+    ta.setAttribute('readonly', '');
     document.body.appendChild(ta);
     ta.focus(); ta.select();
-    try { document.execCommand('copy'); } catch(e){}
+    if (ta.setSelectionRange) ta.setSelectionRange(0, ta.value.length);
+    var copied = false;
+    var copyError = null;
+    try { copied = document.execCommand('copy') === true; } catch(e){ copyError = e; }
     document.body.removeChild(ta);
-    resolve();
+    if (copied) resolve();
+    else reject(copyError || new Error('浏览器不允许自动复制'));
+  });
+}
+
+function offerManualCopy(text, label){
+  try { window.prompt(label || '浏览器不允许自动复制，请长按下面的内容复制：', text); }
+  catch(e){}
+}
+
+function copyRoomCode(button, code){
+  if (!code) return Promise.resolve(false);
+  var original = button ? button.textContent : '复制';
+  if (button){ button.disabled = true; button.textContent = '复制中…'; }
+  return copyTextToClipboard(code).then(function(){
+    if (button) button.textContent = '已复制';
+    if (typeof showAppToast === 'function') showAppToast('房间码已复制');
+    setTimeout(function(){ if (button){ button.disabled = false; button.textContent = original; } }, 1200);
+    return true;
+  }).catch(function(){
+    if (button){ button.disabled = false; button.textContent = '手动复制'; }
+    offerManualCopy(code, '浏览器不允许自动复制，请长按下面的房间码复制：');
+    if (typeof showAppToast === 'function') showAppToast('请长按房间码并选择复制');
+    setTimeout(function(){ if (button) button.textContent = original; }, 1600);
+    return false;
   });
 }
 
@@ -3553,6 +3617,8 @@ function injectCopyButtons(){
           btn.textContent = '⧉';
           btn.classList.remove('copied');
         }, 1200);
+      }).catch(function(){
+        offerManualCopy(fullText, '请长按下面的地点名称复制：');
       });
     });
 
@@ -4842,6 +4908,8 @@ function rmUpsertLocalRoom(docId, data){
   room.nextMemberId = data.nextMemberId || 1;
   room.tripId = data.tripId || null;
   room.toolType = data.toolType || data.roomType || 'legacy';
+  room.schemaVersion = Number(data.schemaVersion) || room.schemaVersion || 0;
+  room.lifecycle = data.lifecycle || room.lifecycle || null;
   room.ownerUid = data.ownerUid || (data.members && data.members[0] && data.members[0].uid) || null;
   room.createdAt = data.createdAt || room.createdAt || null;
   room.ledger = data.ledger || null;   /* 房间共享账本（云端为准的那份） */
@@ -4886,8 +4954,10 @@ function rmRenderHomeRoomList(){
       }
       var card = document.createElement('div');
       card.className = 'rm-room-card';
+      card.dataset.roomType = room.toolType || 'legacy';
+      var roomIcon = room.toolType === 'midpoint' ? 'map-pin-share' : (room.toolType === 'ledger' ? 'receipt-2' : 'users');
       card.innerHTML =
-        '<div class="rm-room-icon">' + getIconHtml('users') + '</div>' +
+        '<div class="rm-room-icon">' + getIconHtml(roomIcon) + '</div>' +
         '<div class="rm-room-info">' +
           '<div class="rm-room-name">' + appEscapeHtml(room.name) + '</div>' +
           '<div class="rm-room-sub">' + sub + '</div>' +
@@ -5276,11 +5346,7 @@ document.getElementById('rmDashMemberName').addEventListener('keydown', function
 document.getElementById('rmBtnCopyCode').addEventListener('click', function(){
   var room = rmCurrentRoom();
   if (!room) return;
-  var btn = this;
-  copyTextToClipboard(room.code).then(function(){
-    btn.textContent = '✓ 已复制';
-    setTimeout(function(){ btn.textContent = '复制'; }, 1200);
-  });
+  copyRoomCode(this, room.code);
 });
 document.getElementById('rmBtnInvite').addEventListener('click', function(){
   var room = rmCurrentRoom();
@@ -5292,6 +5358,9 @@ document.getElementById('rmBtnInvite').addEventListener('click', function(){
     setTimeout(function(){
       btn.innerHTML = getIconHtml('share-2') + '复制邀请文案，发到群里';
     }, 1600);
+  }).catch(function(){
+    offerManualCopy(text, '请长按下面的邀请文案复制：');
+    if (typeof showAppToast === 'function') showAppToast('请长按邀请文案并选择复制');
   });
 });
 
@@ -5893,13 +5962,15 @@ function spinnerSpin(){
   function makeRoomData(type, name){
     var member = { id: glMakeSharedId('member'), uid: window.rmMyUid, name: name, color: GL_COLORS[0] };
     var roomName = name + (type === 'midpoint' ? '发起的碰面' : '发起的账本');
+    var createdAtMs = Date.now();
     var data = {
       name: roomName,
       code: rmGenCode(), toolType: type, members: [member], nextMemberId: 2,
+      schemaVersion: 3, lifecycle: { policy: 'owner-disband-only', createdAtMs: createdAtMs },
       ownerUid: window.rmMyUid,
       tripId: null, ledger: null,
       meetup: type === 'midpoint' ? { people: [{ uid: window.rmMyUid, name: name, address: '', lat: null, lng: null, color: LOC_COLORS[0] }] } : { people: [] },
-      createdAt: new Date()
+      createdAt: new Date(createdAtMs)
     };
     if (type === 'ledger'){
       var now = Date.now();
@@ -6002,6 +6073,65 @@ function spinnerSpin(){
     }).then(function(){ setBusy(type, false); });
   }
 
+  function setHomeJoinError(message){
+    var error = document.getElementById('homeJoinError');
+    if (!error) return;
+    error.textContent = message || '';
+    error.style.display = message ? 'block' : 'none';
+  }
+
+  function setHomeJoinBusy(busy){
+    var button = document.getElementById('homeJoinRoomBtn');
+    if (!button) return;
+    button.disabled = busy;
+    button.textContent = busy ? '识别中…' : '加入';
+  }
+
+  function findAnyTypedRoom(code, name){
+    return rmTcbReady.then(function(ready){
+      if (ready && rmDb){
+        return rmRoomGateway('join', { code: code, type: 'auto', name: name }, '加入房间').then(function(result){
+          return { docId: result.docId, room: rmUpsertLocalRoom(result.docId, result.room) };
+        });
+      }
+      if (rmTcbError || CLOUDBASE_ENV_ID !== '你的环境ID') throw (rmTcbError || new Error('CloudBase 尚未连接成功'));
+      var room = ROOMS.find(function(item){ return item.code === code; });
+      if (!room) return null;
+      if (room.toolType !== 'midpoint' && room.toolType !== 'ledger'){
+        var oldRoomError = new Error('这是旧版历史房间，请从原设备的行程页打开。');
+        oldRoomError.code = 'ROOM_LEGACY_UNSUPPORTED';
+        throw oldRoomError;
+      }
+      return findTypedRoom(room.toolType, code, name);
+    });
+  }
+
+  function joinAnyRoom(){
+    var nameInput = document.getElementById('homeJoinName');
+    var codeInput = document.getElementById('homeJoinCode');
+    if (!nameInput || !codeInput) return;
+    var name = (nameInput.value || '').trim();
+    var code = (codeInput.value || '').trim().toUpperCase();
+    setHomeJoinError('');
+    if (!name){ setHomeJoinError('请先填写你自己的名字。'); nameInput.focus(); return; }
+    if (code.length !== 8){ setHomeJoinError('请输入完整的 8 位房间码。'); codeInput.focus(); return; }
+    setHomeJoinBusy(true);
+    findAnyTypedRoom(code, name).then(function(found){
+      if (!found) throw new Error('没有找到房间码“' + code + '”');
+      var type = found.room && found.room.toolType;
+      if (type !== 'midpoint' && type !== 'ledger') throw new Error('这个房间不是新版碰面或账本房间。');
+      saveNickname(name);
+      codeInput.value = '';
+      rmRememberRoom(found.docId);
+      rmEnterTypedRoom(found.docId, type);
+    }).catch(function(err){
+      var message = String(err && (err.message || err) || '');
+      if (/没有找到|旧版|已经有人|尝试次数|达到|请输入|不是新版/.test(message)) setHomeJoinError(message);
+      else setHomeJoinError(backendErrorText(err));
+    }).then(function(){ setHomeJoinBusy(false); });
+  }
+  window.joinAnyRoom = joinAnyRoom;
+
   function leaveTyped(type){
     var room = typedRoom(type);
     if (!room){ stopTypedSync(); rmGoHome(); return; }
@@ -6021,13 +6151,26 @@ function spinnerSpin(){
       codeInput.addEventListener('input', function(){ this.value = this.value.toUpperCase().replace(/[^A-HJ-NP-Z2-9]/g, '').slice(0, 8); });
       codeInput.addEventListener('keydown', function(e){ if (e.key === 'Enter') joinTyped(type); });
     }
-    if (copyBtn) copyBtn.addEventListener('click', function(){
+    if (copyBtn) copyBtn.addEventListener('click', function(e){
+      e.preventDefault();
+      e.stopPropagation();
       var room = typedRoom(type); if (!room) return;
-      copyTextToClipboard(room.code).then(function(){ copyBtn.textContent = '已复制'; setTimeout(function(){ copyBtn.textContent = '复制'; }, 1200); });
+      copyRoomCode(copyBtn, room.code);
     });
     if (leaveBtn) leaveBtn.addEventListener('click', function(){ leaveTyped(type); });
     rmRefreshTypedRoomUI(type);
   });
+
+  var homeJoinName = document.getElementById('homeJoinName');
+  var homeJoinCode = document.getElementById('homeJoinCode');
+  var homeJoinButton = document.getElementById('homeJoinRoomBtn');
+  if (homeJoinName && !homeJoinName.value) homeJoinName.value = savedNickname();
+  if (homeJoinCode){
+    homeJoinCode.addEventListener('input', function(){ this.value = this.value.toUpperCase().replace(/[^A-HJ-NP-Z2-9]/g, '').slice(0, 8); });
+    homeJoinCode.addEventListener('keydown', function(e){ if (e.key === 'Enter') joinAnyRoom(); });
+  }
+  if (homeJoinName) homeJoinName.addEventListener('keydown', function(e){ if (e.key === 'Enter') homeJoinCode.focus(); });
+  if (homeJoinButton) homeJoinButton.addEventListener('click', joinAnyRoom);
 
   /* 从首页进入工具时总是先展示该工具自己的入口；历史房间仍可从“行程”页恢复。 */
   var originalOpenMidpoint = window.openMidpoint;

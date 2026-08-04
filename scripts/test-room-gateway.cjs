@@ -115,6 +115,10 @@ async function main() {
   assert.equal(created.ok, true);
   assert.match(created.data.room.code, /^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{8}$/);
   assert.deepEqual(created.data.room.memberUids, ["owner"]);
+  assert.equal(created.data.room.schemaVersion, 3);
+  assert.deepEqual(created.data.room.lifecycle.policy, "owner-disband-only");
+  assert.equal(typeof created.data.room.lifecycle.createdAtMs, "number");
+  assert.equal(Object.hasOwn(created.data.room, "expiresAt"), false);
   const { docId, room } = created.data;
 
   const ownerRead = await call("owner", { action: "getRoom", docId });
@@ -168,6 +172,16 @@ async function main() {
   });
   assert.equal(wrongType.code, "WRONG_ROOM_TYPE");
   assert.equal(rooms.get(docId).memberUids.includes("stranger-2"), false);
+
+  const autoLedger = await call("auto-ledger", {
+    action: "join",
+    type: "auto",
+    code: room.code,
+    name: "自动账本成员"
+  });
+  assert.equal(autoLedger.ok, true);
+  assert.equal(autoLedger.data.type, "ledger");
+  assert.equal(autoLedger.data.room.toolType, "ledger");
 
   const baseLedger = clone(rooms.get(docId).ledger);
   const ownerMember = baseLedger.members.find((item) => item.uid === "owner");
@@ -281,10 +295,25 @@ async function main() {
     room: { toolType: "midpoint", name: "碰面测试", members: [{ name: "碰面房主" }] }
   });
   assert.equal(midpointCreated.ok, true);
+  assert.equal(midpointCreated.data.room.schemaVersion, 3);
+  assert.deepEqual(midpointCreated.data.room.lifecycle.policy, "owner-disband-only");
+  assert.equal(typeof midpointCreated.data.room.lifecycle.createdAtMs, "number");
+  assert.equal(Object.hasOwn(midpointCreated.data.room, "expiresAt"), false);
   const midpointDocId = midpointCreated.data.docId;
   const midpointEpoch = midpointCreated.data.room.members[0].membershipEpoch;
   const midpointSync = await call("mid-owner", { action: "syncLedger", docId: midpointDocId, ledger: baseLedger });
   assert.equal(midpointSync.code, "WRONG_ROOM_TYPE");
+  const autoMidpoint = await call("auto-midpoint", {
+    action: "join",
+    type: "auto",
+    code: midpointCreated.data.room.code,
+    name: "自动碰面成员"
+  });
+  assert.equal(autoMidpoint.ok, true);
+  assert.equal(autoMidpoint.data.type, "midpoint");
+  assert.equal(autoMidpoint.data.room.toolType, "midpoint");
+  const autoMidpointLeft = await call("auto-midpoint", { action: "leave", docId: midpointDocId });
+  assert.equal(autoMidpointLeft.ok, true);
   const pointSaved = await call("mid-owner", {
     action: "setMeetupPoint",
     docId: midpointDocId,
@@ -496,6 +525,13 @@ async function main() {
   });
   assert.equal(legacyCreated.ok, true);
   const legacyDocId = legacyCreated.data.docId;
+  const autoLegacy = await call("auto-legacy", {
+    action: "join",
+    type: "auto",
+    code: legacyCreated.data.room.code,
+    name: "自动加入者"
+  });
+  assert.equal(autoLegacy.code, "ROOM_LEGACY_UNSUPPORTED");
   const legacyLedger = {
     name: "旧版测试",
     nameUpdatedAt: stamp,
@@ -528,6 +564,13 @@ async function main() {
   assert.equal(leftRead.data.room, null, "a member must lose read access immediately after leaving");
   const leftSync = await call("member", { action: "syncLedger", docId, ledger: memberSync.data.ledger });
   assert.equal(leftSync.code, "ROOM_NOT_FOUND");
+  const rejoined = await call("member", {
+    action: "join",
+    type: "ledger",
+    code: room.code,
+    name: "成员"
+  });
+  assert.equal(rejoined.ok, true, "a member can rejoin after leaving with the same room code");
 
   const ownerLeave = await call("owner", { action: "leave", docId });
   assert.equal(ownerLeave.code, "OWNER_MUST_DISBAND");
@@ -541,6 +584,13 @@ async function main() {
   assert.equal(rooms.has(docId), false);
   const disbandedRead = await call("owner", { action: "getRoom", docId });
   assert.equal(disbandedRead.data.room, null);
+  const disbandedJoin = await call("after-disband", {
+    action: "join",
+    type: "ledger",
+    code: room.code,
+    name: "解散后加入者"
+  });
+  assert.equal(disbandedJoin.code, "ROOM_NOT_FOUND", "a disbanded room code must no longer be available");
   const repeatedDisband = await call("owner", { action: "disband", docId });
   assert.equal(repeatedDisband.ok, true);
 

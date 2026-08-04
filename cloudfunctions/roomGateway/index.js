@@ -538,6 +538,8 @@ function normalizeTypedRoom(source, uid) {
   const room = {
     name: roomName,
     toolType: type,
+    schemaVersion: 3,
+    lifecycle: { policy: "owner-disband-only", createdAtMs: now },
     members: [member],
     memberUids: [uid],
     memberEpochs: { [membershipVersionKey(uid)]: membershipEpoch },
@@ -681,6 +683,7 @@ async function getRoom(event, uid) {
 async function joinRoom(event, uid) {
   const code = cleanText(event.code, 8).toUpperCase();
   const expectedType = cleanText(event.type, 16);
+  const isAutoJoin = expectedType === "auto";
   const name = cleanText(event.name, 24);
   if (!/^(?:[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}|[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{8})$/.test(code)) {
     return failure("INVALID_CODE", "请输入完整的 8 位房间码（旧房间可输入 6 位）");
@@ -689,7 +692,12 @@ async function joinRoom(event, uid) {
   const room = await roomByCode(code);
   if (!room) return failure("ROOM_NOT_FOUND", `没有找到房间码“${code}”`);
   const type = room.toolType || room.roomType || "legacy";
-  if (expectedType && type !== expectedType) {
+  if (isAutoJoin && type !== "midpoint" && type !== "ledger") {
+    return type === "legacy"
+      ? failure("ROOM_LEGACY_UNSUPPORTED", "旧版综合房间不支持自动加入，请从对应功能进入")
+      : failure("WRONG_ROOM_TYPE", "这个房间不支持自动加入");
+  }
+  if (!isAutoJoin && expectedType && type !== expectedType) {
     const actual = type === "midpoint" ? "碰面码" : type === "ledger" ? "账本码" : "旧版综合房间码";
     return failure("WRONG_ROOM_TYPE", `这是${actual}，不能加入当前功能`);
   }
@@ -710,7 +718,12 @@ async function joinRoom(event, uid) {
     }
 
     const currentType = current.toolType || current.roomType || "legacy";
-    if (expectedType && currentType !== expectedType) {
+    if (isAutoJoin && currentType !== "midpoint" && currentType !== "ledger") {
+      return currentType === "legacy"
+        ? failure("ROOM_LEGACY_UNSUPPORTED", "旧版综合房间不支持自动加入，请从对应功能进入")
+        : failure("WRONG_ROOM_TYPE", "这个房间不支持自动加入");
+    }
+    if (!isAutoJoin && expectedType && currentType !== expectedType) {
       const actual = currentType === "midpoint" ? "碰面码" : currentType === "ledger" ? "账本码" : "旧版综合房间码";
       return failure("WRONG_ROOM_TYPE", `这是${actual}，不能加入当前功能`);
     }
@@ -818,7 +831,7 @@ async function joinRoom(event, uid) {
 
     const updatedResult = requireDbSuccess(await ref.update(patch), "加入房间");
     if (!updatedResult || updatedResult.updated !== 1) throw new Error("加入房间失败");
-    return success({ docId, room: updated });
+    return success({ docId, type: currentType, room: updated });
   }, 5);
 }
 

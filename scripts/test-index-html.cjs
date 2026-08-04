@@ -84,4 +84,24 @@ assert.equal(
   "each home tool card needs one decorative arrow"
 );
 
+for (const id of ["homeJoinName", "homeJoinCode", "homeJoinRoomBtn", "homeJoinError"]) {
+  assert.match(home, new RegExp(`id=["']${id}["']`), `home universal join is missing #${id}`);
+}
+assert.match(
+  source,
+  /rmRoomGateway\(\s*['"]join['"]\s*,\s*\{\s*code:\s*code,\s*type:\s*['"]auto['"],\s*name:\s*name\s*\}/,
+  "home universal join must ask the gateway to auto-detect room type"
+);
+assert.match(
+  source,
+  /rmEnterTypedRoom\(found\.docId,\s*type\)/,
+  "home universal join must route using the server-returned room type"
+);
+assert.match(home, /tool-icon ledger[\s\S]*?ti-receipt-2/, "the ledger home card needs its own receipt icon");
+assert.match(source, /card\.dataset\.roomType\s*=\s*room\.toolType/, "room cards must expose their type for icon styling");
+assert.match(source, /room\.toolType\s*===\s*['"]midpoint['"]\s*\?\s*['"]map-pin-share['"][\s\S]*?['"]receipt-2['"]/, "midpoint and ledger cards need distinct icons");
+assert.match(source, /schemaVersion:\s*3[\s\S]*?policy:\s*['"]owner-disband-only['"]/, "new local rooms must carry the persistent-room schema marker");
+assert.match(source, /document\.execCommand\(['"]copy['"]\)\s*===\s*true/, "clipboard fallback must verify that copying actually succeeded");
+assert.match(source, /function\s+copyRoomCode\s*\(/, "room code copying needs reliable success/failure feedback");
+
 console.log(`index.html checks passed (${inlineScripts.length} inline scripts).`);
