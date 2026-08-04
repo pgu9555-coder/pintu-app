@@ -4,5 +4,17 @@
     "create": false,
     "update": false,
     "delete": false
+  },
+  "user_profiles": {
+    "read": false,
+    "create": false,
+    "update": false,
+    "delete": false
+  },
+  "profile_avatar_cleanup": {
+    "read": false,
+    "create": false,
+    "update": false,
+    "delete": false
   }
 }

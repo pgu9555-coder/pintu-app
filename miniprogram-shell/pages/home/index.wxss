@@ -6,3 +6,19 @@
 .tool-icon { width:72rpx; height:72rpx; display:flex; align-items:center; justify-content:center; border-radius:18rpx; background:#E5EEE8; color:#143D35; font-size:38rpx; }
 .privacy-link { margin:8rpx auto 0; padding:8rpx 24rpx; min-width:0; line-height:48rpx; background:transparent; color:#78847D; font-size:24rpx; }
 .privacy-link::after { border:0; }
+.profile-card { padding-bottom: 26rpx; }
+.profile-head { display:flex; align-items:center; gap:18rpx; margin-bottom:18rpx; }
+.profile-avatar { width:88rpx; height:88rpx; flex:0 0 auto; border-radius:50%; background:#E5EEE8; }
+.profile-avatar-placeholder { display:flex; align-items:center; justify-content:center; color:#143D35; font-size:34rpx; font-weight:700; }
+.profile-copy { flex:1; min-width:0; }
+.profile-copy .section-title { margin-bottom:4rpx; }
+.avatar-action { flex:0 0 auto; margin:0; padding:0 18rpx; min-width:0; line-height:58rpx; border-radius:29rpx; background:#F3EBDD; color:#7F5818; font-size:24rpx; }
+.avatar-action::after { border:0; }
+.profile-save { margin-top:16rpx; }
+.avatar-cleanup-warning { display:flex; align-items:center; justify-content:space-between; gap:16rpx; margin-top:14rpx; padding:12rpx 14rpx; border-radius:12rpx; background:#FFF3DD; color:#7F5818; font-size:24rpx; }
+.avatar-cleanup-warning .profile-text-action { color:#7F5818; }
+.avatar-unsupported { flex:0 0 auto; color:#78847D; font-size:22rpx; text-align:right; }
+.profile-actions { display:flex; justify-content:flex-end; gap:18rpx; margin-top:16rpx; }
+.profile-text-action { margin:0; padding:0; min-width:0; background:transparent; color:#7F5818; font-size:24rpx; line-height:48rpx; }
+.profile-text-action::after { border:0; }
+.profile-text-action.danger { color:#9C433A; }

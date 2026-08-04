@@ -2,6 +2,29 @@
   <view class="title">拼途</view>
   <view class="muted">一起出发，把见面和账目留在同一个房间。</view>
 
+  <view class="card profile-card">
+    <view class="profile-head">
+      <image wx:if="{{profileAvatarPreview}}" class="profile-avatar" src="{{profileAvatarPreview}}" mode="aspectFill" />
+      <view wx:else class="profile-avatar profile-avatar-placeholder">微</view>
+      <view class="profile-copy">
+        <view class="section-title">微信账号</view>
+        <view class="muted">{{profileLoaded ? (profileExists ? '资料已连接，可随时编辑或删除' : '可完善头像昵称；资料仅归你的微信账号') : '正在加载你的资料…'}}</view>
+      </view>
+      <button wx:if="{{canChooseAvatar}}" class="avatar-action" open-type="chooseAvatar" bindchooseavatar="chooseAvatar" disabled="{{profileBusy || !profileLoaded}}">换头像</button>
+      <view wx:else class="avatar-unsupported">当前微信版本不支持换头像</view>
+    </view>
+    <input class="input" type="nickname" placeholder="微信昵称" value="{{profileNickname}}" maxlength="24" bindinput="profileNicknameInput" disabled="{{!profileLoaded || profileBusy}}" />
+    <button class="btn profile-save" bindtap="saveProfile" loading="{{profileBusy}}" disabled="{{profileBusy || !profileLoaded}}">保存微信资料</button>
+    <view wx:if="{{profileAvatarCleanupPending}}" class="avatar-cleanup-warning">
+      <text>有 {{profileAvatarCleanupPending}} 个旧头像文件待清理</text>
+      <button class="profile-text-action" bindtap="retryAvatarCleanup" disabled="{{profileBusy}}">重试清理</button>
+    </view>
+    <view class="profile-actions">
+      <button class="profile-text-action" bindtap="removeAvatar" disabled="{{profileBusy || !profileLoaded}}">移除头像</button>
+      <button class="profile-text-action danger" bindtap="deleteProfile" disabled="{{profileBusy || !profileLoaded}}">删除云端资料</button>
+    </view>
+  </view>
+
   <view class="card">
     <view class="gold section-title">统一加入</view>
     <input class="input" placeholder="你的名字" value="{{name}}" maxlength="24" bindinput="nameInput" />
@@ -12,7 +35,7 @@
   <view class="card">
     <view class="section-title">开始一趟协作</view>
     <view class="tool" bindtap="openMidpoint">
-      <view class="tool-icon">⌖</view>
+      <view class="tool-icon">☷</view>
       <view class="tool-copy">
         <view>协作碰面</view>
         <view class="muted">共享出发点，估算参考中点并共同选去处</view>
@@ -20,7 +43,7 @@
       <text>›</text>
     </view>
     <view class="tool" bindtap="openLedger">
-      <view class="tool-icon">¥</view>
+      <view class="tool-icon">账</view>
       <view class="tool-copy">
         <view>共享账本</view>
         <view class="muted">记录支出，自动分摊结算</view>
@@ -28,7 +51,7 @@
       <text>›</text>
     </view>
     <view class="tool" bindtap="openSpinner">
-      <view class="tool-icon">◌</view>
+      <view class="tool-icon">◎</view>
       <view class="tool-copy">
         <view>幸运转盘</view>
         <view class="muted">转起来，再公布答案</view>
@@ -37,6 +60,6 @@
     </view>
   </view>
 
-  <button class="btn gold" bindtap="openTrips">查看最近房间</button>
+  <button class="btn gold" bindtap="openTrips">查看我的房间</button>
   <button class="privacy-link" bindtap="openPrivacy">隐私保护指引</button>
 </view>

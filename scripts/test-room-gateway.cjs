@@ -8,23 +8,72 @@ let nextModerationSuggestion = "pass";
 const moderationCalls = [];
 let nextId = 1;
 const rooms = new Map();
+const profiles = new Map();
+const profileCleanupTasks = new Map();
+let nextDeleteFileResponse = null;
+let nextDeleteFileError = null;
 
 function clone(value) {
   return structuredClone(value);
 }
 
-function roomCollection(inTransaction) {
+function collectionFor(name, inTransaction) {
+  const records = name === "user_profiles"
+    ? profiles
+    : name === "profile_avatar_cleanup"
+      ? profileCleanupTasks
+      : rooms;
   return {
     where(query) {
       return {
-        limit() {
+        orderBy(field, direction) {
+          this.orderFields = this.orderFields || [];
+          this.orderFields.push({ field, direction });
+          return this;
+        },
+        limit(count) {
+          this.limitCount = count;
+          return this;
+        },
+        skip(count) {
+          this.skipCount = count;
           return this;
         },
         async get() {
-          const matches = [...rooms.values()].filter((room) =>
-            Object.keys(query).every((key) => room[key] === query[key])
-          );
-          return { data: clone(matches) };
+          const matchesQuery = (record, condition) => {
+            if (condition && Array.isArray(condition.__or)) {
+              return condition.__or.some((part) => matchesQuery(record, part));
+            }
+            return Object.keys(condition || {}).every((key) => {
+              const expected = condition[key];
+              if (expected && Object.hasOwn(expected, "__elemMatch")) {
+                return Array.isArray(record[key]) && record[key].includes(expected.__elemMatch);
+              }
+              if (expected && Object.hasOwn(expected, "__lt")) {
+                const actualValue = record[key] instanceof Date ? record[key].getTime() : record[key];
+                const expectedValue = expected.__lt instanceof Date ? expected.__lt.getTime() : expected.__lt;
+                return actualValue < expectedValue;
+              }
+              if (record[key] instanceof Date && expected instanceof Date) return record[key].getTime() === expected.getTime();
+              return record[key] === expected;
+            });
+          };
+          const matches = [...records.values()].filter((record) => matchesQuery(record, query));
+          if (this.orderFields && this.orderFields.length) {
+            matches.sort((first, second) => {
+              for (const { field, direction } of this.orderFields) {
+                const firstValue = first[field] instanceof Date ? first[field].getTime() : first[field];
+                const secondValue = second[field] instanceof Date ? second[field].getTime() : second[field];
+                if (firstValue === secondValue) continue;
+                const diff = firstValue > secondValue ? 1 : -1;
+                return direction === "desc" ? -diff : diff;
+              }
+              return 0;
+            });
+          }
+          const start = this.skipCount || 0;
+          const page = this.limitCount ? matches.slice(start, start + this.limitCount) : matches.slice(start);
+          return { data: clone(page) };
         }
       };
     },
@@ -36,22 +85,22 @@ function roomCollection(inTransaction) {
     doc(id) {
       return {
         async get() {
-          const room = rooms.get(id);
-          return { data: inTransaction ? clone(room || null) : room ? [clone(room)] : [] };
+          const record = records.get(id);
+          return { data: inTransaction ? clone(record || null) : record ? [clone(record)] : [] };
         },
         async update(patch) {
-          const room = rooms.get(id);
-          if (!room) return { updated: 0 };
-          rooms.set(id, { ...room, ...clone(patch) });
+          const record = records.get(id);
+          if (!record) return { updated: 0 };
+          records.set(id, { ...record, ...clone(patch) });
           return { updated: 1 };
         },
         async set(value) {
-          rooms.set(id, { ...clone(value), _id: id });
+          records.set(id, { ...clone(value), _id: id });
           return { set: 1 };
         },
         async remove() {
-          if (!rooms.has(id)) return { deleted: 0 };
-          rooms.delete(id);
+          if (!records.has(id)) return { deleted: 0 };
+          records.delete(id);
           return { deleted: 1 };
         }
       };
@@ -70,15 +119,42 @@ const fakeCloudbase = {
           }
         };
       },
+      async deleteFile({ fileList }) {
+        if (nextDeleteFileError) {
+          const error = nextDeleteFileError;
+          nextDeleteFileError = null;
+          throw error;
+        }
+        if (nextDeleteFileResponse) {
+          const response = nextDeleteFileResponse;
+          nextDeleteFileResponse = null;
+          return clone(response);
+        }
+        return { fileList: (fileList || []).map((fileID) => ({ fileID, code: "SUCCESS" })) };
+      },
       database() {
         return {
-          collection() {
-            return roomCollection(false);
+          command: {
+            eq(value) {
+              return { __eq: value };
+            },
+            lt(value) {
+              return { __lt: value };
+            },
+            elemMatch(condition) {
+              return { __elemMatch: condition.__eq };
+            },
+            or(conditions) {
+              return { __or: conditions };
+            }
+          },
+          collection(name) {
+            return collectionFor(name, false);
           },
           async runTransaction(callback) {
             return callback({
-              collection() {
-                return roomCollection(true);
+              collection(name) {
+                return collectionFor(name, true);
               }
             });
           }
@@ -136,6 +212,72 @@ async function main() {
   const miniSpoofed = await callWx(null, { action: "create", userInfo: { uid: "forged-wx" }, room: {} });
   assert.equal(miniSpoofed.code, "UNAUTHENTICATED", "a forged mini-program event identity must never be trusted");
 
+  const webProfile = await call("web-user", { action: "getProfile" });
+  assert.equal(webProfile.code, "WECHAT_MINIPROGRAM_ONLY", "profiles must reject web callers");
+  const webProfileUpdate = await call("web-user", { action: "updateProfile", nickname: "Forged web profile" });
+  assert.equal(webProfileUpdate.code, "WECHAT_MINIPROGRAM_ONLY", "web callers cannot update WeChat profiles");
+  const webProfileDelete = await call("web-user", { action: "deleteProfile" });
+  assert.equal(webProfileDelete.code, "WECHAT_MINIPROGRAM_ONLY", "web callers cannot delete WeChat profiles");
+  const emptyProfile = await callWx("openid-profile", { action: "getProfile", userInfo: { uid: "forged-profile" } });
+  assert.deepEqual(
+    { exists: emptyProfile.data.exists, nickname: emptyProfile.data.nickname, avatarFileId: emptyProfile.data.avatarFileId, updatedAt: emptyProfile.data.updatedAt, avatarCleanupPendingCount: emptyProfile.data.avatarCleanupPendingCount },
+    { exists: false, nickname: "", avatarFileId: "", updatedAt: null, avatarCleanupPendingCount: 0 }
+  );
+  assert.match(emptyProfile.data.avatarUploadPrefix, /^avatars\/profile-[a-f0-9]{64}\/$/, "the trusted user receives only their opaque avatar upload prefix");
+  const invalidProfile = await callWx("openid-profile", { action: "updateProfile", nickname: "  " });
+  assert.equal(invalidProfile.code, "INVALID_PROFILE", "profile nicknames must be non-empty after trimming");
+  const invalidAvatar = await callWx("openid-profile", {
+    action: "updateProfile", nickname: "Profile user", avatarFileId: "https://attacker.invalid/avatar.png"
+  });
+  assert.equal(invalidAvatar.code, "INVALID_PROFILE", "only CloudBase avatar file ids may be stored");
+  const otherProfilePrefix = (await callWx("openid-other-profile", { action: "getProfile" })).data.avatarUploadPrefix;
+  const crossAccountAvatar = await callWx("openid-profile", {
+    action: "updateProfile", nickname: "Profile user", avatarFileId: `cloud://pintu/${otherProfilePrefix}other.png`
+  });
+  assert.equal(crossAccountAvatar.code, "INVALID_PROFILE", "one identity cannot register another identity's avatar file for server-side cleanup");
+  const profileAvatarFileId = `cloud://pintu/${emptyProfile.data.avatarUploadPrefix}profile.png`;
+  const savedProfile = await callWx("openid-profile", {
+    action: "updateProfile", nickname: "  Profile user  ", avatarFileId: profileAvatarFileId, uid: "forged-profile"
+  });
+  assert.equal(savedProfile.ok, true);
+  assert.deepEqual(
+    { exists: savedProfile.data.exists, nickname: savedProfile.data.nickname, avatarFileId: savedProfile.data.avatarFileId },
+    { exists: true, nickname: "Profile user", avatarFileId: profileAvatarFileId },
+    "profile responses must be trimmed and omit trusted identity fields"
+  );
+  const profileStored = [...profiles.values()][0];
+  assert.equal(Object.hasOwn(profileStored, "uid"), false, "profiles must not persist caller uid/openid fields");
+  const profileUpdated = await callWx("openid-profile", { action: "updateProfile", nickname: "New profile name" });
+  assert.equal(profileUpdated.data.avatarFileId, profileAvatarFileId, "partial updates retain an existing avatar");
+  const profileIdempotent = await callWx("openid-profile", { action: "updateProfile", nickname: "New profile name" });
+  assert.equal(profileIdempotent.data.updatedAt, profileUpdated.data.updatedAt, "identical profile writes are idempotent");
+  nextModerationSuggestion = "risky";
+  const riskyProfile = await callWx("openid-risky-profile", { action: "updateProfile", nickname: "risky name" });
+  assert.equal(riskyProfile.code, "CONTENT_REJECTED", "profile nickname moderation must fail closed");
+  const otherProfileDelete = await callWx("openid-other-profile", { action: "deleteProfile" });
+  assert.equal(otherProfileDelete.ok, true, "deleting a missing own profile is idempotent");
+  assert.equal((await callWx("openid-profile", { action: "getProfile" })).data.exists, true, "one caller cannot delete another caller's opaque profile");
+  const replacementAvatarFileId = `cloud://pintu/${emptyProfile.data.avatarUploadPrefix}replacement.png`;
+  nextDeleteFileResponse = { fileList: [{ fileID: profileAvatarFileId, code: "FAILED" }] };
+  const profileReplaced = await callWx("openid-profile", { action: "updateProfile", avatarFileId: replacementAvatarFileId });
+  assert.equal(profileReplaced.data.avatarCleanup.pendingCount, 1, "failed old-avatar deletion is returned to the caller");
+  assert.equal(profileCleanupTasks.size, 1, "failed old-avatar deletion is persisted for retry");
+  const cleanupRetried = await callWx("openid-profile", { action: "retryAvatarCleanup" });
+  assert.equal(cleanupRetried.data.avatarCleanup.pendingCount, 0, "the owner can retry server-side avatar cleanup");
+  assert.equal(profileCleanupTasks.size, 0, "successful cleanup removes only the owner's retry record");
+  nextDeleteFileError = new Error("storage temporarily unavailable");
+  const deletedProfile = await callWx("openid-profile", { action: "deleteProfile" });
+  assert.equal(deletedProfile.data.deleted, true);
+  assert.equal(deletedProfile.data.avatarCleanup.pendingCount, 1, "profile deletion reports a queued avatar cleanup instead of claiming full removal");
+  const repeatedProfileDelete = await callWx("openid-profile", { action: "deleteProfile" });
+  assert.equal(repeatedProfileDelete.data.deleted, true, "deleting an already deleted profile remains successful");
+  assert.equal(repeatedProfileDelete.data.avatarCleanup.pendingCount, 0, "a repeated delete retries the durable cleanup record");
+  const profileAfterDelete = await callWx("openid-profile", { action: "getProfile" });
+  assert.deepEqual(
+    { exists: profileAfterDelete.data.exists, nickname: profileAfterDelete.data.nickname, avatarFileId: profileAfterDelete.data.avatarFileId, updatedAt: profileAfterDelete.data.updatedAt, avatarCleanupPendingCount: profileAfterDelete.data.avatarCleanupPendingCount },
+    { exists: false, nickname: "", avatarFileId: "", updatedAt: null, avatarCleanupPendingCount: 0 }
+  );
+
   const wxOwnerUid = "wx:wx-test-pintu:openid-owner";
   const wxMemberUid = "wx:wx-test-pintu:openid-member";
   const wxCreated = await callWx("openid-owner", {
@@ -158,6 +300,111 @@ async function main() {
   assert.equal(wxJoined.ok, true, "a second WeChat OPENID can join by room code");
   assert.equal(wxJoined.data.viewer.uid, wxMemberUid);
   assert.equal(wxJoined.data.viewer.isOwner, false);
+  const seededMyRoom = {
+    _id: "room-my-older",
+    name: "Earlier shared ledger",
+    code: "ABCDEFGH",
+    toolType: "ledger",
+    accessPlatform: "wechat-mini-program",
+    memberUids: [wxOwnerUid],
+    members: [{ uid: wxOwnerUid, name: "Owner" }],
+    ledger: { expenses: [{ amountCents: 1234 }, { amountCents: 66 }] },
+    createdAt: new Date(1000),
+    updatedAt: new Date(1000),
+    ownerUid: wxOwnerUid,
+    inviteHash: "must-not-leak"
+  };
+  const newerMyRoom = {
+    _id: "room-my-newer",
+    name: "Latest midpoint",
+    code: "JKLMNPQR",
+    toolType: "midpoint",
+    accessPlatform: "wechat-mini-program",
+    memberUids: [wxOwnerUid],
+    members: [{ uid: wxOwnerUid, name: "Owner" }, { uid: wxMemberUid, name: "Member" }],
+    ledger: { expenses: [] },
+    createdAt: new Date(2000),
+    updatedAt: new Date(2000),
+    ownerUid: wxOwnerUid
+  };
+  rooms.set(seededMyRoom._id, seededMyRoom);
+  rooms.set(newerMyRoom._id, newerMyRoom);
+  rooms.set("room-my-web", { ...seededMyRoom, _id: "room-my-web", accessPlatform: "web", updatedAt: new Date(3000) });
+  rooms.set("room-my-left", {
+    ...seededMyRoom,
+    _id: "room-my-left",
+    ownerUid: "someone-else",
+    memberUids: [wxOwnerUid],
+    members: [{ uid: "someone-else" }]
+  });
+  const myRooms = await callWx("openid-owner", { action: "listMyRooms", userInfo: { uid: "forged-owner" } });
+  assert.equal(myRooms.ok, true);
+  assert.deepEqual(
+    myRooms.data.rooms.filter((item) => item.docId !== wxDocId).map((item) => item.docId).slice(0, 2),
+    ["room-my-newer", "room-my-older"],
+    "my rooms are sorted newest first"
+  );
+  assert.equal(myRooms.data.rooms.some((item) => item.docId === "room-my-web" || item.docId === "room-my-left"), false, "platform isolation and departed members must be excluded");
+  const myRoomSummary = myRooms.data.rooms.find((item) => item.docId === "room-my-older");
+  assert.deepEqual(
+    { memberCount: myRoomSummary.memberCount, expenseCount: myRoomSummary.expenseCount, totalCents: myRoomSummary.totalCents },
+    { memberCount: 1, expenseCount: 2, totalCents: 1300 }
+  );
+  assert.deepEqual(
+    Object.keys(myRoomSummary).sort(),
+    ["docId", "expenseCount", "memberCount", "room", "totalCents", "updatedAt"],
+    "room summaries must contain only page-safe fields"
+  );
+  assert.equal(Object.hasOwn(myRoomSummary, "ownerUid"), false, "room summaries must not leak ownership or invite data");
+  const webMyRooms = await call("web-user", { action: "listMyRooms", accessPlatform: "wechat-mini-program" });
+  assert.equal(webMyRooms.code, "WECHAT_MINIPROGRAM_ONLY", "web callers cannot list WeChat rooms by forging a platform");
+  const manyUid = "wx:wx-test-pintu:openid-many";
+  for (let index = 0; index < 55; index += 1) {
+    const code = `MANY${String(index).padStart(4, "0")}`;
+    rooms.set(`room-many-${index}`, {
+      _id: `room-many-${index}`,
+      name: `Many room ${index}`,
+      code,
+      toolType: "ledger",
+      accessPlatform: "wechat-mini-program",
+      memberUids: [manyUid],
+      members: [{ uid: manyUid, name: "Many" }],
+      ledger: { expenses: [] },
+      createdAt: new Date(index),
+      updatedAt: new Date(index)
+    });
+  }
+  const invalidMyRoomsCursor = await callWx("openid-many", { action: "listMyRooms", cursor: { createdAt: -1, docId: "room" } });
+  assert.equal(invalidMyRoomsCursor.code, "INVALID_PAGINATION", "my rooms rejects unsafe cursors");
+  const invalidMyRoomsLimit = await callWx("openid-many", { action: "listMyRooms", limit: 51 });
+  assert.equal(invalidMyRoomsLimit.code, "INVALID_PAGINATION", "my rooms caps page size at 50");
+  const manyRooms = await callWx("openid-many", { action: "listMyRooms", cursor: null, limit: 50 });
+  assert.equal(manyRooms.data.rooms.length, 50, "my rooms are server-limited to 50 summaries");
+  assert.equal(manyRooms.data.hasMore, true, "my rooms returns a continuation when more results exist");
+  assert.deepEqual(manyRooms.data.nextCursor, { createdAt: 5, docId: "room-many-5" }, "my rooms returns an immutable keyset cursor");
+  rooms.get("room-many-4").updatedAt = new Date(999999999);
+  const moreManyRooms = await callWx("openid-many", {
+    action: "listMyRooms", cursor: manyRooms.data.nextCursor, limit: 50
+  });
+  assert.equal(moreManyRooms.data.rooms.length, 5, "my rooms can retrieve rooms after the first 50");
+  assert.equal(moreManyRooms.data.rooms.some((room) => room.docId === "room-many-4"), true, "a room updated after page one is not skipped because pagination uses immutable creation time");
+  assert.equal(moreManyRooms.data.hasMore, false, "the final my-rooms page has no continuation");
+  const lifecycleRoom = await callWx("openid-list-owner", {
+    action: "create", room: { toolType: "ledger", name: "Lifecycle room", members: [{ name: "List owner" }] }
+  });
+  await callWx("openid-list-member", {
+    action: "join", type: "ledger", code: lifecycleRoom.data.room.code, name: "List member"
+  });
+  const beforeLeaveRooms = await callWx("openid-list-member", { action: "listMyRooms" });
+  assert.equal(beforeLeaveRooms.data.rooms.some((item) => item.docId === lifecycleRoom.data.docId), true, "joined rooms appear in my rooms");
+  const leftLifecycleRoom = await callWx("openid-list-member", { action: "leave", docId: lifecycleRoom.data.docId });
+  assert.equal(leftLifecycleRoom.ok, true);
+  const afterLeaveRooms = await callWx("openid-list-member", { action: "listMyRooms" });
+  assert.equal(afterLeaveRooms.data.rooms.some((item) => item.docId === lifecycleRoom.data.docId), false, "left rooms disappear from my rooms");
+  const disbandedLifecycleRoom = await callWx("openid-list-owner", { action: "disband", docId: lifecycleRoom.data.docId });
+  assert.equal(disbandedLifecycleRoom.ok, true);
+  const afterDisbandRooms = await callWx("openid-list-owner", { action: "listMyRooms" });
+  assert.equal(afterDisbandRooms.data.rooms.some((item) => item.docId === lifecycleRoom.data.docId), false, "disbanded rooms disappear from my rooms");
   const wxRead = await callWx("openid-member", { action: "getRoom", docId: wxDocId });
   assert.equal(wxRead.ok, true, "a joined WeChat identity can read the room");
   assert.equal(wxRead.data.room.members.some((member) => member.uid === wxMemberUid), true);

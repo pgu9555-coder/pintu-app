@@ -68,10 +68,55 @@ async function applyCollectionRule(collectionName, securityRule) {
   console.log(`Verified CUSTOM security rule for ${collectionName}.`);
 }
 
+async function ensureCollection(collectionName) {
+  const databaseManager = cloudbase.database;
+  if (
+    !databaseManager ||
+    typeof databaseManager.createCollectionIfNotExists !== "function"
+  ) {
+    throw new Error(
+      `CloudBase manager cannot ensure collection ${collectionName}; refusing to deploy incomplete security rules.`
+    );
+  }
+
+  await databaseManager.createCollectionIfNotExists(collectionName);
+  console.log(`Verified database collection ${collectionName} exists.`);
+}
+
+async function ensureMyRoomsIndex() {
+  const indexName = "member_access_platform_created_id";
+  const exists = await cloudbase.database.checkIndexExists("rooms", indexName);
+  if (!exists || !exists.Exists) {
+    await cloudbase.database.updateCollection("rooms", {
+      CreateIndexes: [
+        {
+          IndexName: indexName,
+          MgoKeySchema: {
+            MgoIsUnique: false,
+            MgoIndexKeys: [
+              { Name: "accessPlatform", Direction: "1" },
+              { Name: "memberUids", Direction: "1" },
+              { Name: "createdAt", Direction: "-1" },
+              { Name: "_id", Direction: "-1" }
+            ]
+          }
+        }
+      ]
+    });
+  }
+  const verified = await cloudbase.database.checkIndexExists("rooms", indexName);
+  if (!verified || !verified.Exists) {
+    throw new Error("My-rooms database index verification failed.");
+  }
+  console.log(`Verified database index ${indexName} exists.`);
+}
+
 async function main() {
   for (const [collectionName, securityRule] of Object.entries(rules)) {
+    await ensureCollection(collectionName);
     await applyCollectionRule(collectionName, securityRule);
   }
+  await ensureMyRoomsIndex();
 }
 
 main().catch((error) => {

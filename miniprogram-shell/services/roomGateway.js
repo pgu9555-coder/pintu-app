@@ -33,6 +33,21 @@ module.exports = {
   getRoom(docId) {
     return call('getRoom', { docId })
   },
+  getProfile() {
+    return call('getProfile')
+  },
+  updateProfile(data) {
+    return call('updateProfile', data)
+  },
+  deleteProfile() {
+    return call('deleteProfile')
+  },
+  retryAvatarCleanup() {
+    return call('retryAvatarCleanup')
+  },
+  listMyRooms(cursor, limit) {
+    return call('listMyRooms', { cursor, limit })
+  },
   syncLedger(docId, ledger, membershipEpoch) {
     return call('syncLedger', { docId, ledger, membershipEpoch })
   },

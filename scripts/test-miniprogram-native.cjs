@@ -83,13 +83,47 @@ assert.deepEqual(
 );
 
 const gatewaySource = fs.readFileSync(path.join(root, "services", "roomGateway.js"), "utf8");
-for (const action of ["publishDecisionCandidates", "setDecisionVote", "confirmDecisionCandidate", "reopenDecision"]) {
+for (const action of ["publishDecisionCandidates", "setDecisionVote", "confirmDecisionCandidate", "reopenDecision", "updateProfile"]) {
   assert.match(
     gatewaySource,
     new RegExp(`${action}\\(data\\)\\s*\\{\\s*return call\\(['\"]${action}['\"], data\\)`),
     `room gateway must expose ${action}`
   );
 }
+assert.match(gatewaySource, /getProfile\(\)\s*\{\s*return call\(['"]getProfile['"]\)/, "room gateway must expose getProfile");
+assert.match(gatewaySource, /deleteProfile\(\)\s*\{\s*return call\(['"]deleteProfile['"]\)/, "room gateway must expose deleteProfile");
+assert.match(gatewaySource, /retryAvatarCleanup\(\)\s*\{\s*return call\(['"]retryAvatarCleanup['"]\)/, "room gateway must expose cleanup retry");
+assert.match(gatewaySource, /listMyRooms\(cursor, limit\)\s*\{\s*return call\(['"]listMyRooms['"], \{ cursor, limit \}\)/, "room gateway must expose cursor-paginated listMyRooms");
+
+const homePageSource = fs.readFileSync(path.join(root, "pages", "home", "index.js"), "utf8");
+const homeMarkup = fs.readFileSync(path.join(root, "pages", "home", "index.wxml"), "utf8");
+assert.match(homeMarkup, /open-type="chooseAvatar"[\s\S]*?bindchooseavatar="chooseAvatar"/, "home must use the native chooseAvatar button");
+assert.match(homeMarkup, /<input[^>]*type="nickname"/, "home must use the native nickname input");
+assert.match(homePageSource, /gateway\.getProfile\(\)/, "home must load the authenticated WeChat profile");
+assert.match(homePageSource, /wx\.cloud\.uploadFile\(/, "avatar selection must upload through CloudBase");
+assert.match(homePageSource, /gateway\.updateProfile\(/, "home must save profile updates through the gateway");
+assert.match(homePageSource, /gateway\.deleteProfile\(\)/, "home must let the caller delete their cloud profile");
+assert.match(homePageSource, /gateway\.retryAvatarCleanup\(\)/, "home must let the caller retry an observable avatar cleanup failure");
+assert.match(homePageSource, /gateway\.updateProfile\(\{ avatarFileId: '' \}\)/, "home must let the caller remove their avatar");
+assert.match(homePageSource, /avatarUploadPrefix/, "avatar uploads must use the caller's trusted, server-issued path prefix");
+assert.match(homePageSource, /wx\.canIUse/, "home must detect chooseAvatar support on older clients");
+assert.match(homePageSource, /storage\.saveName\(profile\.nickname\)/, "saved profile names must become the local room-name default");
+assert.match(homePageSource, /onLoad\(options\)[\s\S]*?storage\.saveName\(['"]['"]\)/, "home must clear a previous WeChat account's cached nickname before resolving the current profile");
+assert.ok(!/profile\.nickname\s*\|\|\s*storage\.getName\(\)/.test(homePageSource), "profile loading must not fall back to another account's cached nickname");
+assert.ok(!/wx\.getUserProfile/.test(homePageSource + homeMarkup), "the deprecated getUserProfile API must not be used");
+
+const tripsPageSource = fs.readFileSync(path.join(root, "pages", "trips", "index.js"), "utf8");
+const tripsMarkup = fs.readFileSync(path.join(root, "pages", "trips", "index.wxml"), "utf8");
+assert.match(tripsPageSource, /gateway\.listMyRooms\(null, 50\)/, "trips must load the caller's first cloud room page");
+assert.match(tripsPageSource, /gateway\.listMyRooms\(cursor, 50\)/, "trips must load additional cloud room pages by cursor");
+assert.match(tripsPageSource, /cursor\.createdAt/, "trips must validate immutable creation-time cursors");
+assert.match(tripsPageSource, /myRoomsRequestId/, "trips must ignore stale room-list responses");
+assert.ok(!/storage\.all\(/.test(tripsPageSource), "trips must not display shared-device room caches");
+assert.match(tripsPageSource, /storage\.save\(\{ docId: entry\.docId, room: entry\.room \}\)/, "opening a trusted cloud room may refresh its local cache");
+assert.match(tripsPageSource, /cloudError/, "trips must retain a clear cloud-load error state");
+assert.match(tripsMarkup, /正在同步你的云端房间/, "trips must render a cloud loading state");
+assert.match(tripsMarkup, /cloudError/, "trips must render cloud-load failures");
+assert.match(tripsMarkup, /加载更多/, "trips must offer paginated room recovery");
 
 const midpointPageSource = fs.readFileSync(path.join(root, "pages", "midpoint", "index.js"), "utf8");
 const midpointMarkup = fs.readFileSync(path.join(root, "pages", "midpoint", "index.wxml"), "utf8");

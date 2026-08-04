@@ -5,6 +5,11 @@ const cloudbase = require("@cloudbase/node-sdk");
 const wxCloud = require("wx-server-sdk");
 
 const ROOM_COLLECTION = "rooms";
+const PROFILE_COLLECTION = "user_profiles";
+const PROFILE_CLEANUP_COLLECTION = "profile_avatar_cleanup";
+const MAX_MY_ROOMS_PAGE_SIZE = 50;
+const MAX_AVATAR_CLEANUP_BATCH = 50;
+const MAX_AVATAR_CLEANUP_RECORDS = 500;
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const COLORS = ["#0F3D36", "#B8842A", "#3E6E8E", "#A8506E", "#C05B3C", "#4C5C5B"];
 const MAX_LEDGER_BYTES = 400 * 1024;
@@ -471,6 +476,90 @@ function membershipVersionKey(uid) {
   return crypto.createHash("sha256").update(String(uid)).digest("hex");
 }
 
+/* Profile document ids are intentionally opaque and deterministic.  The
+   trusted uid never leaves this function, and is never selected from event. */
+function profileDocumentId(uid) {
+  return `profile-${crypto.createHash("sha256").update(String(uid)).digest("hex")}`;
+}
+
+/* Cleanup records use the same opaque, caller-derived id as profiles.  They
+   are never readable by clients; keeping failed deletions here means a
+   profile can safely change first without silently losing the old file. */
+function profileCleanupDocumentId(uid) {
+  return `cleanup-${crypto.createHash("sha256").update(String(uid)).digest("hex")}`;
+}
+
+function profileTimestamp(value) {
+  if (!value) return null;
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (value instanceof Date) return Number.isFinite(value.getTime()) ? value.getTime() : null;
+  if (typeof value.getTime === "function") {
+    const timestamp = value.getTime();
+    return Number.isFinite(timestamp) ? timestamp : null;
+  }
+  return null;
+}
+
+function publicProfile(profile, exists, cleanupPendingCount = 0, uid = "") {
+  return {
+    exists: !!exists,
+    nickname: exists ? cleanText(profile.nickname, 24) : "",
+    avatarFileId: exists ? cleanText(profile.avatarFileId, 1024) : "",
+    updatedAt: exists ? profileTimestamp(profile.updatedAt) : null,
+    avatarCleanupPendingCount: Math.max(0, Math.floor(Number(cleanupPendingCount) || 0)),
+    avatarUploadPrefix: validUid(uid) ? avatarUploadPrefix(uid) : ""
+  };
+}
+
+function normalizeProfileNickname(value) {
+  if (typeof value !== "string") publicInputError("INVALID_PROFILE", "昵称格式无效");
+  const nickname = value.trim();
+  if (!nickname || Array.from(nickname).length > 24) {
+    publicInputError("INVALID_PROFILE", "昵称需为 1 到 24 个字符");
+  }
+  return nickname;
+}
+
+function normalizeAvatarFileId(value, uid) {
+  if (typeof value !== "string") publicInputError("INVALID_PROFILE", "头像格式无效");
+  const avatarFileId = value.trim();
+  if (avatarFileId && (!avatarFileId.startsWith("cloud://") || avatarFileId.length > 1024 || /\s/.test(avatarFileId) || !isManagedAvatarFileId(avatarFileId, uid))) {
+    publicInputError("INVALID_PROFILE", "头像文件无效");
+  }
+  return avatarFileId;
+}
+
+/* Only files written by this mini-program's explicit avatar chooser are ever
+   deleted with server authority.  A client cannot use a profile update as an
+   oracle for deleting another CloudBase file it happens to know the id for. */
+function avatarUploadPrefix(uid) {
+  return `avatars/${profileDocumentId(uid)}/`;
+}
+
+function isManagedAvatarFileId(value, uid) {
+  if (!validUid(uid) || typeof value !== "string") return false;
+  const match = /^cloud:\/\/[^/]+\/(.+)$/.exec(value);
+  if (!match) return false;
+  const prefix = avatarUploadPrefix(uid);
+  const relativePath = match[1];
+  const fileName = relativePath.slice(prefix.length);
+  return relativePath.startsWith(prefix) && /^[A-Za-z0-9._-]{1,160}$/.test(fileName);
+}
+
+function cleanupFileIds(value, uid) {
+  if (!Array.isArray(value)) return [];
+  return Array.from(new Set(value.filter((fileId) => isManagedAvatarFileId(fileId, uid)))).slice(0, MAX_AVATAR_CLEANUP_RECORDS);
+}
+
+function cleanupTaskFromResponse(response) {
+  const task = profileFromResponse(response);
+  return task && typeof task === "object" ? task : null;
+}
+
+function cleanupPendingCount(task, uid) {
+  return cleanupFileIds(task && task.fileIds, uid).length;
+}
+
 function newMembershipEpoch() {
   return `epoch_${Date.now().toString(36)}_${crypto.randomBytes(12).toString("hex")}`;
 }
@@ -672,7 +761,8 @@ function normalizeTypedRoom(source, uid, accessPlatform) {
       type === "midpoint"
         ? { people: [{ uid, name: memberName, address: "", lat: null, lng: null, color: COLORS[0] }] }
         : { people: [] },
-    createdAt: new Date()
+    createdAt: new Date(),
+    updatedAt: new Date()
   };
   if (type === "ledger") {
     room.ledger = {
@@ -717,7 +807,8 @@ function normalizeLegacyRoom(source, uid, accessPlatform) {
     tripId: null,
     ledger: null,
     meetup: { people: [] },
-    createdAt: new Date()
+    createdAt: new Date(),
+    updatedAt: new Date()
   };
 }
 
@@ -811,6 +902,350 @@ async function getRoom(event, uid, accessPlatform) {
     };
   }
   return success({ room: safeRoom, viewer: roomViewer(safeRoom, uid) });
+}
+
+function profileFromResponse(response) {
+  if (!response || response.data == null) return null;
+  return Array.isArray(response.data) ? response.data[0] || null : response.data;
+}
+
+function requireWechatMiniProgram(accessPlatform) {
+  if (accessPlatform !== "wechat-mini-program") {
+    return failure("WECHAT_MINIPROGRAM_ONLY", "该操作仅支持微信小程序");
+  }
+  return null;
+}
+
+async function getProfile(uid, accessPlatform) {
+  const denied = requireWechatMiniProgram(accessPlatform);
+  if (denied) return denied;
+  const [profileResponse, cleanupResponse] = await Promise.all([
+    db.collection(PROFILE_COLLECTION).doc(profileDocumentId(uid)).get(),
+    db.collection(PROFILE_CLEANUP_COLLECTION).doc(profileCleanupDocumentId(uid)).get()
+  ]);
+  const profile = profileFromResponse(requireDbSuccess(profileResponse, "读取微信资料"));
+  const cleanupTask = cleanupTaskFromResponse(requireDbSuccess(cleanupResponse, "读取头像清理状态"));
+  return success(publicProfile(profile || {}, !!profile, cleanupPendingCount(cleanupTask, uid), uid));
+}
+
+async function addAvatarCleanupTask(transaction, uid, fileIds) {
+  const requestedFileIds = cleanupFileIds(fileIds, uid);
+  if (!requestedFileIds.length) return 0;
+  const ref = transaction.collection(PROFILE_CLEANUP_COLLECTION).doc(profileCleanupDocumentId(uid));
+  const existing = cleanupTaskFromResponse(
+    requireDbSuccess(await ref.get(), "读取头像清理任务")
+  );
+  const merged = cleanupFileIds([
+    ...cleanupFileIds(existing && existing.fileIds, uid),
+    ...requestedFileIds
+  ], uid);
+  const now = new Date();
+  requireDbSuccess(await ref.set({
+    fileIds: merged,
+    createdAt: existing && existing.createdAt ? existing.createdAt : now,
+    updatedAt: now,
+    attempts: Math.max(0, Math.floor(Number(existing && existing.attempts) || 0))
+  }), "记录头像清理任务");
+  return merged.length;
+}
+
+function cleanupResult(pendingCount, attemptedCount = 0, deletedCount = 0, error = "") {
+  return {
+    status: pendingCount ? "pending" : "cleared",
+    attemptedCount,
+    deletedCount,
+    pendingCount,
+    error: cleanText(error, 160)
+  };
+}
+
+function unmanagedAvatarCleanupResult() {
+  return {
+    status: "unmanaged",
+    attemptedCount: 0,
+    deletedCount: 0,
+    pendingCount: 0,
+    error: "旧版本头像文件不在当前账号专属目录，未自动删除"
+  };
+}
+
+/* CloudBase's server SDK reports one result per requested FileID.  Do not
+   infer success from a resolved promise: a partial failure must remain queued
+   and visible to the owner for another retry. */
+async function drainAvatarCleanup(uid) {
+  const taskId = profileCleanupDocumentId(uid);
+  const initialResponse = requireDbSuccess(
+    await db.collection(PROFILE_CLEANUP_COLLECTION).doc(taskId).get(),
+    "读取头像清理任务"
+  );
+  const task = cleanupTaskFromResponse(initialResponse);
+  const pending = cleanupFileIds(task && task.fileIds, uid);
+  if (!pending.length) return cleanupResult(0);
+
+  const attempted = pending.slice(0, MAX_AVATAR_CLEANUP_BATCH);
+  let deletedFileIds = [];
+  let deleteError = "";
+  try {
+    const response = await app.deleteFile({ fileList: attempted });
+    const resultList = Array.isArray(response && response.fileList) ? response.fileList : [];
+    const successfulFileIds = new Set(
+      resultList
+        .filter((item) => item && item.code === "SUCCESS" && attempted.includes(item.fileID))
+        .map((item) => item.fileID)
+    );
+    deletedFileIds = attempted.filter((fileId) => successfulFileIds.has(fileId));
+    if (deletedFileIds.length !== attempted.length) {
+      deleteError = "部分头像文件尚未删除";
+    }
+  } catch (error) {
+    deleteError = error && error.message ? error.message : "头像文件删除请求失败";
+  }
+
+  const state = await db.runTransaction(async (transaction) => {
+    const ref = transaction.collection(PROFILE_CLEANUP_COLLECTION).doc(taskId);
+    const current = cleanupTaskFromResponse(
+      requireDbSuccess(await ref.get(), "读取头像清理任务")
+    );
+    const currentFileIds = cleanupFileIds(current && current.fileIds, uid);
+    const remaining = currentFileIds.filter((fileId) => !deletedFileIds.includes(fileId));
+    if (!remaining.length) {
+      requireDbSuccess(await ref.remove(), "移除头像清理任务");
+      return { pendingCount: 0 };
+    }
+    requireDbSuccess(await ref.set({
+      fileIds: remaining,
+      createdAt: current && current.createdAt ? current.createdAt : new Date(),
+      updatedAt: new Date(),
+      attempts: Math.max(0, Math.floor(Number(current && current.attempts) || 0)) + 1,
+      lastError: cleanText(deleteError || "部分头像文件尚未删除", 160)
+    }), "更新头像清理任务");
+    return { pendingCount: remaining.length };
+  }, 5);
+  return cleanupResult(state.pendingCount, attempted.length, deletedFileIds.length, deleteError);
+}
+
+async function updateProfile(event, uid, accessPlatform) {
+  const denied = requireWechatMiniProgram(accessPlatform);
+  if (denied) return denied;
+  const source = event && typeof event === "object" ? event : {};
+  const hasNickname = Object.prototype.hasOwnProperty.call(source, "nickname");
+  const hasAvatar = Object.prototype.hasOwnProperty.call(source, "avatarFileId");
+  if (!hasNickname && !hasAvatar) return failure("INVALID_PROFILE", "请填写要更新的资料");
+  const docId = profileDocumentId(uid);
+  const incomingNickname = hasNickname ? normalizeProfileNickname(source.nickname) : null;
+  const incomingAvatarFileId = hasAvatar ? normalizeAvatarFileId(source.avatarFileId, uid) : null;
+  const initialResponse = requireDbSuccess(
+    await db.collection(PROFILE_COLLECTION).doc(docId).get(),
+    "读取微信资料"
+  );
+  const initial = profileFromResponse(initialResponse);
+
+  /* Keep external moderation outside the database transaction.  CloudBase may
+     retry transaction callbacks, and a network API inside the callback could
+     be called multiple times while holding the transaction open. */
+  if (hasNickname && (!initial || incomingNickname !== cleanText(initial.nickname, 24))) {
+    await moderateMiniProgramText([incomingNickname]);
+  }
+
+  const saved = await db.runTransaction(async (transaction) => {
+    const ref = transaction.collection(PROFILE_COLLECTION).doc(docId);
+    const response = requireDbSuccess(await ref.get(), "读取微信资料");
+    const current = profileFromResponse(response);
+    const nickname = hasNickname ? incomingNickname : current && cleanText(current.nickname, 24);
+    if (!nickname) publicInputError("INVALID_PROFILE", "请先填写昵称");
+    const avatarFileId = hasAvatar ? incomingAvatarFileId : current && cleanText(current.avatarFileId, 1024);
+
+    if (current && nickname === cleanText(current.nickname, 24) && avatarFileId === cleanText(current.avatarFileId, 1024)) {
+      return { profile: publicProfile(current, true, 0, uid), cleanupQueued: false, unmanagedAvatar: false };
+    }
+    const now = new Date();
+    const next = {
+      nickname,
+      avatarFileId: avatarFileId || "",
+      createdAt: current && current.createdAt ? current.createdAt : now,
+      updatedAt: now
+    };
+    requireDbSuccess(await ref.set(next), "保存微信资料");
+    const oldAvatarFileId = current && cleanText(current.avatarFileId, 1024);
+    const cleanupQueued = oldAvatarFileId && oldAvatarFileId !== avatarFileId && isManagedAvatarFileId(oldAvatarFileId, uid);
+    if (cleanupQueued) await addAvatarCleanupTask(transaction, uid, [oldAvatarFileId]);
+    return {
+      profile: publicProfile(next, true, 0, uid),
+      cleanupQueued,
+      unmanagedAvatar: !!(oldAvatarFileId && oldAvatarFileId !== avatarFileId && !cleanupQueued)
+    };
+  }, 5);
+  const cleanup = saved.unmanagedAvatar ? unmanagedAvatarCleanupResult() : await drainAvatarCleanup(uid);
+  return success({
+    ...saved.profile,
+    avatarCleanupPendingCount: cleanup.pendingCount,
+    avatarCleanup: cleanup
+  });
+}
+
+async function deleteProfile(uid, accessPlatform) {
+  const denied = requireWechatMiniProgram(accessPlatform);
+  if (denied) return denied;
+  const deleted = await db.runTransaction(async (transaction) => {
+    const ref = transaction.collection(PROFILE_COLLECTION).doc(profileDocumentId(uid));
+    const current = profileFromResponse(requireDbSuccess(await ref.get(), "读取微信资料"));
+    const oldAvatarFileId = current && cleanText(current.avatarFileId, 1024);
+    if (oldAvatarFileId && isManagedAvatarFileId(oldAvatarFileId, uid)) {
+      await addAvatarCleanupTask(transaction, uid, [current.avatarFileId]);
+    }
+    const result = requireDbSuccess(await ref.remove(), "删除微信资料");
+    if (result && result.deleted != null && result.deleted !== 0 && result.deleted !== 1) {
+      throw new Error("删除微信资料失败");
+    }
+    return {
+      cleanupQueued: !!(oldAvatarFileId && isManagedAvatarFileId(oldAvatarFileId, uid)),
+      unmanagedAvatar: !!(oldAvatarFileId && !isManagedAvatarFileId(oldAvatarFileId, uid))
+    };
+  }, 5);
+  const cleanup = deleted.unmanagedAvatar ? unmanagedAvatarCleanupResult() : await drainAvatarCleanup(uid);
+  return success({ deleted: true, avatarCleanup: cleanup });
+}
+
+async function retryAvatarCleanup(uid, accessPlatform) {
+  const denied = requireWechatMiniProgram(accessPlatform);
+  if (denied) return denied;
+  return success({ avatarCleanup: await drainAvatarCleanup(uid) });
+}
+
+function listMyRoomsPage(event) {
+  const source = event && typeof event === "object" ? event : {};
+  const limit = source.limit == null ? MAX_MY_ROOMS_PAGE_SIZE : source.limit;
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_MY_ROOMS_PAGE_SIZE) {
+    return failure("INVALID_PAGINATION", "房间列表数量无效");
+  }
+  if (source.offset != null && source.offset !== 0) {
+    return failure("INVALID_PAGINATION", "请更新小程序后继续加载房间");
+  }
+  if (source.cursor == null || source.cursor === "") return { cursor: null, limit };
+  const cursor = source.cursor;
+  if (!isPlainObject(cursor) || !Number.isSafeInteger(cursor.createdAt) || cursor.createdAt < 0 || cursor.createdAt > Number.MAX_SAFE_INTEGER || typeof cursor.docId !== "string") {
+    return failure("INVALID_PAGINATION", "房间列表游标无效");
+  }
+  const docId = cursor.docId.trim();
+  if (!docId || docId.length > 256 || /[\u0000-\u001f]/.test(docId)) {
+    return failure("INVALID_PAGINATION", "房间列表游标无效");
+  }
+  return { cursor: { createdAt: cursor.createdAt, docId }, limit };
+}
+
+function myRoomsWhere(memberPredicate, cursor) {
+  const base = {
+    accessPlatform: "wechat-mini-program",
+    memberUids: memberPredicate
+  };
+  if (!cursor) return base;
+  const command = db.command;
+  if (!command || typeof command.or !== "function" || typeof command.lt !== "function") {
+    throw new Error("CloudBase 数据库不支持安全的房间列表游标查询");
+  }
+  const createdAt = new Date(cursor.createdAt);
+  return command.or([
+    { ...base, createdAt: command.lt(createdAt) },
+    { ...base, createdAt, _id: command.lt(cursor.docId) }
+  ]);
+}
+
+function roomListCursor(room) {
+  const createdAt = profileTimestamp(room && room.createdAt);
+  const docId = room && typeof room._id === "string" ? room._id : "";
+  if (!Number.isSafeInteger(createdAt) || createdAt < 0 || !docId) return null;
+  return { createdAt, docId };
+}
+
+function orderMyRooms(query) {
+  return query.orderBy("createdAt", "desc").orderBy("_id", "desc");
+}
+
+function roomSummary(room) {
+  const expenses = room && room.ledger && Array.isArray(room.ledger.expenses) ? room.ledger.expenses : [];
+  const totalCents = expenses.reduce((sum, expense) => {
+    const amount = Number(expense && expense.amountCents);
+    return Number.isSafeInteger(amount) && amount > 0 ? sum + amount : sum;
+  }, 0);
+  const activeMembers = roomTypeFor(room) === "midpoint" || roomTypeFor(room) === "ledger"
+    ? activeTopLevelMemberUids(room)
+    : uniqueUids(Array.isArray(room.memberUids) ? room.memberUids : []);
+  const updatedAt = profileTimestamp(room.updatedAt) || profileTimestamp(room.ledger && room.ledger.updatedAt) || profileTimestamp(room.createdAt);
+  return {
+    docId: room._id,
+    room: {
+      name: cleanText(room.name, 60),
+      code: cleanText(room.code, 8),
+      toolType: roomTypeFor(room)
+    },
+    memberCount: activeMembers.length,
+    expenseCount: expenses.length,
+    totalCents,
+    updatedAt
+  };
+}
+
+async function listMyRooms(event, uid, accessPlatform) {
+  const denied = requireWechatMiniProgram(accessPlatform);
+  if (denied) return denied;
+  const page = listMyRoomsPage(event);
+  if (page && page.ok === false) return page;
+  const command = db.command;
+  const memberPredicate = command && typeof command.elemMatch === "function" && typeof command.eq === "function"
+    ? command.elemMatch(command.eq(uid))
+    : uid;
+  const summaries = [];
+  let queryCursor = page.cursor;
+  let nextCursor = null;
+
+  /* Keyset pagination uses immutable creation time instead of updatedAt. A
+     room can be edited between requests without moving behind the cursor and
+     disappearing from a later page. The _id tie breaker handles equal times. */
+  while (summaries.length < page.limit) {
+    const response = requireDbSuccess(
+      await orderMyRooms(
+        db.collection(ROOM_COLLECTION).where(myRoomsWhere(memberPredicate, queryCursor))
+      )
+        .limit(MAX_MY_ROOMS_PAGE_SIZE)
+        .get(),
+      "读取我的房间"
+    );
+    const rooms = Array.isArray(response && response.data) ? response.data : [];
+    for (const room of rooms) {
+      const roomCursor = roomListCursor(room);
+      if (!roomCursor) continue;
+      nextCursor = roomCursor;
+      if (!hasRoomAccessPlatform(room, accessPlatform) || !isActiveRoomMember(room, uid)) continue;
+      const summary = roomSummary(room);
+      if (summary.room.toolType === "midpoint" || summary.room.toolType === "ledger") summaries.push(summary);
+      if (summaries.length === page.limit) {
+        break;
+      }
+    }
+    if (summaries.length === page.limit) break;
+    if (rooms.length < MAX_MY_ROOMS_PAGE_SIZE || !nextCursor) break;
+    queryCursor = nextCursor;
+  }
+  let hasMore = false;
+  if (summaries.length === page.limit && nextCursor) {
+    const probe = requireDbSuccess(
+      await orderMyRooms(
+        db.collection(ROOM_COLLECTION).where(myRoomsWhere(memberPredicate, nextCursor))
+      )
+        .limit(1)
+        .get(),
+      "检查我的房间后续页"
+    );
+    hasMore = Array.isArray(probe && probe.data) && probe.data.length > 0;
+  }
+  return success({
+    rooms: summaries.sort((first, second) => {
+      const updatedDifference = Number(second.updatedAt || 0) - Number(first.updatedAt || 0);
+      return updatedDifference || String(second.docId).localeCompare(String(first.docId));
+    }),
+    nextCursor: hasMore ? nextCursor : null,
+    hasMore
+  });
 }
 
 async function joinRoom(event, uid, accessPlatform) {
@@ -964,6 +1399,7 @@ async function joinRoom(event, uid, accessPlatform) {
       }
     }
 
+    patch.updatedAt = new Date();
     const updatedResult = requireDbSuccess(await ref.update(patch), "加入房间");
     if (!updatedResult || updatedResult.updated !== 1) throw new Error("加入房间失败");
     return success({ docId, type: currentType, room: updated, viewer: roomViewer(updated, uid) });
@@ -1020,7 +1456,7 @@ async function syncLedger(event, uid, accessPlatform) {
     merged.updatedAt = stamp;
     merged.updatedBy = uid;
 
-    const updatedResult = requireDbSuccess(await ref.update({ ledger: merged }), "写入共享账本");
+    const updatedResult = requireDbSuccess(await ref.update({ ledger: merged, updatedAt: new Date() }), "写入共享账本");
     if (!updatedResult || updatedResult.updated !== 1) throw new Error("写入共享账本失败");
     return success({ docId, ledger: merged });
   }, 5);
@@ -1132,6 +1568,7 @@ async function setMeetupPoint(event, uid, accessPlatform) {
     patch.members = members.map((member) => member && member.uid === uid
       ? { ...member, ...(point ? { name: point.name } : {}), membershipEpoch: incomingMembershipEpoch }
       : member);
+    patch.updatedAt = new Date();
     const updatedResult = requireDbSuccess(await ref.update(patch), "更新出发点");
     if (!updatedResult || updatedResult.updated !== 1) throw new Error("更新出发点失败");
     return success({ docId, meetup: patch.meetup, members: patch.members || room.members || [] });
@@ -1202,7 +1639,7 @@ async function publishDecisionCandidates(event, uid, accessPlatform) {
       confirmedBy: confirmedCandidateId ? currentDecision.confirmedBy : null
     };
     const nextMeetup = { ...meetup, decision };
-    const updated = requireDbSuccess(await ref.update({ meetup: nextMeetup }), "发布共同候选");
+    const updated = requireDbSuccess(await ref.update({ meetup: nextMeetup, updatedAt: new Date() }), "发布共同候选");
     if (!updated || updated.updated !== 1) throw new Error("发布共同候选失败");
     return decisionResponse(docId, nextMeetup);
   }, 5);
@@ -1236,7 +1673,7 @@ async function setDecisionVote(event, uid, accessPlatform) {
       return failure("INVALID_DECISION", "投票数量超过上限");
     }
     const nextMeetup = { ...meetup, decision: { ...decision, revision: decision.revision + 1, votes } };
-    const updated = requireDbSuccess(await ref.update({ meetup: nextMeetup }), "保存投票");
+    const updated = requireDbSuccess(await ref.update({ meetup: nextMeetup, updatedAt: new Date() }), "保存投票");
     if (!updated || updated.updated !== 1) throw new Error("保存投票失败");
     return decisionResponse(docId, nextMeetup);
   }, 5);
@@ -1274,7 +1711,7 @@ async function confirmDecisionCandidate(event, uid, accessPlatform) {
         confirmedBy: uid
       }
     };
-    const updated = requireDbSuccess(await ref.update({ meetup: nextMeetup }), "确定共同地点");
+    const updated = requireDbSuccess(await ref.update({ meetup: nextMeetup, updatedAt: new Date() }), "确定共同地点");
     if (!updated || updated.updated !== 1) throw new Error("更新共同决定失败");
     return decisionResponse(docId, nextMeetup);
   }, 5);
@@ -1308,7 +1745,7 @@ async function reopenDecision(event, uid, accessPlatform) {
         confirmedBy: null
       }
     };
-    const updated = requireDbSuccess(await ref.update({ meetup: nextMeetup }), "重新选择地点");
+    const updated = requireDbSuccess(await ref.update({ meetup: nextMeetup, updatedAt: new Date() }), "重新选择地点");
     if (!updated || updated.updated !== 1) throw new Error("重新选择地点失败");
     return decisionResponse(docId, nextMeetup);
   }, 5);
@@ -1362,7 +1799,7 @@ async function updateLegacyMembers(event, uid, accessPlatform) {
       nextMembers = members.filter((member) => member && String(member.id) !== String(memberId));
     }
 
-    const patch = { members: nextMembers, nextMemberId };
+    const patch = { members: nextMembers, nextMemberId, updatedAt: new Date() };
     const updatedResult = requireDbSuccess(await ref.update(patch), "更新房间成员");
     if (!updatedResult || updatedResult.updated !== 1) throw new Error("更新房间成员失败");
     return success({ docId, room: { ...room, ...patch } });
@@ -1405,7 +1842,8 @@ async function leaveRoom(event, uid, accessPlatform) {
       : activeTopLevelMemberUids(room);
     const patch = {
       memberUids: currentMemberUids.filter((memberUid) => memberUid !== uid),
-      members: (Array.isArray(room.members) ? room.members : []).filter((member) => member.uid !== uid)
+      members: (Array.isArray(room.members) ? room.members : []).filter((member) => member.uid !== uid),
+      updatedAt: new Date()
     };
     if (room.meetup && Array.isArray(room.meetup.people)) {
       const currentDecision = normalizedMeetupDecision(room.meetup, room);
@@ -1433,6 +1871,11 @@ exports.main = async (event, context) => {
     if (action === "create") return await createRoom(event, uid, accessPlatform);
     if (action === "join") return await joinRoom(event, uid, accessPlatform);
     if (action === "getRoom") return await getRoom(event, uid, accessPlatform);
+    if (action === "getProfile") return await getProfile(uid, accessPlatform);
+    if (action === "updateProfile") return await updateProfile(event, uid, accessPlatform);
+    if (action === "deleteProfile") return await deleteProfile(uid, accessPlatform);
+    if (action === "retryAvatarCleanup") return await retryAvatarCleanup(uid, accessPlatform);
+    if (action === "listMyRooms") return await listMyRooms(event, uid, accessPlatform);
     if (action === "syncLedger") return await syncLedger(event, uid, accessPlatform);
     if (action === "setMeetupPoint") return await setMeetupPoint(event, uid, accessPlatform);
     if (action === "publishDecisionCandidates") return await publishDecisionCandidates(event, uid, accessPlatform);

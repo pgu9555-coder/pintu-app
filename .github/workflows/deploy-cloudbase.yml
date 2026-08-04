@@ -80,11 +80,19 @@ jobs:
           node scripts/test-security-config.cjs
           node scripts/test-miniprogram-native.cjs
 
-      - name: Deploy room access gateway
-        run: tcb fn deploy roomGateway --force --yes
-
       - name: Install deployment dependencies
         run: npm install --no-save @cloudbase/manager-node@5.6.6 @cloudbase/node-sdk@3.18.3
+
+      - name: Ensure database collections, indexes, and security rules
+        env:
+          TCB_SECRET_ID: ${{ secrets.TCB_SECRET_ID }}
+          TCB_SECRET_KEY: ${{ secrets.TCB_SECRET_KEY }}
+          CLOUDBASE_ENV_ID: pintu-d4g77ecn24b674fa0
+          TCB_REGION: ap-shanghai
+        run: node scripts/apply-cloudbase-security.cjs
+
+      - name: Deploy room access gateway
+        run: tcb fn deploy roomGateway --force --yes
 
       - name: Apply and verify function security rules
         env:
@@ -102,14 +110,6 @@ jobs:
           CLOUDBASE_ENV_ID: pintu-d4g77ecn24b674fa0
           RUN_ROOM_MEMBERSHIP_MIGRATION: "1"
         run: node scripts/migrate-room-members.cjs
-
-      - name: Apply and verify database security rules
-        env:
-          TCB_SECRET_ID: ${{ secrets.TCB_SECRET_ID }}
-          TCB_SECRET_KEY: ${{ secrets.TCB_SECRET_KEY }}
-          CLOUDBASE_ENV_ID: pintu-d4g77ecn24b674fa0
-          TCB_REGION: ap-shanghai
-        run: node scripts/apply-cloudbase-security.cjs
 
       - name: Deploy index.html to production
         run: tcb hosting deploy ./cloudbase-site / -e pintu-d4g77ecn24b674fa0

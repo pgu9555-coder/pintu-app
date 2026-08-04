@@ -2,5 +2,6 @@
 .trip-icon { width:72rpx; height:72rpx; flex:0 0 auto; display:flex; align-items:center; justify-content:center; border-radius:18rpx; background:#E5EEE8; color:#143D35; font-size:36rpx; font-weight:700; }
 .trip-copy { flex:1; min-width:0; }
 .trip-name { font-size:30rpx; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.remove-button { flex:0 0 auto; margin:0; padding:0 16rpx; min-width:0; line-height:60rpx; border-radius:30rpx; background:#F3EBDD; color:#9C433A; font-size:24rpx; }
-.remove-button::after { border:0; }
+.trip-meta { margin-top:4rpx; color:#78847D; font-size:22rpx; }
+.cloud-error { color:#9C433A; background:#FFF6F1; }
+.load-more { margin-top:20rpx; }
