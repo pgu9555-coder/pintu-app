@@ -10,27 +10,54 @@
     <view wx:if="{{swipeCurrent}}" class="swipe-stage">
       <view class="swipe-shadow-card shadow-two"></view>
       <view class="swipe-shadow-card shadow-one"></view>
-      <view class="swipe-card">
-        <view class="place-symbol">{{swipeCurrent.initial}}</view>
-        <view class="place-tag">共同候选</view>
-        <view class="swipe-name">{{swipeCurrent.name}}</view>
-        <view class="swipe-address">{{swipeCurrent.typeStr || '地图选择地点'}}</view>
-        <view wx:if="{{swipeCurrent.dist}}" class="swipe-distance">距参考中点约 {{swipeCurrent.dist}} 米</view>
-        <button class="map-link" data-lat="{{swipeCurrent.lat}}" data-lng="{{swipeCurrent.lng}}" data-name="{{swipeCurrent.name}}" data-type="{{swipeCurrent.typeStr}}" bindtap="openCandidate">在地图中查看</button>
+      <view class="swipe-card" style="{{swipeCardStyle}}" bindtouchstart="swipeTouchStart" bindtouchmove="swipeTouchMove" bindtouchend="swipeTouchEnd">
+        <view class="swipe-card-inner {{swipeFlipped ? 'flipped' : ''}}">
+          <view class="swipe-face swipe-front">
+            <view class="place-symbol">{{swipeCurrent.initial}}</view>
+            <view class="place-tag">共同候选</view>
+            <view class="swipe-name">{{swipeCurrent.name}}</view>
+            <view class="swipe-address">{{swipeCurrent.typeStr || '地图选择地点'}}</view>
+            <view wx:if="{{swipeCurrent.dist}}" class="swipe-distance">距参考中点约 {{swipeCurrent.dist}} 米</view>
+            <button class="map-link" bindtap="flipSwipeCard">翻面看地点详情</button>
+          </view>
+          <view class="swipe-face swipe-back">
+            <view class="place-tag">地点详情</view>
+            <view class="swipe-name">{{swipeCurrent.name}}</view>
+            <view class="swipe-address">地址：{{swipeCurrent.address || swipeCurrent.typeStr || '暂无详细地址'}}</view>
+            <view wx:if="{{swipeCurrent.category}}" class="swipe-address">分类：{{swipeCurrent.category}}</view>
+            <view wx:if="{{swipeCurrent.dist}}" class="swipe-distance">距参考中点约 {{swipeCurrent.dist}} 米</view>
+            <view wx:if="{{swipeCurrent.phone || swipeCurrent.rating || swipeCurrent.averageCost}}" class="detail-meta">
+              <text wx:if="{{swipeCurrent.phone}}">电话 {{swipeCurrent.phone}}</text>
+              <text wx:if="{{swipeCurrent.rating}}">评分 {{swipeCurrent.rating}}</text>
+              <text wx:if="{{swipeCurrent.averageCost}}">人均 ¥{{swipeCurrent.averageCost}}</text>
+            </view>
+            <view class="detail-actions">
+              <button class="map-link" data-name="{{swipeCurrent.name}}" bindtap="copyCandidateName">复制名称</button>
+              <button class="map-link" data-address="{{swipeCurrent.address}}" data-type="{{swipeCurrent.typeStr}}" bindtap="copyCandidateAddress">复制地址</button>
+              <button class="map-link" data-lat="{{swipeCurrent.lat}}" data-lng="{{swipeCurrent.lng}}" data-name="{{swipeCurrent.name}}" data-address="{{swipeCurrent.address}}" data-type="{{swipeCurrent.typeStr}}" bindtap="openCandidate">地图导航</button>
+            </view>
+            <button class="map-link" bindtap="flipSwipeCard">翻回正面</button>
+          </view>
+        </view>
       </view>
     </view>
     <view wx:if="{{swipeCurrent}}" class="swipe-actions">
-      <button class="swipe-button pass" bindtap="swipeAction" data-action="pass">×</button>
-      <button class="swipe-button like" bindtap="swipeAction" data-action="like">♥</button>
+      <button class="swipe-button pass" bindtap="swipeAction" data-action="pass" disabled="{{swipeVoteBusy}}">×</button>
+      <button class="swipe-button like" bindtap="swipeAction" data-action="like" disabled="{{swipeVoteBusy}}">♥</button>
     </view>
     <view wx:if="{{swipeFinished}}" class="card swipe-result">
       <view class="result-icon">✓</view>
       <view class="title">留下了 {{swipeLikes.length}} 个心动选择</view>
       <view wx:if="{{!swipeLikes.length}}" class="empty-copy">这轮没有心动地点，再挑一次也可以。</view>
-      <view wx:for="{{swipeLikes}}" wx:key="id" class="liked-row" data-lat="{{item.lat}}" data-lng="{{item.lng}}" data-name="{{item.name}}" data-type="{{item.typeStr}}" bindtap="openCandidate">
+      <view wx:for="{{swipeLikes}}" wx:key="id" class="liked-row">
         <view class="liked-index">{{index + 1}}</view>
-        <view class="liked-copy"><view class="liked-name">{{item.name}}</view><view class="muted">{{item.typeStr || '地图选择地点'}}</view></view>
-        <view class="liked-arrow">›</view>
+        <view class="liked-copy">
+          <view class="liked-name">{{item.name}}</view>
+          <view class="muted">{{item.address || item.typeStr || '地图选择地点'}}</view>
+          <view wx:if="{{item.category}}" class="muted">{{item.category}}</view>
+          <view wx:if="{{item.phone || item.rating || item.averageCost}}" class="detail-meta compact-meta"><text wx:if="{{item.phone}}">电话 {{item.phone}}</text><text wx:if="{{item.rating}}">评分 {{item.rating}}</text><text wx:if="{{item.averageCost}}">人均 ¥{{item.averageCost}}</text></view>
+          <view class="candidate-actions"><button class="text-action map-text" data-name="{{item.name}}" catchtap="copyCandidateName">复制名称</button><button class="text-action map-text" data-address="{{item.address}}" data-type="{{item.typeStr}}" catchtap="copyCandidateAddress">复制地址</button><button class="text-action map-text" data-lat="{{item.lat}}" data-lng="{{item.lng}}" data-name="{{item.name}}" data-address="{{item.address}}" data-type="{{item.typeStr}}" catchtap="openCandidate">地图导航</button></view>
+        </view>
       </view>
       <button class="btn" bindtap="restartSwipe">再挑一次</button>
       <button class="btn secondary" bindtap="backFromSwipe">返回公平中点</button>
@@ -56,6 +83,7 @@
       </block>
       <block wx:else>
         <view class="local-note">不建房间也能在本机填写多个地址；建房后每个人可在自己的手机上更新位置。</view>
+        <view wx:if="{{localStorageMessage}}" class="map-config-note">{{localStorageMessage}}</view>
         <input class="input" placeholder="你的名字" value="{{name}}" maxlength="24" bindinput="nameInput" />
         <button class="btn" bindtap="create" loading="{{busy}}" disabled="{{busy}}">创建碰面房间</button>
         <view class="room-entry-row">
@@ -75,7 +103,26 @@
           <view class="point-avatar">{{item.name[0]}}</view>
           <view class="point-copy"><view class="point-name">{{item.name}}</view><view class="point-address">{{item.address || '尚未选择地点'}}</view></view>
         </view>
-        <button class="dashed-button" bindtap="chooseLocation" loading="{{busy}}" disabled="{{busy}}">⌖ 选择 / 更新我的出发点</button>
+        <view class="mine-editor">
+          <view class="editor-label">我的名字和出发点</view>
+          <input class="input" placeholder="我的名字" value="{{mineName}}" maxlength="24" bindinput="mineNameInput" />
+          <input class="input" placeholder="输入地点后，从下方列表选择" value="{{mineAddress}}" maxlength="120" bindinput="mineAddressInput" bindfocus="mineAddressFocus" />
+          <view wx:if="{{addressSearchLoading}}" class="suggestion-status">正在搜索地点…</view>
+          <scroll-view wx:if="{{addressSuggestionsVisible && addressSuggestions.length}}" class="address-suggestions" scroll-y="true">
+            <view class="suggestion-hint">请选择具体地点（可上下滑动查看更多）</view>
+            <view wx:for="{{addressSuggestions}}" wx:key="id" class="suggestion-item" data-index="{{index}}" bindtap="selectAddressSuggestion">
+              <view class="suggestion-name">{{item.name}}</view>
+              <view class="suggestion-address">{{item.address}}</view>
+            </view>
+          </scroll-view>
+          <view wx:if="{{!amapConfigured}}" class="map-config-note">为保证位置准确，请点“从地图选点”，可在微信地图里搜索具体地点。</view>
+          <view class="mine-actions">
+            <button class="btn secondary compact-button" bindtap="chooseLocation" loading="{{busy}}" disabled="{{busy}}">从地图选点</button>
+            <button class="btn compact-button" bindtap="saveMeetupLocation" loading="{{pointSyncBusy}}" disabled="{{busy}}">保存我的地点</button>
+          </view>
+          <view wx:if="{{pointSyncPending || pointSyncText}}" class="point-sync-state {{pointSyncPending ? 'pending' : ''}}">{{pointSyncText}}</view>
+          <button wx:if="{{mineHasSavedLocation}}" class="text-action clear-location" bindtap="clearMeetupLocation" disabled="{{busy}}">清除已保存的出发点</button>
+        </view>
       </block>
 
       <block wx:else>
@@ -105,24 +152,41 @@
         <view><view class="section-title">共同找去处</view><view class="muted">从地图搜索真实地点，再一起决定</view></view>
         <view class="candidate-count">{{room ? decisionCandidates.length : localCandidates.length}} / 12</view>
       </view>
+      <view wx:if="{{room && decisionCandidates.length}}" class="decision-participation">已有 {{decisionParticipantCount}} / {{decisionMemberCount}} 位成员参与投票</view>
       <view wx:if="{{decisionConfirmed}}" class="decision-status">✓ 已确定共同去处</view>
+      <view wx:if="{{confirmedCandidate}}" class="confirmed-summary">
+        <view class="confirmed-summary-label">最终决定</view>
+        <view class="confirmed-summary-name">{{confirmedCandidate.name}}</view>
+        <view class="candidate-address">{{confirmedCandidate.address || confirmedCandidate.typeStr || '地图选择地点'}}<text wx:if="{{confirmedCandidate.dist}}"> · 距中点约 {{confirmedCandidate.dist}} 米</text></view>
+        <view class="candidate-actions summary-actions">
+          <button class="text-action map-text" data-name="{{confirmedCandidate.name}}" bindtap="copyCandidateName">复制名称</button>
+          <button class="text-action map-text" data-address="{{confirmedCandidate.address}}" data-type="{{confirmedCandidate.typeStr}}" bindtap="copyCandidateAddress">复制地址</button>
+          <button class="text-action map-text" data-lat="{{confirmedCandidate.lat}}" data-lng="{{confirmedCandidate.lng}}" data-name="{{confirmedCandidate.name}}" data-address="{{confirmedCandidate.address}}" data-type="{{confirmedCandidate.typeStr}}" bindtap="openCandidate">地图导航</button>
+        </view>
+      </view>
+      <button wx:if="{{room && center && !decisionConfirmed}}" class="dashed-button candidate-add" bindtap="searchRoomCandidates" loading="{{busy}}" disabled="{{busy}}">{{amapConfigured ? '搜索参考中点附近的真实地点' : '从微信地图选择候选地点'}}</button>
       <button wx:if="{{room && !decisionConfirmed}}" class="dashed-button candidate-add" bindtap="addDecisionCandidate" loading="{{busy}}" disabled="{{busy}}">＋ 从地图添加候选地点</button>
       <button wx:if="{{!room}}" class="dashed-button candidate-add" bindtap="addLocalCandidate">＋ 从地图搜索附近商圈 / 餐饮</button>
+      <view wx:if="{{mapSearchMessage}}" class="map-search-message">{{mapSearchMessage}}</view>
 
       <view wx:if="{{room && !decisionCandidates.length || !room && !localCandidates.length}}" class="empty-copy centered">还没有候选地点，先搜索一个实际可到达的去处。</view>
 
       <block wx:if="{{room}}">
         <view wx:for="{{decisionCandidates}}" wx:key="id" class="candidate-row">
-          <view class="candidate-topline"><view class="candidate-name">{{item.name}}</view><view wx:if="{{item.isConfirmed}}" class="confirmed-tag">已确定</view></view>
-          <view class="candidate-address">{{item.typeStr || '地图选择地点'}}</view>
-          <view class="vote-summary">想去 {{item.wantVotes}} · 可以 {{item.okVotes}} · 不去 {{item.noVotes}}</view>
+          <view class="candidate-topline"><view class="candidate-name">{{item.name}}</view><view wx:if="{{item.isConsensusLeader}}" class="consensus-tag">共识最高</view><view wx:if="{{item.isConfirmed}}" class="confirmed-tag">已确定</view></view>
+          <view class="candidate-address">{{item.address || item.typeStr || '地图选择地点'}}</view>
+          <view wx:if="{{item.category && item.category !== item.typeStr}}" class="candidate-detail-line">分类：{{item.category}}</view>
+          <view wx:if="{{item.phone || item.rating || item.averageCost}}" class="detail-meta compact-meta"><text wx:if="{{item.phone}}">电话 {{item.phone}}</text><text wx:if="{{item.rating}}">评分 {{item.rating}}</text><text wx:if="{{item.averageCost}}">人均 ¥{{item.averageCost}}</text></view>
+          <view class="vote-summary">想去 {{item.wantVotes}} · 可以 {{item.okVotes}} · 不去 {{item.noVotes}} · {{item.voteTotal}} 人参与此候选</view>
           <view wx:if="{{!decisionConfirmed}}" class="vote-row">
             <button class="vote-option {{item.wantSelected ? 'selected' : ''}}" data-candidate-id="{{item.id}}" data-value="want" bindtap="voteDecision" disabled="{{busy}}">想去</button>
             <button class="vote-option {{item.okSelected ? 'selected' : ''}}" data-candidate-id="{{item.id}}" data-value="ok" bindtap="voteDecision" disabled="{{busy}}">可以</button>
             <button class="vote-option {{item.noSelected ? 'selected' : ''}}" data-candidate-id="{{item.id}}" data-value="no" bindtap="voteDecision" disabled="{{busy}}">不去</button>
           </view>
           <view class="candidate-actions">
-            <button class="text-action map-text" data-lat="{{item.lat}}" data-lng="{{item.lng}}" data-name="{{item.name}}" data-type="{{item.typeStr}}" bindtap="openCandidate">地图查看</button>
+            <button class="text-action map-text" data-name="{{item.name}}" bindtap="copyCandidateName">复制名称</button>
+            <button class="text-action map-text" data-address="{{item.address}}" data-type="{{item.typeStr}}" bindtap="copyCandidateAddress">复制地址</button>
+            <button class="text-action map-text" data-lat="{{item.lat}}" data-lng="{{item.lng}}" data-name="{{item.name}}" data-address="{{item.address}}" data-type="{{item.typeStr}}" bindtap="openCandidate">地图导航</button>
             <button wx:if="{{isOwner && !decisionConfirmed}}" class="text-action confirm-action" data-candidate-id="{{item.id}}" bindtap="confirmDecision" disabled="{{busy}}">确定这里</button>
           </view>
         </view>
@@ -132,7 +196,7 @@
       <block wx:else>
         <view wx:for="{{localCandidates}}" wx:key="id" class="candidate-row local-candidate-row">
           <view class="candidate-rank">{{index + 1}}</view>
-          <view class="candidate-copy" data-lat="{{item.lat}}" data-lng="{{item.lng}}" data-name="{{item.name}}" data-type="{{item.typeStr}}" bindtap="openCandidate"><view class="candidate-name">{{item.name}}</view><view class="candidate-address">{{item.typeStr}}<text wx:if="{{item.dist}}"> · 约 {{item.dist}} 米</text></view></view>
+          <view class="candidate-copy"><view class="candidate-name">{{item.name}}</view><view class="candidate-address">{{item.address || item.typeStr}}<text wx:if="{{item.dist}}"> · 约 {{item.dist}} 米</text></view><view wx:if="{{item.category}}" class="candidate-detail-line">分类：{{item.category}}</view><view wx:if="{{item.phone || item.rating || item.averageCost}}" class="detail-meta compact-meta"><text wx:if="{{item.phone}}">电话 {{item.phone}}</text><text wx:if="{{item.rating}}">评分 {{item.rating}}</text><text wx:if="{{item.averageCost}}">人均 ¥{{item.averageCost}}</text></view><view class="candidate-actions"><button class="text-action map-text" data-name="{{item.name}}" bindtap="copyCandidateName">复制名称</button><button class="text-action map-text" data-address="{{item.address}}" data-type="{{item.typeStr}}" bindtap="copyCandidateAddress">复制地址</button><button class="text-action map-text" data-lat="{{item.lat}}" data-lng="{{item.lng}}" data-name="{{item.name}}" data-address="{{item.address}}" data-type="{{item.typeStr}}" bindtap="openCandidate">地图导航</button></view></view>
           <button class="remove-point" catchtap="removeLocalCandidate" data-id="{{item.id}}">×</button>
         </view>
       </block>

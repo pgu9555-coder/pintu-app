@@ -4,6 +4,7 @@
     <view class="page-title">行程账本</view>
     <view class="page-status">● {{syncText}}</view>
   </view>
+  <view wx:if="{{syncPending}}" style="margin-bottom:18rpx;padding:16rpx 18rpx;border-radius:14rpx;background:#FFF4D9;color:#8B641F;font-size:22rpx;line-height:1.5;">修改已保存在本机，恢复网络后会自动同步。</view>
 
   <view class="card collaboration-card">
     <view class="room-card-head">
@@ -54,7 +55,7 @@
   <block wx:if="{{step === 1}}">
     <view class="card">
       <view class="section-title">这趟行程</view>
-      <input class="input" placeholder="例如：五一上海游" value="{{tripName}}" maxlength="80" bindinput="tripNameInput" bindblur="saveTripName" />
+      <input class="input" placeholder="例如：五一上海游" value="{{tripName}}" maxlength="20" bindinput="tripNameInput" bindblur="saveTripName" />
       <view class="section-label">同行的人</view>
       <view wx:if="{{!ledger.members.length}}" class="empty-copy">先把同行的人加进来，至少需要 2 人。</view>
       <view wx:for="{{ledger.members}}" wx:key="id" class="member-row">
@@ -69,7 +70,7 @@
         </view>
       </view>
       <view class="add-member-row">
-        <input class="input" placeholder="添加同行人名字" value="{{memberName}}" maxlength="24" bindinput="memberInput" />
+        <input class="input" placeholder="添加同行人名字" value="{{memberName}}" maxlength="12" bindinput="memberInput" />
         <button class="add-button" bindtap="addMember" loading="{{busy}}" disabled="{{busy}}">＋</button>
       </view>
     </view>
@@ -78,7 +79,7 @@
   <block wx:if="{{step === 2}}">
     <view class="card expense-form-card">
       <view class="section-title">{{editingId ? '修改这笔支出' : '加一笔支出'}}</view>
-      <input class="input" placeholder="花在哪里了，如 酒店 / 机票 / 晚餐" value="{{desc}}" maxlength="80" bindinput="descInput" />
+      <input class="input" placeholder="花在哪里了，如 酒店 / 机票 / 晚餐" value="{{desc}}" maxlength="20" bindinput="descInput" />
       <view class="money-row">
         <input class="input amount-input" type="digit" placeholder="金额" value="{{amount}}" bindinput="amountInput" />
         <view class="currency">¥</view>
@@ -120,6 +121,7 @@
   </block>
 
   <block wx:if="{{step === 3}}">
+    <view wx:if="{{settlementUpdated}}" class="settlement-updated" style="margin-bottom:20rpx;padding:18rpx 20rpx;border-radius:16rpx;background:#EAF2F7;color:#3E6E8E;font-size:23rpx;line-height:1.5;">账本刚刚有更新，下面的结算结果已自动重新计算。</view>
     <view class="total-card">
       <view class="total-caption">本次总支出</view>
       <view class="total-number">¥{{totalYuan}}</view>
@@ -137,18 +139,19 @@
     </view>
 
     <view class="card">
-      <view class="section-title">最少转账方案</view>
+      <view class="section-title">{{settlementExact ? '最少转账方案' : '推荐转账方案'}}</view>
       <view wx:for="{{settlements}}" wx:key="key" class="settlement-row">
         <view class="transfer-copy"><text>{{item.from}}</text><text class="arrow">→</text><text>{{item.to}}</text></view>
         <view class="transfer-amount">¥{{item.yuan}}</view>
       </view>
       <view wx:if="{{!settlements.length}}" class="settled-state">✓ 大家已经结清</view>
+      <view class="verify-strip" style="padding:18rpx 0 4rpx;color:#4C5C5B;text-align:center;font-size:22rpx;line-height:1.5;">✓ {{settlementVerifyText}}</view>
     </view>
   </block>
 
   <view class="nav-foot">
     <button wx:if="{{step > 1}}" class="btn secondary" bindtap="previousStep">上一步</button>
     <button wx:if="{{step < 3}}" class="btn" bindtap="nextStep">{{step === 1 ? '开始记账' : '算清楚！'}}</button>
-    <button wx:else class="btn" bindtap="goStep" data-step="2">继续记一笔</button>
+    <button wx:else class="btn" bindtap="finishTrip">完成</button>
   </view>
 </view>

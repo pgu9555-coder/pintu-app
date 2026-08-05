@@ -12,26 +12,26 @@
   </view>
 
   <view class="wheel-stage">
-    <view class="wheel-pointer"></view>
+    <view class="wheel-pointer {{spinning && !motionReduced ? 'wheel-pointer-ticking' : ''}}"></view>
     <view class="wheel-rotor" style="transform:rotate({{wheelRotation}}deg);transition-duration:{{spinDuration}}ms;">
       <canvas class="wheel-canvas" canvas-id="spinnerCanvas" width="280" height="280"></canvas>
     </view>
-    <view class="wheel-center {{spinning ? 'wheel-center-busy' : ''}}" bindtap="spin">{{spinning ? '…' : '转'}}</view>
+    <view class="wheel-center {{spinning ? 'wheel-center-busy' : ''}}" catchtap="spin">{{spinButtonText}}</view>
   </view>
 
-  <view class="spin-result {{result ? 'spin-result-show' : ''}}">{{result}}</view>
+  <view class="spin-result {{result ? 'spin-result-show' : ''}} spin-result-{{resultMode}}">{{result}}</view>
 
   <view class="section-label people-label">在场的人</view>
   <view class="people-card">
     <view class="add-row">
-      <input class="name-input" maxlength="8" placeholder="加一个名字" value="{{newName}}" bindinput="nameInput" bindconfirm="add" confirm-type="done" />
-      <view class="add-button" bindtap="add">＋</view>
+      <input class="name-input" maxlength="8" placeholder="加一个名字" value="{{newName}}" bindinput="nameInput" bindconfirm="add" confirm-type="done" disabled="{{spinning}}" />
+      <view class="add-button {{spinning ? 'add-button-disabled' : ''}}" catchtap="add">＋</view>
     </view>
     <view wx:if="{{!names.length}}" class="empty-row">还没有人，从上面加第一个</view>
     <view wx:for="{{names}}" wx:key="*this" class="person-row">
-      <view class="person-avatar">{{item[0]}}</view>
+      <view class="person-avatar avatar-{{index}}">{{item[0]}}</view>
       <view class="person-name">{{item}}</view>
-      <view class="remove-button" bindtap="remove" data-index="{{index}}">×</view>
+      <view class="remove-button {{spinning ? 'remove-button-disabled' : ''}}" catchtap="remove" data-index="{{index}}">×</view>
     </view>
   </view>
 </view>

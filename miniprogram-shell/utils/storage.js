@@ -1,6 +1,74 @@
 const KEY = 'pintu-native-rooms'
 const SUPPORTED_TYPES = new Set(['midpoint', 'ledger'])
 
+// Mini-program storage belongs to the device, not to the currently signed-in
+// WeChat account. Keep the active account scope in memory only, and prefix
+// every persisted key with the server-issued opaque profile hash. This avoids
+// showing one WeChat user's local rooms, name, or drafts to another account on
+// the same phone.
+let accountScope = ''
+
+function scopeFromProfile(profile) {
+  const prefix = String(profile && profile.avatarUploadPrefix || '')
+  const match = prefix.match(/^avatars\/profile-([a-f0-9]{64})\/$/)
+  return match ? match[1] : ''
+}
+
+function setAccountScope(profileOrScope) {
+  const raw = typeof profileOrScope === 'string'
+    ? profileOrScope
+    : scopeFromProfile(profileOrScope)
+  const match = String(raw || '').match(/^(?:profile-)?([a-f0-9]{64})$/)
+  accountScope = match ? match[1] : ''
+  return Boolean(accountScope)
+}
+
+function clearAccountScope() {
+  accountScope = ''
+}
+
+function isAccountScoped() {
+  return Boolean(accountScope)
+}
+
+function scopedKey(key) {
+  if (!accountScope) return ''
+  return `pintu-account-${accountScope}:${String(key || '')}`
+}
+
+function getScoped(key, fallback) {
+  const target = scopedKey(key)
+  if (!target) return fallback
+  try {
+    const value = wx.getStorageSync(target)
+    return value === undefined || value === null || value === '' ? fallback : value
+  } catch (_) {
+    return fallback
+  }
+}
+
+function setScoped(key, value) {
+  const target = scopedKey(key)
+  if (!target) return false
+  try {
+    wx.setStorageSync(target, value)
+    return true
+  } catch (_) {
+    return false
+  }
+}
+
+function removeScoped(key) {
+  const target = scopedKey(key)
+  if (!target) return false
+  try {
+    wx.removeStorageSync(target)
+    return true
+  } catch (_) {
+    return false
+  }
+}
+
 function isValidEntry(entry) {
   return Boolean(
     entry &&
@@ -25,12 +93,8 @@ function compactEntry(entry) {
 }
 
 function all() {
-  try {
-    const stored = wx.getStorageSync(KEY)
-    return Array.isArray(stored) ? stored.map(compactEntry).filter(Boolean) : []
-  } catch (_) {
-    return []
-  }
+  const stored = getScoped(KEY, [])
+  return Array.isArray(stored) ? stored.map(compactEntry).filter(Boolean) : []
 }
 
 function save(entry) {
@@ -39,30 +103,33 @@ function save(entry) {
   const rooms = all().filter((item) => item.docId !== entry.docId)
   rooms.unshift(Object.assign({}, compact, { visitedAt: Date.now() }))
   const limited = rooms.slice(0, 20)
-  try {
-    wx.setStorageSync(KEY, limited)
-  } catch (_) {}
+  setScoped(KEY, limited)
   return limited
 }
 
 function remove(docId) {
-  try {
-    wx.setStorageSync(KEY, all().filter((item) => item.docId !== docId))
-  } catch (_) {}
+  setScoped(KEY, all().filter((item) => item.docId !== docId))
 }
 
 function getName() {
-  try {
-    return wx.getStorageSync('pintu-name') || ''
-  } catch (_) {
-    return ''
-  }
+  return getScoped('pintu-name', '')
 }
 
 function saveName(name) {
-  try {
-    wx.setStorageSync('pintu-name', String(name || '').slice(0, 24))
-  } catch (_) {}
+  setScoped('pintu-name', String(name || '').slice(0, 24))
 }
 
-module.exports = { all, save, remove, getName, saveName }
+module.exports = {
+  all,
+  save,
+  remove,
+  getName,
+  saveName,
+  scopeFromProfile,
+  setAccountScope,
+  clearAccountScope,
+  isAccountScoped,
+  getScoped,
+  setScoped,
+  removeScoped
+}

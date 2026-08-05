@@ -438,6 +438,12 @@ async function main() {
   });
   assert.equal(webJoinedMiniRoom.ok, true, "a Web identity can join a mini-program-created room");
   assert.equal(webJoinedMiniRoom.data.room.accessPlatform, "shared");
+  assert.match(
+    rooms.get(wxDocId).contentReviewPendingId,
+    /^[a-f0-9]{32}$/,
+    "Web text entering a shared room must be queued for a trusted mini-program review"
+  );
+  const moderationCountBeforeWebWrite = moderationCalls.length;
   const webCrossPlatformLedger = clone(webJoinedMiniRoom.data.room.ledger);
   webCrossPlatformLedger.name = "网页与微信共享账本";
   webCrossPlatformLedger.nameUpdatedAt = Date.now() + 10;
@@ -448,7 +454,120 @@ async function main() {
     accessPlatform: "wechat-mini-program"
   });
   assert.equal(webCrossPlatformWrite.ok, true, "Web ledger writes must sync into a mini-program-created room");
-  assert.equal(moderationCalls.some((entry) => entry.openid === "openid-owner" && entry.content.includes("网页与微信共享账本")), true, "Web text shown in WeChat must be moderated");
+  assert.equal(
+    moderationCalls.length,
+    moderationCountBeforeWebWrite,
+    "a Web invocation must not try to borrow a stored WeChat OPENID for OpenAPI authentication"
+  );
+  const miniReviewedWebWrite = await callWx("openid-owner", { action: "getRoom", docId: wxDocId });
+  assert.equal(miniReviewedWebWrite.ok, true, "the next trusted mini-program read reviews pending Web text");
+  assert.equal(miniReviewedWebWrite.data.room.ledger.name, "网页与微信共享账本");
+  assert.equal(rooms.get(wxDocId).contentReviewPendingId, "", "a successful trusted review clears only the reviewed marker");
+  assert.equal(
+    moderationCalls.some((entry) => entry.openid === "openid-owner" && entry.content.includes("网页与微信共享账本")),
+    true,
+    "Web text must be moderated before it is returned to WeChat"
+  );
+  const riskyPendingLedger = clone(miniReviewedWebWrite.data.room.ledger);
+  riskyPendingLedger.name = "待审核网页内容";
+  riskyPendingLedger.nameUpdatedAt = Date.now() + 100;
+  riskyPendingLedger.updatedAt = riskyPendingLedger.nameUpdatedAt;
+  riskyPendingLedger.revision = riskyPendingLedger.nameUpdatedAt;
+  const riskyPendingWrite = await call("web-joiner", {
+    action: "syncLedger", docId: wxDocId, ledger: riskyPendingLedger,
+    membershipEpoch: webJoinedMiniRoom.data.viewer.membershipEpoch
+  });
+  assert.equal(riskyPendingWrite.ok, true);
+  assert.match(rooms.get(wxDocId).contentReviewEntriesJson, /待审核网页内容/, "Web writes queue only their changed text for a trusted review");
+  /* A Web user can fix their own pending text before any mini client reads it.
+     The later safe text must replace (not accumulate with) the earlier risk. */
+  const restoredPendingLedger = clone(riskyPendingLedger);
+  restoredPendingLedger.name = "网页与微信共享账本";
+  restoredPendingLedger.nameUpdatedAt += 1;
+  restoredPendingLedger.updatedAt = restoredPendingLedger.nameUpdatedAt;
+  restoredPendingLedger.revision = restoredPendingLedger.nameUpdatedAt;
+  assert.equal((await call("web-joiner", {
+    action: "syncLedger", docId: wxDocId, ledger: restoredPendingLedger,
+    membershipEpoch: webJoinedMiniRoom.data.viewer.membershipEpoch
+  })).ok, true, "a safe replacement can overwrite pending risky text");
+  nextModerationSuggestion = "pass";
+  const safeReplacementRead = await callWx("openid-owner", { action: "getRoom", docId: wxDocId });
+  assert.equal(safeReplacementRead.ok, true, "safe replacement unblocks the room without surfacing the old risky text");
+  assert.equal(safeReplacementRead.data.room.ledger.name, "网页与微信共享账本");
+  assert.equal(rooms.get(wxDocId).contentReviewPendingId, "", "the reviewed replacement clears the marker");
+  assert.equal(
+    moderationCalls.at(-1).content.includes("待审核网页内容"), false,
+    "replaced risky text is never submitted or returned after a safe overwrite"
+  );
+
+  /* Simulate a well-established (and therefore already approved) large
+     ledger. A later one-line Web edit must not try to re-review all history. */
+  const approvedLargeRoom = rooms.get(wxDocId);
+  const approvedLargeLedger = clone(approvedLargeRoom.ledger);
+  const largeMember = approvedLargeLedger.members[0];
+  const baseStamp = Date.now() - 1000;
+  approvedLargeLedger.expenses = Array.from({ length: 220 }, (_, index) => ({
+    id: `approved-${index}`, desc: `已审核历史${index}-${"a".repeat(90)}`,
+    amountCents: 100, payerId: largeMember.id, splitIds: [largeMember.id],
+    createdAt: baseStamp + index, updatedAt: baseStamp + index, updatedBy: "openid-owner"
+  }));
+  approvedLargeLedger.nextExpenseId = 300;
+  approvedLargeLedger.revision = baseStamp + 500;
+  approvedLargeLedger.updatedAt = baseStamp + 500;
+  rooms.set(wxDocId, { ...approvedLargeRoom, ledger: approvedLargeLedger });
+  const largeWebEdit = clone(approvedLargeLedger);
+  largeWebEdit.expenses.push({
+    id: "web-small-change", desc: "网页单条增量", amountCents: 200,
+    payerId: largeMember.id, splitIds: [largeMember.id],
+    createdAt: Date.now(), updatedAt: Date.now(), updatedBy: "web-joiner"
+  });
+  largeWebEdit.updatedAt = Date.now();
+  largeWebEdit.revision = largeWebEdit.updatedAt;
+  assert.equal((await call("web-joiner", {
+    action: "syncLedger", docId: wxDocId, ledger: largeWebEdit,
+    membershipEpoch: webJoinedMiniRoom.data.viewer.membershipEpoch
+  })).ok, true, "a single Web edit in a >16KiB approved ledger remains writable");
+  const callsBeforeLargeRead = moderationCalls.length;
+  const largeLedgerRead = await callWx("openid-owner", { action: "getRoom", docId: wxDocId });
+  assert.equal(largeLedgerRead.ok, true, "mini readers can review just the incremental Web text in a large ledger");
+  assert.equal(moderationCalls.length, callsBeforeLargeRead + 1);
+  assert.equal(moderationCalls.at(-1).content, "网页单条增量", "the review payload excludes approved historical ledger data");
+
+  const riskyExitLedger = clone(largeLedgerRead.data.room.ledger);
+  riskyExitLedger.expenses.push({
+    id: "web-risky-exit", desc: "违规网页支出", amountCents: 300,
+    payerId: largeMember.id, splitIds: [largeMember.id],
+    createdAt: Date.now(), updatedAt: Date.now(), updatedBy: "web-joiner"
+  });
+  riskyExitLedger.updatedAt = Date.now();
+  riskyExitLedger.revision = riskyExitLedger.updatedAt;
+  assert.equal((await call("web-joiner", {
+    action: "syncLedger", docId: wxDocId, ledger: riskyExitLedger,
+    membershipEpoch: webJoinedMiniRoom.data.viewer.membershipEpoch
+  })).ok, true);
+  assert.equal((await call("web-joiner", { action: "leave", docId: wxDocId })).ok, true, "the Web author can leave before review");
+  nextModerationSuggestion = "risky";
+  const recoveredAfterExit = await callWx("openid-owner", { action: "getRoom", docId: wxDocId });
+  assert.equal(recoveredAfterExit.ok, true, "a rejected Web update is sanitized instead of permanently freezing the room");
+  assert.equal(JSON.stringify(recoveredAfterExit.data.room).includes("违规网页支出"), false, "risky text is never returned to the mini program");
+  assert.equal(recoveredAfterExit.data.room.ledger.expenses.some((expense) => expense.id === "web-risky-exit" && expense.desc === "待修改支出"), true);
+
+  /* A marker written by the short-lived pre-incremental rollout has no entity
+     queue. It must fail closed without attempting an oversized full-ledger
+     moderation request or leaking whichever field was risky. */
+  const legacyPendingRoom = clone(rooms.get(wxDocId));
+  legacyPendingRoom.name = "旧版未知待审文本";
+  legacyPendingRoom.ledger.expenses[0].desc = "旧版未知风险支出";
+  legacyPendingRoom.contentReviewPendingId = "a".repeat(32);
+  legacyPendingRoom.contentReviewEntriesJson = "";
+  rooms.set(wxDocId, legacyPendingRoom);
+  const legacyPendingRead = await callWx("openid-owner", { action: "getRoom", docId: wxDocId });
+  assert.equal(legacyPendingRead.ok, false, "legacy pending rooms fail closed instead of exposing unreviewed text");
+  assert.equal(legacyPendingRead.code, "CONTENT_REVIEW_LEGACY");
+  assert.equal(rooms.get(wxDocId).name, "旧版未知待审文本", "legacy fallback never destroys the original room name");
+  assert.equal(rooms.get(wxDocId).ledger.expenses[0].desc, "旧版未知风险支出", "legacy fallback never destroys historical ledger data");
+  assert.equal(rooms.get(wxDocId).contentReviewPendingId, "a".repeat(32), "legacy pending marker remains fail-closed");
+  rooms.set(wxDocId, clone(recoveredAfterExit.data.room));
   const platformRequestId = "platform_idempotency_123";
   const wxIdempotent = await callWx("openid-idempotent", {
     action: "create", clientRequestId: platformRequestId,
@@ -472,6 +591,19 @@ async function main() {
     candidates: [{ name: "危险候选", lat: 22.5, lng: 113.9, typeStr: "餐厅", dist: 1, isMall: false, isDrink: false }]
   });
   assert.equal(riskyCandidates.code, "CONTENT_REJECTED", "candidate text must fail closed when mini-program moderation flags it");
+  const safeWxCandidate = await callWx("openid-owner", {
+    action: "publishDecisionCandidates", docId: wxMidpoint.data.docId, membershipEpoch: wxMidpoint.data.viewer.membershipEpoch,
+    candidates: [{
+      name: "安全候选", lat: 22.5, lng: 113.9, typeStr: "餐厅", dist: 1, isMall: false, isDrink: false,
+      phone: "0755-12345678", rating: "4.7", averageCost: "86"
+    }]
+  });
+  assert.equal(safeWxCandidate.ok, true);
+  assert.equal(
+    moderationCalls.some((entry) => entry.content.includes("0755-12345678") && entry.content.includes("4.7") && entry.content.includes("86")),
+    true,
+    "every persisted candidate detail shown in WeChat must pass content moderation"
+  );
   const wxLegacy = await callWx("openid-owner", {
     action: "create", room: { name: "微信旧房间", members: [{ name: "甲" }, { name: "乙" }] }
   });
@@ -675,6 +807,74 @@ async function main() {
     "a client-created ledger identity must not be allowed to claim an authentication uid"
   );
 
+  const protectedOwnerBefore = forgedUidSync.data.ledger.members.find((item) => item.uid === "owner");
+  const protectedRenameLedger = clone(forgedUidSync.data.ledger);
+  const protectedRenameAt = Date.now() + 2000;
+  protectedRenameLedger.members = protectedRenameLedger.members.map((item) => item.uid === "owner"
+    ? { ...item, name: "伪造的房主名字", updatedAt: protectedRenameAt, updatedBy: "owner" }
+    : item);
+  protectedRenameLedger.updatedAt = protectedRenameAt;
+  protectedRenameLedger.revision = protectedRenameAt;
+  const protectedRename = await call("owner", {
+    action: "syncLedger", docId, membershipEpoch: ownerEpoch, ledger: protectedRenameLedger
+  });
+  assert.equal(protectedRename.ok, true);
+  assert.equal(
+    protectedRename.data.ledger.members.find((item) => item.uid === "owner").name,
+    protectedOwnerBefore.name,
+    "whole-ledger writes must not rename a real room identity"
+  );
+
+  const protectedDeleteLedger = clone(protectedRename.data.ledger);
+  const protectedDeleteAt = protectedRenameAt + 1;
+  protectedDeleteLedger.members = protectedDeleteLedger.members.filter((item) => item.uid !== "owner");
+  protectedDeleteLedger.memberTombstones[String(protectedOwnerBefore.id)] = {
+    deletedAt: protectedDeleteAt,
+    deletedBy: "owner"
+  };
+  protectedDeleteLedger.updatedAt = protectedDeleteAt;
+  protectedDeleteLedger.revision = protectedDeleteAt;
+  const protectedDelete = await call("owner", {
+    action: "syncLedger", docId, membershipEpoch: ownerEpoch, ledger: protectedDeleteLedger
+  });
+  assert.equal(protectedDelete.ok, true);
+  assert.equal(
+    protectedDelete.data.ledger.members.some((item) => item.uid === "owner"),
+    true,
+    "whole-ledger writes must not remove a real room identity"
+  );
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(protectedDelete.data.ledger.memberTombstones, String(protectedOwnerBefore.id)),
+    false,
+    "a real room identity must not retain a destructive ledger tombstone"
+  );
+
+  const migratedMissingUidRoom = clone(rooms.get(docId));
+  const migratedOwner = migratedMissingUidRoom.ledger.members.find((item) => String(item.id) === String(protectedOwnerBefore.id));
+  delete migratedOwner.uid;
+  rooms.set(docId, migratedMissingUidRoom);
+  const migratedRenameLedger = clone(migratedMissingUidRoom.ledger);
+  const migratedRenameAt = protectedDeleteAt + 10;
+  migratedRenameLedger.members = migratedRenameLedger.members.map((item) => String(item.id) === String(protectedOwnerBefore.id)
+    ? { ...item, name: "伪造的迁移成员名", updatedAt: migratedRenameAt, updatedBy: "owner" }
+    : item);
+  migratedRenameLedger.updatedAt = migratedRenameAt;
+  migratedRenameLedger.revision = migratedRenameAt;
+  const migratedRename = await call("owner", {
+    action: "syncLedger", docId, membershipEpoch: ownerEpoch, ledger: migratedRenameLedger
+  });
+  assert.equal(migratedRename.ok, true);
+  assert.equal(
+    migratedRename.data.ledger.members.find((item) => String(item.id) === String(protectedOwnerBefore.id)).name,
+    protectedOwnerBefore.name,
+    "a room-backed migrated ledger member without uid must still be protected from rename"
+  );
+  assert.equal(
+    migratedRename.data.ledger.members.find((item) => String(item.id) === String(protectedOwnerBefore.id)).uid,
+    "owner",
+    "a room-backed migrated ledger member must recover its trusted uid"
+  );
+
   const beforeDeniedSync = JSON.stringify(rooms.get(docId).ledger);
   const deniedSync = await call("stranger-3", { action: "syncLedger", docId, ledger: baseLedger });
   assert.equal(deniedSync.code, "ROOM_NOT_FOUND");
@@ -799,7 +999,8 @@ async function main() {
   /* Shared decision: all writes are membership-, round-, and revision-bound. */
   const ownerDecisionEpoch = rooms.get(midpointDocId).members.find((item) => item.uid === "mid-owner").membershipEpoch;
   const decisionCandidates = [
-    { id: "forged-client-id", name: "候选商场", lat: 22.54000001, lng: 113.98000001, typeStr: "购物中心", dist: 320, isMall: true, isDrink: false },
+    { id: "forged-client-id", name: "候选商场", lat: 22.54000001, lng: 113.98000001, typeStr: "购物中心", dist: 320, isMall: true, isDrink: false,
+      address: "深圳市福田区测试路 1 号", category: "商场;购物中心", phone: "0755-12345678", rating: "4.7", averageCost: "86" },
     { id: "also-forged", name: "候选咖啡", lat: 22.55, lng: 113.99, typeStr: "咖啡厅", dist: 610, isMall: false, isDrink: true }
   ];
   const outsiderPublish = await call("decision-outsider", {
@@ -821,7 +1022,17 @@ async function main() {
   assert.equal(publishedDecision.ok, true);
   assert.equal(publishedDecision.data.decision.candidates.length, 2);
   assert.notEqual(publishedDecision.data.decision.candidates[0].id, "forged-client-id", "server must derive candidate ids");
+  assert.equal(publishedDecision.data.decision.candidates[0].address, "深圳市福田区测试路 1 号", "candidate address must survive shared-room normalization");
+  assert.equal(publishedDecision.data.decision.candidates[0].phone, "0755-12345678", "candidate details must sync to every room member");
+  assert.equal(publishedDecision.data.decision.candidates[0].rating, "4.7");
+  assert.equal(publishedDecision.data.decision.candidates[0].averageCost, "86");
   assert.match(publishedDecision.data.decision.roundId, /^round_/);
+  const invalidCandidateDetails = await call("mid-owner", {
+    action: "publishDecisionCandidates", docId: midpointDocId, membershipEpoch: ownerDecisionEpoch,
+    roundId: publishedDecision.data.decision.roundId, revision: publishedDecision.data.decision.revision,
+    candidates: [Object.assign({}, decisionCandidates[0], { phone: "联系我加微信", rating: "9.9" })]
+  });
+  assert.equal(invalidCandidateDetails.code, "INVALID_DECISION", "candidate phone and numeric details must use restricted formats");
   const candidateOne = publishedDecision.data.decision.candidates[0];
   const candidateTwo = publishedDecision.data.decision.candidates[1];
   const outsiderVote = await call("decision-outsider", {

@@ -8,6 +8,7 @@ const rooms = rules.rooms || {};
 const profiles = rules.user_profiles || {};
 const cleanupTasks = rules.profile_avatar_cleanup || {};
 const applyScript = fs.readFileSync(path.join(__dirname, "apply-cloudbase-security.cjs"), "utf8");
+const gatewayConfig = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "cloudfunctions", "roomGateway", "config.json"), "utf8"));
 
 assert.equal(
   rooms.read,
@@ -27,5 +28,9 @@ assert.match(applyScript, /member_created_id/, "deployment must create the cross
 assert.doesNotMatch(applyScript, /MgoIndexKeys:[\s\S]*?accessPlatform/, "my-rooms index must not hide rooms created on another client");
 assert.match(applyScript, /createdAt/, "the my-rooms cursor index must use immutable creation time");
 assert.doesNotMatch(applyScript, /(?:setStorageAcl|getStorageAcl|READONLY)/, "deployment must never make the whole storage bucket public-read");
+assert.ok(
+  gatewayConfig.permissions && Array.isArray(gatewayConfig.permissions.openapi) && gatewayConfig.permissions.openapi.includes("security.msgSecCheck"),
+  "roomGateway must declare the WeChat text-security cloud-call permission"
+);
 
 console.log("CloudBase security configuration checks passed.");

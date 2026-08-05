@@ -3,10 +3,32 @@
     <view class="trips-mark"><image src="/assets/icons/brand-plane.svg" mode="aspectFit" /></view>
     <view class="page-title">行程</view>
   </view>
+  <view class="section-label trips-label">本地行程</view>
+  <button class="btn secondary" style="margin:0 0 18rpx;" bindtap="newLocal">＋ 新建行程账本</button>
+  <view wx:if="{{!localTrips.length}}" class="state-card empty-state">
+    <view class="empty-icon">⌁</view><view class="empty-title">还没有本地行程</view><view class="muted">新建一趟行程后，成员和支出会仅保存在当前账号的这台设备上。</view>
+  </view>
+  <view
+    wx:for="{{localTrips}}"
+    wx:key="tripId"
+    class="trip-row"
+    bindtap="openLocal"
+    data-id="{{item.tripId}}"
+  >
+    <view class="trip-icon trip-icon-ledger"><image src="/assets/icons/receipt.svg" mode="aspectFit" /></view>
+    <view class="trip-copy">
+      <view class="trip-name">{{item.name}}</view>
+      <view class="trip-meta">本地账本 · {{item.memberCount}} 人 · {{item.expenseCount}} 笔支出</view>
+    </view>
+    <view wx:if="{{item.showTotal}}" class="trip-total">¥{{item.totalYuan}}</view>
+    <view wx:else class="trip-arrow">›</view>
+    <button catchtap="deleteLocal" data-id="{{item.tripId}}" style="flex:0 0 auto;margin:0 0 0 8rpx;padding:0 12rpx;border:1rpx solid #DFC0BA;border-radius:12rpx;background:#FFFDF6;color:#9C433A;font-size:21rpx;line-height:48rpx;">删除</button>
+  </view>
+
   <view class="section-label trips-label">进行中的房间</view>
 
   <view wx:if="{{loading}}" class="state-card"><view class="state-spinner"></view><text>正在同步你的云端房间…</text></view>
-  <view wx:if="{{cloudError}}" class="state-card error-state">{{cloudError}}；为保护账号隐私，未显示本机缓存。</view>
+  <view wx:if="{{cloudError}}" class="state-card error-state">{{cloudError}}；为保护账号隐私，未显示云端房间的本机缓存。</view>
   <view wx:if="{{!loading && !rooms.length && !cloudError}}" class="state-card empty-state">
     <view class="empty-icon">⌁</view><view class="empty-title">还没有进行中的房间</view><view class="muted">从首页创建房间，或输入房间码加入。</view>
   </view>
@@ -25,6 +47,7 @@
     </view>
     <view wx:if="{{item.showTotal}}" class="trip-total">¥{{item.totalYuan}}</view>
     <view wx:else class="trip-arrow">›</view>
+    <button catchtap="roomAction" data-id="{{item.docId}}" loading="{{roomActionBusyId === item.docId}}" disabled="{{roomActionBusyId !== ''}}" style="flex:0 0 auto;margin:0 0 0 8rpx;padding:0 10rpx;border:1rpx solid #DFC0BA;border-radius:12rpx;background:#FFFDF6;color:#9C433A;font-size:19rpx;line-height:48rpx;">退出/解散</button>
   </view>
 
   <button wx:if="{{hasMore}}" class="btn secondary load-more" bindtap="loadMore" loading="{{loadingMore}}" disabled="{{loadingMore}}">{{loadingMore ? '加载中…' : '加载更多房间'}}</button>

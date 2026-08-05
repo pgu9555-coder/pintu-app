@@ -32,8 +32,8 @@ assert.doesNotMatch(
 assert.match(source, /rmRoomGateway\(\s*['"]getRoom['"]/, "room reads must use roomGateway");
 assert.match(
   source,
-  /rmRoomGateway\(\s*['"]syncLedger['"]\s*,\s*\{[\s\S]*?membershipEpoch:\s*rmMembershipEpochForRoom\(/,
-  "shared-ledger writes must carry the current membership epoch"
+  /rmRoomGateway\(\s*['"]syncLedger['"]\s*,\s*\{[\s\S]*?membershipEpoch:\s*payloadMembershipEpoch/,
+  "shared-ledger writes must carry the epoch captured with the queued payload"
 );
 assert.match(source, /mpDecisionWrite\([^)]*['"]publishDecisionCandidates['"]/, "shared decision candidates must use the guarded decision writer");
 assert.match(source, /mpDecisionWrite\([^)]*['"]setDecisionVote['"]/, "shared decision votes must use the guarded decision writer");
@@ -117,6 +117,14 @@ assert.match(
 );
 assert.match(source, /function\s+glAddExpense\s*\([\s\S]*?glAmountToCents\(amountEl\.value\)[\s\S]*?glShowInvalidAmount\(amountEl\)/, "new expenses must reject invalid amounts before local insertion");
 assert.match(source, /glSaveExpenseEdit[\s\S]*?glAmountToCents\(amountInput\.value\)[\s\S]*?glShowInvalidAmount\(amountInput\)/, "expense edits must reject invalid amounts before saving");
+assert.match(source, /function\s+glDeleteMember\(id\)[\s\S]*?trip\.roomDocId\s*&&\s*protectedMember\s*&&\s*protectedMember\.uid/, "shared room members must be protected from web deletion before mutation");
+assert.match(source, /function\s+glOpenMemberEditor\(id\)[\s\S]*?trip\.roomDocId\s*&&\s*member\.uid/, "shared room members must be protected from web rename before opening the editor");
+assert.match(source, /protectedMember\s*=\s*Boolean\(trip\.roomDocId\s*&&\s*m\.uid\)/, "web member UI must hide destructive controls for true room members");
+assert.match(source, /payloadMembershipEpoch[\s\S]*?membershipEpoch:\s*payloadMembershipEpoch/, "a queued web ledger write must retain its original membership epoch");
+assert.match(source, /syncBlocked[\s\S]*?remoteNeedsRepair\s*&&\s*!hasPendingSync\s*&&\s*!syncBlocked/, "blocked stale Web ledger writes must not be replayed during cloud hydration");
+assert.match(source, /function glQueueCloudSync\(trip, explicitConfirmation\)[\s\S]*?state\.blocked\s*&&\s*!explicitConfirmation/, "only an explicit new Web save may reconfirm a blocked ledger payload");
+assert.match(source, /\['INVALID_LEDGER', 'INVALID_REQUEST', 'INVALID_DECISION', 'FORBIDDEN', 'WRONG_ROOM_TYPE', 'ROOM_TYPE_MISMATCH', 'CONTENT_REJECTED', 'STALE_MEMBERSHIP'\]/, "non-retryable web ledger conflicts must stop automatic retries");
+assert.match(source, /function\s+glPersistTrips\(\)[\s\S]*?本机保存失败，本次未同步/, "web local-storage failures must be visible and must not claim a sync");
 
 assert.match(source, /inputEl\.dataset\.locationGeneration\s*=\s*String\(Number\(inputEl\.dataset\.locationGeneration\s*\|\|\s*0\)\s*\+\s*1\)/, "typing or selecting an address must advance the location generation");
 assert.match(source, /function\s+geolocateMe\s*\(inputEl\)\s*\{[\s\S]*?var\s+locationGeneration\s*=[\s\S]*?getCurrentPosition\(function\(status, result\)\{[\s\S]*?locationGeneration\)\s*return;[\s\S]*?reverseGeocodePosition[\s\S]*?locationGeneration\)\s*return;/, "stale geolocation and reverse-geocode callbacks must not overwrite a newer address");

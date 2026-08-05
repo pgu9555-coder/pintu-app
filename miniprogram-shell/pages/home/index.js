@@ -40,6 +40,7 @@ Page({
     busy: false,
     joinError: '',
     profileLoaded: false,
+    profileError: '',
     profileBusy: false,
     profileExists: false,
     profileNickname: '',
@@ -54,11 +55,15 @@ Page({
   },
 
   onLoad(options) {
+    this.nameDirty = false
     this.setData({ code: cleanCode(options && options.code) })
     // Mini-program storage is shared by every WeChat account that uses this
     // app on the same device. Clear the old room-name default before resolving
     // the current account's trusted cloud profile so another account's
     // nickname is never flashed or reused.
+    const app = getApp()
+    if (app && typeof app.resetAccountScope === 'function') app.resetAccountScope()
+    else storage.clearAccountScope()
     storage.saveName('')
     const systemInfo = wx.getSystemInfoSync ? wx.getSystemInfoSync() : {}
     const fallbackHeaderTop = Number(systemInfo.statusBarHeight || 20) + 52
@@ -91,6 +96,7 @@ Page({
   preventClose() {},
 
   nameInput(event) {
+    this.nameDirty = true
     this.setData({ name: event.detail.value, joinError: '' })
   },
 
@@ -100,11 +106,22 @@ Page({
 
   async loadProfile() {
     try {
-      const profile = await gateway.getProfile()
+      const app = getApp()
+      const profile = app && typeof app.ensureAccountScope === 'function'
+        ? await app.ensureAccountScope()
+        : await gateway.getProfile()
+      if (!storage.setAccountScope(profile)) {
+        throw new Error('微信账号识别凭据无效，请重新打开小程序')
+      }
       const nickname = profile.nickname || ''
       if (profile.exists && profile.nickname) storage.saveName(profile.nickname)
+      const savedName = storage.getName()
+      const nextName = this.nameDirty
+        ? this.data.name
+        : (profile.exists && nickname ? nickname : savedName)
       this.setData({
         profileLoaded: true,
+        profileError: '',
         profileExists: Boolean(profile.exists),
         profileNickname: nickname,
         profileAvatarFileId: profile.avatarFileId || '',
@@ -112,12 +129,37 @@ Page({
         pendingAvatarUrl: '',
         profileAvatarCleanupPending: Number(profile.avatarCleanupPendingCount) || 0,
         avatarUploadPrefix: profile.avatarUploadPrefix || '',
-        name: profile.exists && profile.nickname ? profile.nickname : this.data.name
+        name: nextName
       })
-    } catch (_) {
-      this.setData({ profileLoaded: true })
-      wx.showToast({ title: '微信资料暂时无法加载', icon: 'none' })
+    } catch (error) {
+      storage.clearAccountScope()
+      this.setData({
+        profileLoaded: true,
+        profileError: error && error.message ? error.message : '微信账号暂时无法识别'
+      })
+      wx.showToast({ title: '微信账号暂时无法识别', icon: 'none' })
     }
+  },
+
+  accountReady() {
+    if (!this.data.profileLoaded) {
+      wx.showToast({ title: '正在识别微信账号，请稍候', icon: 'none' })
+      return false
+    }
+    if (!storage.isAccountScoped()) {
+      wx.showToast({ title: this.data.profileError || '微信账号暂时无法识别，请重试', icon: 'none' })
+      return false
+    }
+    return true
+  },
+
+  async retryProfile() {
+    if (!this.data.profileLoaded) return
+    const app = getApp()
+    if (app && typeof app.resetAccountScope === 'function') app.resetAccountScope()
+    else storage.clearAccountScope()
+    this.setData({ profileLoaded: false, profileError: '' })
+    await this.loadProfile()
   },
 
   async saveProfile() {
@@ -264,11 +306,13 @@ Page({
   },
 
   openMidpoint() {
+    if (!this.accountReady()) return
     this.rememberName()
     wx.navigateTo({ url: '/pages/midpoint/index' })
   },
 
   openLedger() {
+    if (!this.accountReady()) return
     this.rememberName()
     wx.navigateTo({ url: '/pages/ledger/index' })
   },
@@ -278,6 +322,7 @@ Page({
   },
 
   openTrips() {
+    if (!this.accountReady()) return
     wx.switchTab({ url: '/pages/trips/index' })
   },
 
@@ -298,6 +343,7 @@ Page({
 
   async join() {
     if (this.data.busy) return
+    if (!this.accountReady()) return
     const name = this.data.name.trim()
     const code = cleanCode(this.data.code)
     if (!name || code.length !== 8) {

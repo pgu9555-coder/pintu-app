@@ -323,22 +323,54 @@ function mergeLedgers(incoming, current) {
 
 function enforceTrustedLedgerMemberUids(ledger, currentLedger, room) {
   const trustedById = new Map();
+  const protectedById = new Map();
+  const currentById = new Map((currentLedger.members || [])
+    .filter((member) => member && member.id != null)
+    .map((member) => [String(member.id), member]));
   (currentLedger.members || []).forEach((member) => {
-    if (member && validUid(member.uid)) trustedById.set(String(member.id), member.uid);
+    if (member && validUid(member.uid)) {
+      trustedById.set(String(member.id), member.uid);
+      /* A ledger member backed by a real room identity is managed only by
+         join/leave.  A whole-ledger client snapshot must not rename it or
+         tombstone it, otherwise the top-level room member and ledger member
+         diverge and another device can lose its default payer. */
+      protectedById.set(String(member.id), cloneJson(member));
+    }
   });
   (Array.isArray(room.members) ? room.members : []).forEach((member) => {
-    if (member && validUid(member.uid)) trustedById.set(String(member.id), member.uid);
+    if (!member || !validUid(member.uid) || member.id == null) return;
+    const id = String(member.id);
+    trustedById.set(id, member.uid);
+    /* Older migrated ledgers can have the right room-member identity while
+       the parallel ledger record is missing its uid.  Treat that existing
+       ledger record as protected too, otherwise a whole-ledger snapshot could
+       rename or tombstone a real participant before the uid is repaired. */
+    const currentMember = currentById.get(id);
+    if (currentMember && !protectedById.has(id)) {
+      protectedById.set(id, { ...cloneJson(currentMember), uid: member.uid });
+    }
   });
 
-  return {
-    ...ledger,
-    members: (ledger.members || []).map((member) => {
+  const protectedTombstones = { ...(ledger.memberTombstones || {}) };
+  protectedById.forEach((_, id) => { delete protectedTombstones[id]; });
+  const seen = new Set();
+  const members = (ledger.members || []).map((member) => {
+      const id = String(member.id);
+      seen.add(id);
+      if (protectedById.has(id)) return cloneJson(protectedById.get(id));
       const sanitized = { ...member };
       delete sanitized.uid;
-      const trustedUid = trustedById.get(String(member.id));
+      const trustedUid = trustedById.get(id);
       if (trustedUid) sanitized.uid = trustedUid;
       return sanitized;
-    })
+    });
+  protectedById.forEach((member, id) => {
+    if (!seen.has(id)) members.push(cloneJson(member));
+  });
+  return {
+    ...ledger,
+    members,
+    memberTombstones: protectedTombstones
   };
 }
 
@@ -426,15 +458,6 @@ function moderationChunks(values) {
   return chunks;
 }
 
-function miniProgramIdentityFromRoom(room) {
-  const uids = activeTopLevelMemberUids(room);
-  for (const uid of uids) {
-    const match = /^wx:([^:]+):(.+)$/.exec(uid);
-    if (match && match[1] && match[2]) return { appid: match[1], openid: match[2] };
-  }
-  return null;
-}
-
 function visibleRoomTexts(room) {
   if (!room) return [];
   const meetup = room.meetup && isPlainObject(room.meetup) ? room.meetup : {};
@@ -444,7 +467,15 @@ function visibleRoomTexts(room) {
     room.name,
     ...(Array.isArray(room.members) ? room.members.map((member) => member && member.name) : []),
     ...(Array.isArray(meetup.people) ? meetup.people.flatMap((person) => [person && person.name, person && person.address]) : []),
-    ...(Array.isArray(decision.candidates) ? decision.candidates.flatMap((candidate) => [candidate && candidate.name, candidate && candidate.typeStr]) : []),
+    ...(Array.isArray(decision.candidates) ? decision.candidates.flatMap((candidate) => [
+      candidate && candidate.name,
+      candidate && candidate.typeStr,
+      candidate && candidate.address,
+      candidate && candidate.category,
+      candidate && candidate.phone,
+      candidate && candidate.rating,
+      candidate && candidate.averageCost
+    ]) : []),
     ledger.name,
     ...(Array.isArray(ledger.members) ? ledger.members.map((member) => member && member.name) : []),
     ...(Array.isArray(ledger.expenses) ? ledger.expenses.map((expense) => expense && expense.desc) : [])
@@ -452,11 +483,12 @@ function visibleRoomTexts(room) {
 }
 
 async function moderateMiniProgramText(values, room) {
-  /* Web edits must also be checked after a WeChat member has joined; otherwise
-     unreviewed Web text could be rendered inside the mini program.  The room's
-     WeChat identities were written only from trusted OPENID context, so one of
-     them can safely supply the OpenAPI moderation subject. */
-  const wechat = callerWechatContext() || miniProgramIdentityFromRoom(room);
+  /* WeChat cloud calls are authenticated only when the current invocation came
+     from the mini program. A Web invocation cannot safely borrow a stored
+     OPENID: wx-server-sdk has no trusted APPID context for that request. Web
+     writes are therefore marked pending below and reviewed by the next trusted
+     mini-program invocation before they can be returned to a mini client. */
+  const wechat = callerWechatContext();
   if (!wechat) return;
   const checker = wxCloud.openapi && wxCloud.openapi.security && wxCloud.openapi.security.msgSecCheck;
   if (typeof checker !== "function") {
@@ -485,6 +517,274 @@ async function moderateMiniProgramText(values, room) {
       );
     }
   }
+}
+
+function pendingContentReviewId(room) {
+  const scalar = room && room.contentReviewPendingId;
+  if (typeof scalar === "string" && /^[a-f0-9]{32}$/.test(scalar)) return scalar;
+  /* Backward-compatible with the short-lived nested marker used during the
+     rollout. New writes use a scalar because CloudBase cannot create nested
+     keys below a field that was previously cleared to null. */
+  const pending = room && room.contentReviewPending;
+  return pending && typeof pending.id === "string" && /^[a-f0-9]{32}$/.test(pending.id)
+    ? pending.id
+    : "";
+}
+
+/* CloudBase cannot safely turn a field previously written as null into a
+   nested object.  Keep the review queue in one scalar JSON field instead.
+   More importantly, this queue contains only the *new* Web text, never a
+   whole historical room (a long-lived ledger can be much larger than the
+   msgSecCheck 16KiB input limit). */
+function reviewEntityKey(prefix, value) {
+  return `${prefix}:${crypto.createHash("sha256").update(String(value)).digest("hex")}`;
+}
+
+function contentReviewEntries(room) {
+  if (!room || !pendingContentReviewId(room)) return [];
+  let source;
+  try { source = JSON.parse(String(room.contentReviewEntriesJson || "[]")); } catch (_) { return []; }
+  if (!Array.isArray(source)) return [];
+  const seen = new Set();
+  return source.flatMap((entry) => {
+    const key = cleanText(entry && entry.key, 160);
+    if (!/^[A-Za-z0-9:_-]{3,160}$/.test(key) || seen.has(key)) return [];
+    seen.add(key);
+    const texts = Array.isArray(entry && entry.texts)
+      ? entry.texts.map((text) => cleanText(text, 1000)).filter(Boolean).slice(0, 12)
+      : [];
+    return texts.length ? [{ key, texts }] : [];
+  });
+}
+
+function reviewEntry(key, values) {
+  const texts = (Array.isArray(values) ? values : [values])
+    .map((value) => cleanText(value, 1000)).filter(Boolean).slice(0, 12);
+  return texts.length ? { key, texts } : null;
+}
+
+function memberReviewKey(uid) { return reviewEntityKey("member", uid); }
+function pointReviewKey(uid) { return reviewEntityKey("point", uid); }
+function ledgerNameReviewKey() { return reviewEntityKey("ledger", "name"); }
+function roomNameReviewKey() { return reviewEntityKey("room", "name"); }
+function ledgerMemberReviewKey(id) { return reviewEntityKey("ledger-member", id); }
+function expenseReviewKey(id) { return reviewEntityKey("expense", id); }
+function candidateReviewKey(id) { return reviewEntityKey("candidate", id); }
+
+function ledgerReviewEntries(incoming, current) {
+  const entries = [];
+  const removeKeys = [];
+  if (incoming.name !== current.name) entries.push(reviewEntry(ledgerNameReviewKey(), incoming.name));
+  const previousMembers = new Map((current.members || []).map((member) => [String(member.id), member]));
+  const incomingMemberIds = new Set();
+  for (const member of incoming.members || []) {
+    const id = String(member.id);
+    incomingMemberIds.add(id);
+    const previous = previousMembers.get(id);
+    if (!previous || previous.name !== member.name) entries.push(reviewEntry(ledgerMemberReviewKey(id), member.name));
+  }
+  for (const member of current.members || []) {
+    if (!incomingMemberIds.has(String(member.id))) removeKeys.push(ledgerMemberReviewKey(member.id));
+  }
+  const previousExpenses = new Map((current.expenses || []).map((expense) => [String(expense.id), expense]));
+  const incomingExpenseIds = new Set();
+  for (const expense of incoming.expenses || []) {
+    const id = String(expense.id);
+    incomingExpenseIds.add(id);
+    const previous = previousExpenses.get(id);
+    if (!previous || previous.desc !== expense.desc) entries.push(reviewEntry(expenseReviewKey(id), expense.desc));
+  }
+  for (const expense of current.expenses || []) {
+    if (!incomingExpenseIds.has(String(expense.id))) removeKeys.push(expenseReviewKey(expense.id));
+  }
+  return { entries: entries.filter(Boolean), removeKeys };
+}
+
+function candidateReviewTexts(candidate) {
+  return [candidate && candidate.name, candidate && candidate.typeStr, candidate && candidate.address,
+    candidate && candidate.category, candidate && candidate.phone, candidate && candidate.rating,
+    candidate && candidate.averageCost];
+}
+
+function candidateReviewEntries(nextCandidates, previousCandidates) {
+  const entries = [];
+  const removeKeys = [];
+  const previous = new Map((previousCandidates || []).map((candidate) => [String(candidate.id), candidate]));
+  const nextIds = new Set();
+  for (const candidate of nextCandidates || []) {
+    const id = String(candidate.id);
+    nextIds.add(id);
+    const old = previous.get(id);
+    if (!old || JSON.stringify(candidateReviewTexts(old)) !== JSON.stringify(candidateReviewTexts(candidate))) {
+      entries.push(reviewEntry(candidateReviewKey(id), candidateReviewTexts(candidate)));
+    }
+  }
+  for (const candidate of previousCandidates || []) {
+    if (!nextIds.has(String(candidate.id))) removeKeys.push(candidateReviewKey(candidate.id));
+  }
+  return { entries: entries.filter(Boolean), removeKeys };
+}
+
+function markWebContentReview(patch, accessPlatform, room, entries = [], removeKeys = []) {
+  if (accessPlatform !== "web") return patch;
+  const type = roomTypeFor(room);
+  if (type !== "midpoint" && type !== "ledger") return patch;
+  const queued = new Map(contentReviewEntries(room).map((entry) => [entry.key, entry]));
+  for (const key of removeKeys || []) queued.delete(key);
+  for (const entry of entries || []) {
+    if (entry && entry.key && Array.isArray(entry.texts) && entry.texts.length) queued.set(entry.key, entry);
+  }
+  /* Reject oversized *pending changes* before writing. Historical content is
+     already approved and deliberately does not contribute to this limit. */
+  moderationChunks([...queued.values()].flatMap((entry) => entry.texts));
+  if (!queued.size) {
+    if ((entries && entries.length) || (removeKeys && removeKeys.length)) {
+      patch.contentReviewPendingId = "";
+      patch.contentReviewEntriesJson = "";
+    }
+    return patch;
+  }
+  patch.contentReviewPendingId = crypto.randomBytes(16).toString("hex");
+  patch.contentReviewEntriesJson = JSON.stringify([...queued.values()]);
+  return patch;
+}
+
+function pendingReviewFailure(room) {
+  if (room && !contentReviewEntries(room).length) {
+    return failure(
+      "CONTENT_REVIEW_LEGACY",
+      "这个旧房间的历史内容无法自动完成安全检查。原数据已保留，请由房主新建房间继续使用"
+    );
+  }
+  return failure("CONTENT_REVIEW_RETRY", "房间刚有新的网页内容，正在安全检查，请稍后重试");
+}
+
+function mustRetryForPendingReview(room, accessPlatform) {
+  return accessPlatform === "wechat-mini-program" && Boolean(pendingContentReviewId(room));
+}
+
+function rejectedReviewSanitization(room, entries) {
+  const keys = new Set((entries || []).map((entry) => entry.key));
+  const patch = {};
+  if (keys.has(roomNameReviewKey())) patch.name = roomTypeFor(room) === "ledger" ? "共享账本" : "共享碰面";
+  const members = Array.isArray(room.members) ? room.members : [];
+  if (members.some((member) => member && keys.has(memberReviewKey(member.uid)))) {
+    patch.members = members.map((member) => member && keys.has(memberReviewKey(member.uid))
+      ? { ...member, name: "网页成员" } : member);
+  }
+  const ledger = room.ledger && isPlainObject(room.ledger) ? room.ledger : null;
+  if (ledger) {
+    let changed = false;
+    const nextLedger = { ...ledger };
+    if (keys.has(ledgerNameReviewKey())) { nextLedger.name = "共享账本"; changed = true; }
+    if (Array.isArray(ledger.members)) {
+      const nextMembers = ledger.members.map((member) => {
+        const replace = member && (keys.has(ledgerMemberReviewKey(member.id)) || keys.has(memberReviewKey(member.uid)));
+        if (!replace) return member;
+        changed = true;
+        return { ...member, name: "账本成员" };
+      });
+      nextLedger.members = nextMembers;
+    }
+    if (Array.isArray(ledger.expenses)) {
+      nextLedger.expenses = ledger.expenses.map((expense) => {
+        if (!expense || !keys.has(expenseReviewKey(expense.id))) return expense;
+        changed = true;
+        return { ...expense, desc: "待修改支出" };
+      });
+    }
+    if (changed) {
+      const stamp = Math.max(Date.now(), Number(ledger.revision) || 0, Number(ledger.updatedAt) || 0) + 1;
+      nextLedger.revision = stamp;
+      nextLedger.updatedAt = stamp;
+      nextLedger.updatedBy = "content-review";
+      patch.ledger = nextLedger;
+    }
+  }
+  const meetup = room.meetup && isPlainObject(room.meetup) ? room.meetup : null;
+  if (meetup) {
+    let changed = false;
+    const nextMeetup = { ...meetup };
+    if (Array.isArray(meetup.people)) {
+      nextMeetup.people = meetup.people.map((person) => {
+        if (!person) return person;
+        const replaceName = keys.has(memberReviewKey(person.uid));
+        const removePoint = keys.has(pointReviewKey(person.uid));
+        if (!replaceName && !removePoint) return person;
+        changed = true;
+        return { ...person, ...(replaceName ? { name: "网页成员" } : {}),
+          ...(removePoint ? { address: "", lat: null, lng: null } : {}) };
+      });
+    }
+    const decision = normalizedMeetupDecision(meetup, room);
+    const rejectedCandidateIds = new Set(decision.candidates
+      .filter((candidate) => keys.has(candidateReviewKey(candidate.id))).map((candidate) => candidate.id));
+    if (rejectedCandidateIds.size) {
+      changed = true;
+      const candidates = decision.candidates.filter((candidate) => !rejectedCandidateIds.has(candidate.id));
+      const votes = decision.votes.filter((vote) => !rejectedCandidateIds.has(vote.candidateId));
+      const confirmed = rejectedCandidateIds.has(decision.confirmedCandidateId) ? null : decision.confirmedCandidateId;
+      nextMeetup.decision = { ...decision, candidates, votes, confirmedCandidateId: confirmed,
+        state: confirmed ? decision.state : "open", confirmedAt: confirmed ? decision.confirmedAt : null,
+        confirmedBy: confirmed ? decision.confirmedBy : null, revision: decision.revision + 1 };
+    }
+    if (changed) patch.meetup = nextMeetup;
+  }
+  patch.contentReviewPendingId = "";
+  patch.contentReviewEntriesJson = "";
+  if (room.contentReviewPending) patch.contentReviewPending = null;
+  patch.updatedAt = new Date();
+  return patch;
+}
+
+async function reviewPendingWebContent(docId, uid, accessPlatform, allowJoining = false) {
+  if (accessPlatform !== "wechat-mini-program" || !docId) return;
+  const response = requireDbSuccess(
+    await db.collection(ROOM_COLLECTION).doc(docId).get(),
+    "读取待审核房间"
+  );
+  const room = response && Array.isArray(response.data) ? response.data[0] : response && response.data;
+  const pendingId = pendingContentReviewId(room);
+  if (!pendingId || !hasRoomAccessPlatform(room, accessPlatform) || (!allowJoining && !isActiveRoomMember(room, uid))) return;
+  const entries = contentReviewEntries(room);
+  /* Entries are absent only for rooms created by the short-lived old rollout.
+     We cannot know which field that marker represented and reviewing a whole
+     long ledger can exceed the OpenAPI limit. Keep the original document
+     untouched and leave the marker in place: mini-program reads fail closed,
+     while the Web owner can still inspect/export the historical room. */
+  if (!entries.length) {
+    return { blocked: true, legacy: true };
+  }
+  const texts = entries.flatMap((entry) => entry.texts);
+  try {
+    await moderateMiniProgramText(texts, room);
+  } catch (error) {
+    if (!error || error.publicCode !== "CONTENT_REJECTED") throw error;
+    await db.runTransaction(async (transaction) => {
+      const ref = transaction.collection(ROOM_COLLECTION).doc(docId);
+      const currentResponse = requireDbSuccess(await ref.get(), "确认待审核房间");
+      const current = currentResponse && currentResponse.data ? currentResponse.data : null;
+      /* A newer Web change won the race; its marker must remain for its own review. */
+      if (pendingContentReviewId(current) !== pendingId) return;
+      const patch = rejectedReviewSanitization(current, entries);
+      const updated = requireDbSuccess(await ref.update(patch), "清理不安全内容");
+      if (!updated || updated.updated !== 1) throw new Error("清理不安全内容失败");
+    }, 5);
+    return { sanitized: true };
+  }
+  await db.runTransaction(async (transaction) => {
+    const ref = transaction.collection(ROOM_COLLECTION).doc(docId);
+    const currentResponse = requireDbSuccess(await ref.get(), "确认待审核房间");
+    const current = currentResponse && currentResponse.data ? currentResponse.data : null;
+    /* Never clear a newer Web write that raced with this review. */
+    if (pendingContentReviewId(current) !== pendingId) return;
+    const updated = requireDbSuccess(await ref.update({
+      contentReviewPendingId: "",
+      contentReviewEntriesJson: "",
+      ...(current && current.contentReviewPending ? { contentReviewPending: null } : {})
+    }), "确认内容安全检查");
+    if (!updated || updated.updated !== 1) throw new Error("确认内容安全检查失败");
+  }, 5);
 }
 
 function changedLedgerTexts(incoming, current) {
@@ -636,6 +936,31 @@ function validDecisionRoundId(value) {
   return /^round_[A-Za-z0-9_-]{16,80}$/.test(id) ? id : "";
 }
 
+function decisionCandidateDetail(source, field, maxLength, existing) {
+  const hasIncoming = source && Object.prototype.hasOwnProperty.call(source, field);
+  const raw = hasIncoming ? source[field] : existing && existing[field];
+  if (raw == null || raw === "") return "";
+  if (typeof raw !== "string" && typeof raw !== "number") inputError("候选地点详情字段无效");
+  const text = String(raw).trim();
+  if (text.length > maxLength) inputError("候选地点详情过长");
+  return cleanText(text, maxLength);
+}
+
+function decisionCandidatePhone(source, existing) {
+  const phone = decisionCandidateDetail(source, "phone", 80, existing);
+  if (phone && !/^[0-9+()（）\-—\s;；,，]{3,80}$/.test(phone)) inputError("候选地点电话格式无效");
+  return phone;
+}
+
+function decisionCandidateMetric(source, field, maxValue, existing) {
+  const text = decisionCandidateDetail(source, field, 16, existing);
+  if (!text) return "";
+  if (!/^\d{1,8}(?:\.\d{1,2})?$/.test(text)) inputError("候选地点数值详情无效");
+  const value = Number(text);
+  if (!Number.isFinite(value) || value < 0 || value > maxValue) inputError("候选地点数值详情超出范围");
+  return text;
+}
+
 function normalizeDecisionCandidate(source, uid, now, existing) {
   if (!isPlainObject(source)) inputError("候选地点数据无效");
   if (typeof source.name !== "string" || source.name.trim().length > 80 || typeof source.typeStr !== "string" || source.typeStr.trim().length > 120 ||
@@ -651,6 +976,11 @@ function normalizeDecisionCandidate(source, uid, now, existing) {
   if (!Number.isFinite(dist) || dist < 0 || dist > 100000) inputError("候选地点距离无效");
   if (typeof source.isMall !== "boolean" || typeof source.isDrink !== "boolean") inputError("候选地点类型无效");
   const id = decisionCandidateId(name, lat, lng);
+  const address = decisionCandidateDetail(source, "address", 120, existing);
+  const category = decisionCandidateDetail(source, "category", 120, existing);
+  const phone = decisionCandidatePhone(source, existing);
+  const rating = decisionCandidateMetric(source, "rating", 5, existing);
+  const averageCost = decisionCandidateMetric(source, "averageCost", 10000000, existing);
   return {
     id,
     name,
@@ -660,6 +990,11 @@ function normalizeDecisionCandidate(source, uid, now, existing) {
     dist,
     isMall: source.isMall,
     isDrink: source.isDrink,
+    address,
+    category,
+    phone,
+    rating,
+    averageCost,
     createdBy: existing && validUid(existing.createdBy) ? existing.createdBy : uid,
     createdAt: existing && Number.isFinite(Number(existing.createdAt)) ? Math.floor(Number(existing.createdAt)) : now,
     updatedAt: now
@@ -679,9 +1014,15 @@ function validDecisionCandidate(source) {
     if (!name || !Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180 ||
       !Number.isFinite(dist) || dist < 0 || dist > 100000 || typeof source.isMall !== "boolean" || typeof source.isDrink !== "boolean") return null;
     const id = decisionCandidateId(name, lat, lng);
+    const address = decisionCandidateDetail(source, "address", 120, null);
+    const category = decisionCandidateDetail(source, "category", 120, null);
+    const phone = decisionCandidatePhone(source, null);
+    const rating = decisionCandidateMetric(source, "rating", 5, null);
+    const averageCost = decisionCandidateMetric(source, "averageCost", 10000000, null);
     return {
       id, name, lat: Number(lat.toFixed(6)), lng: Number(lng.toFixed(6)), typeStr, dist,
       isMall: source.isMall, isDrink: source.isDrink,
+      address, category, phone, rating, averageCost,
       createdBy: validUid(source.createdBy) ? source.createdBy : "",
       createdAt: Math.max(0, Math.floor(Number(source.createdAt) || 0)),
       updatedAt: Math.max(0, Math.floor(Number(source.updatedAt) || 0))
@@ -866,6 +1207,19 @@ async function createRoom(event, uid, accessPlatform) {
     room.name,
     ...(Array.isArray(room.members) ? room.members.map((member) => member && member.name) : [])
   ], room);
+  if (accessPlatform === "web" && (room.toolType === "midpoint" || room.toolType === "ledger")) {
+    const initialEntries = [
+      reviewEntry(roomNameReviewKey(), room.name),
+      ...(room.members || []).map((member) => reviewEntry(memberReviewKey(member.uid), member.name))
+    ];
+    if (room.toolType === "ledger" && room.ledger) {
+      initialEntries.push(
+        reviewEntry(ledgerNameReviewKey(), room.ledger.name),
+        ...(room.ledger.members || []).map((member) => reviewEntry(ledgerMemberReviewKey(member.id), member.name))
+      );
+    }
+    markWebContentReview(room, accessPlatform, room, initialEntries.filter(Boolean));
+  }
   const requestKey = clientRequestId || `server_${crypto.randomBytes(16).toString("hex")}`;
 
   /* The room document ID is derived from the public code. That makes code
@@ -935,6 +1289,7 @@ async function getRoom(event, uid, accessPlatform) {
   if (!hasRoomAccessPlatform(room, accessPlatform) || !isActiveRoomMember(room, uid)) {
     return success({ room: null, viewer: null });
   }
+  if (mustRetryForPendingReview(room, accessPlatform)) return pendingReviewFailure(room);
   let safeRoom = { ...room, _id: room._id || docId };
   if (roomTypeFor(room) === "midpoint" && room.meetup && isPlainObject(room.meetup)) {
     safeRoom = {
@@ -1295,10 +1650,10 @@ async function joinRoom(event, uid, accessPlatform) {
     return failure("INVALID_CODE", "请输入完整的 8 位房间码（旧房间可输入 6 位）");
   }
   if (!consumeJoinAttempt(uid)) return failure("RATE_LIMITED", "尝试次数过多，请 5 分钟后再试");
-  const room = await roomByCode(code);
+  let room = await roomByCode(code);
   if (room && !hasRoomAccessPlatform(room, accessPlatform)) return failure("ROOM_NOT_FOUND", "没有找到这个房间码");
   if (!room) return failure("ROOM_NOT_FOUND", `没有找到房间码“${code}”`);
-  const type = room.toolType || room.roomType || "legacy";
+  let type = room.toolType || room.roomType || "legacy";
   if (isAutoJoin && type !== "midpoint" && type !== "ledger") {
     return type === "legacy"
       ? failure("ROOM_LEGACY_UNSUPPORTED", "旧版综合房间不支持自动加入，请从对应功能进入")
@@ -1314,12 +1669,19 @@ async function joinRoom(event, uid, accessPlatform) {
     return failure("NAME_REQUIRED", "请先填写你自己的名字");
   }
   /* A mini-program caller checks all existing Web-authored text before the
-     room is first exposed in WeChat.  A Web caller joining a room that already
-     has WeChat members is checked with one of those trusted identities. */
-  await moderateMiniProgramText(
-    callerWechatContext() ? visibleRoomTexts(room).concat(name) : [name],
-    room
-  );
+     room is first exposed in WeChat. Web writes are reviewed on the next
+     trusted mini-program read instead of trying to borrow a stored OPENID. */
+  if (accessPlatform === "wechat-mini-program" && pendingContentReviewId(room)) {
+    await reviewPendingWebContent(room._id, uid, accessPlatform, true);
+    room = await roomByCode(code);
+    if (!room) return failure("ROOM_NOT_FOUND", `没有找到房间码“${code}”`);
+    type = room.toolType || room.roomType || "legacy";
+    if (pendingContentReviewId(room)) return pendingReviewFailure(room);
+  }
+  const reviewedPendingId = pendingContentReviewId(room);
+  /* The existing room was either approved previously or just reviewed above;
+     only the joining mini-program user's newly supplied name needs checking. */
+  await moderateMiniProgramText([name], room);
 
   /* 加入涉及 memberUids、成员资料与碰面点等多个字段。放进同一个事务，
      避免网络中断或两个人同时加入时只写成一半。 */
@@ -1344,6 +1706,9 @@ async function joinRoom(event, uid, accessPlatform) {
     if ((currentType === "midpoint" || currentType === "ledger") && !name) {
       return failure("NAME_REQUIRED", "请先填写你自己的名字");
     }
+    if (accessPlatform === "wechat-mini-program" && pendingContentReviewId(current) !== reviewedPendingId) {
+      return pendingReviewFailure(current);
+    }
 
     const existingMemberUids = Array.isArray(current.memberUids) ? current.memberUids : [];
     const currentMembers = Array.isArray(current.members) ? current.members : [];
@@ -1367,6 +1732,10 @@ async function joinRoom(event, uid, accessPlatform) {
       }
     }
     if (!current.ownerUid) patch.ownerUid = inferredOwnerUid;
+    if (accessPlatform === "wechat-mini-program" && reviewedPendingId) {
+      patch.contentReviewPendingId = "";
+      if (current.contentReviewPending) patch.contentReviewPending = null;
+    }
     let updated = { ...current, ...patch, memberUids, ownerUid: inferredOwnerUid };
 
     if (currentType === "midpoint" || currentType === "ledger") {
@@ -1450,6 +1819,18 @@ async function joinRoom(event, uid, accessPlatform) {
       }
     }
 
+    if (accessPlatform === "web" && (currentType === "midpoint" || currentType === "ledger")) {
+      const entries = [reviewEntry(memberReviewKey(uid), name)];
+      if (currentType === "midpoint") {
+        const person = patch.meetup && (patch.meetup.people || []).find((item) => item && item.uid === uid);
+        entries.push(reviewEntry(pointReviewKey(uid), [name, person && person.address]));
+      }
+      if (currentType === "ledger") {
+        const ledgerMember = patch.ledger && (patch.ledger.members || []).find((item) => item && item.uid === uid);
+        if (ledgerMember) entries.push(reviewEntry(ledgerMemberReviewKey(ledgerMember.id), ledgerMember.name));
+      }
+      markWebContentReview(patch, accessPlatform, current, entries.filter(Boolean));
+    }
     patch.updatedAt = new Date();
     const updatedResult = requireDbSuccess(await ref.update(patch), "加入房间");
     if (!updatedResult || updatedResult.updated !== 1) throw new Error("加入房间失败");
@@ -1493,6 +1874,7 @@ async function syncLedger(event, uid, accessPlatform) {
     if (type === "ledger" && !requireCurrentMembership(room, uid, event.membershipEpoch)) {
       return failure("STALE_MEMBERSHIP", "成员身份已更新，请刷新房间后重试");
     }
+    if (mustRetryForPendingReview(room, accessPlatform)) return pendingReviewFailure(room);
 
     const current = normalizeLedger(room.ledger || {}, now, true);
     const mergedWithUntrustedUids = mergeLedgers(incoming, current);
@@ -1507,7 +1889,12 @@ async function syncLedger(event, uid, accessPlatform) {
     merged.updatedAt = stamp;
     merged.updatedBy = uid;
 
-    const updatedResult = requireDbSuccess(await ref.update({ ledger: merged, updatedAt: new Date() }), "写入共享账本");
+    const ledgerChanges = ledgerReviewEntries(merged, current);
+    const patch = markWebContentReview(
+      { ledger: merged, updatedAt: new Date() }, accessPlatform, room,
+      ledgerChanges.entries, ledgerChanges.removeKeys
+    );
+    const updatedResult = requireDbSuccess(await ref.update(patch), "写入共享账本");
     if (!updatedResult || updatedResult.updated !== 1) throw new Error("写入共享账本失败");
     return success({ docId, ledger: merged });
   }, 5);
@@ -1546,6 +1933,7 @@ async function setMeetupPoint(event, uid, accessPlatform) {
     }
     const type = room.toolType || room.roomType || "legacy";
     if (type !== "midpoint") return failure("WRONG_ROOM_TYPE", "这个房间不是协作碰面房间");
+    if (mustRetryForPendingReview(room, accessPlatform)) return pendingReviewFailure(room);
 
     const meetup = room.meetup && isPlainObject(room.meetup) ? room.meetup : { people: [] };
     const people = Array.isArray(meetup.people) ? meetup.people.slice(0, MAX_ACTIVE_MEMBERS) : [];
@@ -1619,6 +2007,13 @@ async function setMeetupPoint(event, uid, accessPlatform) {
     patch.members = members.map((member) => member && member.uid === uid
       ? { ...member, ...(point ? { name: point.name } : {}), membershipEpoch: incomingMembershipEpoch }
       : member);
+    if (accessPlatform === "web") {
+      const entries = point
+        ? [reviewEntry(memberReviewKey(uid), point.name), reviewEntry(pointReviewKey(uid), [point.name, point.address])]
+        : [];
+      const removeKeys = point ? [] : [pointReviewKey(uid)];
+      markWebContentReview(patch, accessPlatform, room, entries.filter(Boolean), removeKeys);
+    }
     patch.updatedAt = new Date();
     const updatedResult = requireDbSuccess(await ref.update(patch), "更新出发点");
     if (!updatedResult || updatedResult.updated !== 1) throw new Error("更新出发点失败");
@@ -1646,7 +2041,15 @@ async function publishDecisionCandidates(event, uid, accessPlatform) {
     : moderationResponse && moderationResponse.data;
   if (hasRoomAccessPlatform(moderationRoom, accessPlatform) && isActiveRoomMember(moderationRoom, uid)) {
     await moderateMiniProgramText(
-      event.candidates.flatMap((candidate) => [candidate && candidate.name, candidate && candidate.typeStr]),
+      event.candidates.flatMap((candidate) => [
+        candidate && candidate.name,
+        candidate && candidate.typeStr,
+        candidate && candidate.address,
+        candidate && candidate.category,
+        candidate && candidate.phone,
+        candidate && candidate.rating,
+        candidate && candidate.averageCost
+      ]),
       moderationRoom
     );
   }
@@ -1657,6 +2060,7 @@ async function publishDecisionCandidates(event, uid, accessPlatform) {
     if (!hasRoomAccessPlatform(room, accessPlatform)) return failure("ROOM_NOT_FOUND", "房间已结束或你已退出");
     if (!isActiveRoomMember(room, uid)) return failure("ROOM_NOT_FOUND", "房间已结束或你已退出");
     if (roomTypeFor(room) !== "midpoint") return failure("WRONG_ROOM_TYPE", "这个房间不是协作碰面房间");
+    if (mustRetryForPendingReview(room, accessPlatform)) return pendingReviewFailure(room);
     if (!requireCurrentMembership(room, uid, event.membershipEpoch)) return failure("STALE_MEMBERSHIP", "成员身份已更新，请刷新房间后重试");
 
     const meetup = room.meetup && isPlainObject(room.meetup) ? room.meetup : { people: [] };
@@ -1693,7 +2097,12 @@ async function publishDecisionCandidates(event, uid, accessPlatform) {
       confirmedBy: confirmedCandidateId ? currentDecision.confirmedBy : null
     };
     const nextMeetup = { ...meetup, decision };
-    const updated = requireDbSuccess(await ref.update({ meetup: nextMeetup, updatedAt: new Date() }), "发布共同候选");
+    const candidateChanges = candidateReviewEntries(candidates, currentDecision.candidates);
+    const patch = markWebContentReview(
+      { meetup: nextMeetup, updatedAt: new Date() }, accessPlatform, room,
+      candidateChanges.entries, candidateChanges.removeKeys
+    );
+    const updated = requireDbSuccess(await ref.update(patch), "发布共同候选");
     if (!updated || updated.updated !== 1) throw new Error("发布共同候选失败");
     return decisionResponse(docId, nextMeetup);
   }, 5);
@@ -1715,6 +2124,7 @@ async function setDecisionVote(event, uid, accessPlatform) {
     if (!hasRoomAccessPlatform(room, accessPlatform)) return failure("ROOM_NOT_FOUND", "房间已结束或你已退出");
     if (!isActiveRoomMember(room, uid)) return failure("ROOM_NOT_FOUND", "房间已结束或你已退出");
     if (roomTypeFor(room) !== "midpoint") return failure("WRONG_ROOM_TYPE", "这个房间不是协作碰面房间");
+    if (mustRetryForPendingReview(room, accessPlatform)) return pendingReviewFailure(room);
     if (!requireCurrentMembership(room, uid, event.membershipEpoch)) return failure("STALE_MEMBERSHIP", "成员身份已更新，请刷新房间后重试");
     const meetup = room.meetup && isPlainObject(room.meetup) ? room.meetup : { people: [] };
     const decision = normalizedMeetupDecision(meetup, room);
@@ -1745,6 +2155,7 @@ async function confirmDecisionCandidate(event, uid, accessPlatform) {
     if (!hasRoomAccessPlatform(room, accessPlatform)) return failure("ROOM_NOT_FOUND", "房间已结束或你已退出");
     if (!isActiveRoomMember(room, uid)) return failure("ROOM_NOT_FOUND", "房间已结束或你已退出");
     if (roomTypeFor(room) !== "midpoint") return failure("WRONG_ROOM_TYPE", "这个房间不是协作碰面房间");
+    if (mustRetryForPendingReview(room, accessPlatform)) return pendingReviewFailure(room);
     if (!requireCurrentMembership(room, uid, event.membershipEpoch)) return failure("STALE_MEMBERSHIP", "成员身份已更新，请刷新房间后重试");
     if (inferredRoomOwnerUid(room, null) !== uid) return failure("NOT_OWNER", "只有房主可以确定地点");
     const meetup = room.meetup && isPlainObject(room.meetup) ? room.meetup : { people: [] };
@@ -1781,6 +2192,7 @@ async function reopenDecision(event, uid, accessPlatform) {
     if (!hasRoomAccessPlatform(room, accessPlatform)) return failure("ROOM_NOT_FOUND", "房间已结束或你已退出");
     if (!isActiveRoomMember(room, uid)) return failure("ROOM_NOT_FOUND", "房间已结束或你已退出");
     if (roomTypeFor(room) !== "midpoint") return failure("WRONG_ROOM_TYPE", "这个房间不是协作碰面房间");
+    if (mustRetryForPendingReview(room, accessPlatform)) return pendingReviewFailure(room);
     if (!requireCurrentMembership(room, uid, event.membershipEpoch)) return failure("STALE_MEMBERSHIP", "成员身份已更新，请刷新房间后重试");
     if (inferredRoomOwnerUid(room, null) !== uid) return failure("NOT_OWNER", "只有房主可以重新选择地点");
     const meetup = room.meetup && isPlainObject(room.meetup) ? room.meetup : { people: [] };
@@ -1922,6 +2334,18 @@ exports.main = async (event, context) => {
   if (!uid) return failure("UNAUTHENTICATED", "请先登录后再操作房间");
   try {
     const action = cleanText(event && event.action, 40);
+    const reviewBeforeMiniRead = new Set([
+      "getRoom",
+      "syncLedger",
+      "setMeetupPoint",
+      "publishDecisionCandidates",
+      "setDecisionVote",
+      "confirmDecisionCandidate",
+      "reopenDecision"
+    ]);
+    if (reviewBeforeMiniRead.has(action)) {
+      await reviewPendingWebContent(cleanText(event && event.docId, 80), uid, accessPlatform);
+    }
     if (action === "create") return await createRoom(event, uid, accessPlatform);
     if (action === "join") return await joinRoom(event, uid, accessPlatform);
     if (action === "getRoom") return await getRoom(event, uid, accessPlatform);

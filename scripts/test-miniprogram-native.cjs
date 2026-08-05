@@ -119,16 +119,30 @@ assert.match(tripsPageSource, /gateway\.listMyRooms\(cursor, 50\)/, "trips must 
 assert.match(tripsPageSource, /cursor\.createdAt/, "trips must validate immutable creation-time cursors");
 assert.match(tripsPageSource, /myRoomsRequestId/, "trips must ignore stale room-list responses");
 assert.ok(!/storage\.all\(/.test(tripsPageSource), "trips must not display shared-device room caches");
+assert.match(tripsPageSource, /storage\.getScoped\(LOCAL_LEDGER_TRIPS_KEY/, "trips must read local ledgers only from account-scoped storage");
+assert.match(tripsPageSource, /storage\.setScoped\(LOCAL_LEDGER_TRIPS_KEY/, "deleting a local trip must remain account-scoped");
+assert.match(tripsPageSource, /ensureAccountScope/, "trips must wait for the authenticated account scope before reading local or cloud data");
 assert.match(tripsPageSource, /storage\.save\(\{ docId: entry\.docId, room: entry\.room \}\)/, "opening a trusted cloud room may refresh its local cache");
 assert.match(tripsPageSource, /cloudError/, "trips must retain a clear cloud-load error state");
 assert.match(tripsMarkup, /正在同步你的云端房间/, "trips must render a cloud loading state");
 assert.match(tripsMarkup, /cloudError/, "trips must render cloud-load failures");
 assert.match(tripsMarkup, /加载更多/, "trips must offer paginated room recovery");
+assert.match(tripsMarkup, /本地行程/, "trips must separately render account-scoped local ledger trips");
+assert.match(tripsPageSource, /删除本地行程/, "trips must confirm before deleting a local ledger trip");
+assert.match(tripsPageSource, /reconcileLedgerOutbox/, "trips must recover pending ledger writes even when the original room page is no longer reachable");
+assert.match(tripsPageSource, /gateway\.syncLedger\(docId, entry\.ledger, entry\.membershipEpoch\)/, "trips must retry valid pending ledgers in the background");
+assert.match(tripsPageSource, /saveRoomSnapshot\(docId, entry\.roomName, entry\.ledger, true\)/, "ended rooms with pending ledger data must become local history");
+assert.match(tripsPageSource, /if \(entry\.blocked\) continue/, "trips must not endlessly retry a blocked ledger outbox entry");
+assert.match(tripsPageSource, /stalePending[\s\S]*?saveRoomSnapshot\(docId, room\.name, ledger, Boolean\(pending\)\)/, "trips must snapshot pending ledger data before exit or disband");
+assert.match(tripsPageSource, /function isNonRetryableLedgerError/, "trips must recognize permanent ledger conflicts");
+assert.ok(!/restoreRoomSnapshot\(docId, previousSnapshot\)/.test(tripsPageSource), "uncertain leave/disband responses must retain the newest recovery snapshot");
 
 const midpointPageSource = fs.readFileSync(path.join(root, "pages", "midpoint", "index.js"), "utf8");
 const midpointMarkup = fs.readFileSync(path.join(root, "pages", "midpoint", "index.wxml"), "utf8");
 assert.match(midpointPageSource, /function currentDecision\(/, "midpoint must normalize decision state before rendering");
 assert.match(midpointPageSource, /membershipEpoch:\s*viewer\.membershipEpoch/, "decision writes must carry membershipEpoch");
+assert.match(midpointPageSource, /recoverPendingPointDraft\(pending[\s\S]*?mineDraftDirty\s*=\s*true/, "invalidated meetup writes must remain as an editable local draft");
+assert.match(midpointPageSource, /if \(!result\.room\)[\s\S]*?recoverPendingPointDraft\(pending/, "an ended room must preserve an unsynced meetup point as a local draft");
 assert.match(midpointPageSource, /roundId:\s*decision\.roundId/, "decision writes must carry the current roundId");
 assert.match(midpointPageSource, /\['STALE_MEMBERSHIP', 'STALE_DECISION', 'DECISION_CONFIRMED', 'CANDIDATE_NOT_FOUND'\]/, "stale or confirmed decision writes must refresh room state");
 assert.match(midpointPageSource, /wx\.openLocation\([\s\S]*?共同候选地点/, "decision candidates must be openable in the map");
@@ -138,6 +152,7 @@ assert.match(midpointMarkup, /重新选择共同去处/, "owners must be able to
 assert.match(midpointMarkup, /按坐标平均估算，最终请结合实际交通/, "the fair-midpoint title must be paired with an accuracy disclaimer");
 assert.match(midpointPageSource, /LOCAL_MIDPOINT_KEY/, "midpoint must preserve standalone multi-address work locally");
 assert.match(midpointPageSource, /chooseLocalPoint\(event\)/, "standalone midpoint must let each address be selected from the native map");
+assert.match(midpointPageSource, /if \(!amap\.configuredKey\(\)\)[\s\S]*?this\.addDecisionCandidate\(\)/, "room candidate search must fall back to native map selection when AMap is unavailable");
 assert.match(midpointPageSource, /startSwipe\(\)[\s\S]*?swipeAction\(event\)/, "midpoint must expose the same candidate blind-box flow as Web");
 assert.match(midpointMarkup, /再加一个出发点/, "standalone midpoint must support more than two addresses");
 assert.match(midpointMarkup, /不知道选哪个？盲盒帮你挑/, "midpoint must render the destination blind-box entry");
@@ -161,15 +176,44 @@ assert.deepEqual(ledger.balances(ledgerFixture), [
   { id: "carol", name: "Carol", cents: -333 }
 ], "ledger balances must split expenses and preserve rounding");
 assert.deepEqual(ledger.settlements(ledgerFixture), [
-  { from: "Bob", to: "Alice", cents: 233 },
-  { from: "Carol", to: "Alice", cents: 333 }
+  { from: "Carol", to: "Alice", cents: 333 },
+  { from: "Bob", to: "Alice", cents: 233 }
 ], "ledger settlements must reconcile every balance");
+assert.deepEqual(
+  ledger.settlementPlan(ledgerFixture),
+  {
+    rows: [
+      { from: "Carol", to: "Alice", cents: 333 },
+      { from: "Bob", to: "Alice", cents: 233 }
+    ],
+    exact: true
+  },
+  "small ledger settlements must report an exact minimum-transfer plan"
+);
+const largeLedgerFixture = {
+  members: Array.from({ length: 11 }, (_, index) => ({ id: `m${index}`, name: `M${index}` })),
+  expenses: [{ payerId: "m0", amountCents: 100, splitIds: Array.from({ length: 10 }, (_, index) => `m${index + 1}`) }]
+};
+assert.equal(ledger.settlementPlan(largeLedgerFixture).exact, false, "large ledgers must use the greedy settlement fallback");
 
 const ledgerPageSource = fs.readFileSync(path.join(root, "pages", "ledger", "index.js"), "utf8");
 const ledgerMarkup = fs.readFileSync(path.join(root, "pages", "ledger", "index.wxml"), "utf8");
-assert.match(ledgerPageSource, /LOCAL_LEDGER_KEY/, "ledger must support a persistent standalone mode");
-assert.match(ledgerPageSource, /if \(!this\.docId\)[\s\S]*?wx\.setStorageSync\(LOCAL_LEDGER_KEY, next\)/, "standalone ledger writes must remain local");
+assert.match(ledgerPageSource, /LOCAL_LEDGER_TRIPS_KEY/, "ledger must support persistent standalone trips");
+assert.match(ledgerPageSource, /newTripId\(/, "new standalone ledgers must receive a distinct trip ID");
+assert.match(ledgerPageSource, /options && options\.tripId/, "a standalone trip must be reopenable by tripId");
+assert.match(ledgerPageSource, /storage\.getScoped\(LOCAL_LEDGER_TRIPS_KEY/, "standalone ledger reads must remain account-scoped");
+assert.match(ledgerPageSource, /storage\.setScoped\(LOCAL_LEDGER_TRIPS_KEY/, "standalone ledger writes must remain account-scoped");
+assert.match(ledgerPageSource, /hasLocalTripContent/, "blank standalone ledger shells must not be retained in the trip list");
+assert.match(ledgerPageSource, /if \(!saveLocalLedger\(this\.tripId, next\)\)/, "local ledger storage failures must not be reported as saved");
+assert.match(ledgerPageSource, /ensureAccountScope/, "ledger must wait for the authenticated account scope before local storage access");
+assert.ok(!/pintu-local-ledger-v3/.test(ledgerPageSource), "ledger must not migrate or expose the legacy shared-device local key");
 assert.match(ledgerPageSource, /gateway\.syncLedger\(this\.docId, next, this\.viewerMembershipEpoch\(\)\)/, "shared ledger writes must still use the guarded cloud gateway");
+assert.match(ledgerPageSource, /fromRemote && this\.data\.editingId && !\(source\.expenses \|\| \[\]\)\.some/, "a remotely deleted expense must exit the mini-program edit form");
+assert.match(ledgerPageSource, /editingId && !editing[\s\S]*?重新添加/, "saving a stale mini-program edit must not recreate a removed expense");
+assert.match(ledgerPageSource, /if \(this\.docId && member\.uid\)/, "only real shared-room members, not local history members, are protected from rename/delete");
+assert.match(ledgerPageSource, /entry\.blocked[\s\S]*?同步冲突，待修改/, "blocked ledger outbox entries must show a recoverable conflict state");
+assert.match(ledgerPageSource, /function isNonRetryableLedgerError/, "ledger must classify permanent gateway failures");
+assert.ok(!/restoreRoomSnapshot\(docId, previousSnapshot\)/.test(ledgerPageSource), "uncertain room exits must not roll back the newest snapshot");
 assert.match(ledgerMarkup, /同行的人[\s\S]*?记支出[\s\S]*?谁转给谁/, "ledger must retain the Web three-step workflow");
 assert.match(ledgerMarkup, /(?:bind|catch)tap="editExpense"/, "existing expenses must be editable");
 assert.match(ledgerMarkup, /最少转账方案/, "ledger must render final settlement instructions");
@@ -177,10 +221,16 @@ assert.match(ledgerMarkup, /最少转账方案/, "ledger must render final settl
 const spinnerPageSource = fs.readFileSync(path.join(root, "pages", "spinner", "index.js"), "utf8");
 const spinnerMarkup = fs.readFileSync(path.join(root, "pages", "spinner", "index.wxml"), "utf8");
 assert.match(spinnerPageSource, /wx\.createCanvasContext\(['"]spinnerCanvas['"]/, "spinner must draw a labeled segmented wheel");
-assert.match(spinnerPageSource, /this\.rotation \+= 5 \* 360 \+ delta/, "spinner must visibly rotate through several turns before selecting a result");
-assert.match(spinnerPageSource, /saved\.names\.slice\(0, 8\)/, "spinner must keep the same eight-person limit as Web");
+assert.match(spinnerPageSource, /const turns = 5 \+ Math\.floor\(Math\.random\(\) \* 2\)/, "spinner must rotate through five or six full turns before selecting a result");
+assert.match(spinnerPageSource, /targetAngle = this\.rotation \+ turns \* 360 \+ delta/, "spinner must animate to the selected segment");
+assert.match(spinnerPageSource, /COLORS\s*=\s*\[[\s\S]*?#C99A3C['"]\]/, "spinner must keep the same eight-colour palette as Web");
 assert.match(spinnerPageSource, /this\.data\.names\.length >= 8/, "spinner must reject a ninth participant like Web");
+assert.match(spinnerPageSource, /names\.length < 2/, "spinner must require at least two participants");
+assert.ok(!/getStorageSync|setStorageSync|pintu-spinner-v3/.test(spinnerPageSource), "spinner must stay session-only like Web and never leak a prior account's list");
 assert.match(spinnerMarkup, /wheel-pointer[\s\S]*?wheel-rotor[\s\S]*?wheel-center/, "spinner must render a pointer, animated rotor, and center control");
+
+assert.match(midpointPageSource, /typeof wx\.chooseLocation !== ['"]function['"]/, "midpoint must guard unsupported native map APIs");
+assert.match(midpointPageSource, /translateX\(\$\{delta\}px\)/, "blind-box drag distance must use the same pixel unit as touch coordinates");
 
 const readmeSource = fs.readFileSync(path.join(root, "..", "README.md"), "utf8");
 assert.match(readmeSource, /同一个 8 位房间码可在两端加入/, "documentation must describe Web/mini-program room interoperability");
