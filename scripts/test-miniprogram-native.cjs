@@ -178,6 +178,8 @@ const spinnerPageSource = fs.readFileSync(path.join(root, "pages", "spinner", "i
 const spinnerMarkup = fs.readFileSync(path.join(root, "pages", "spinner", "index.wxml"), "utf8");
 assert.match(spinnerPageSource, /wx\.createCanvasContext\(['"]spinnerCanvas['"]/, "spinner must draw a labeled segmented wheel");
 assert.match(spinnerPageSource, /this\.rotation \+= 5 \* 360 \+ delta/, "spinner must visibly rotate through several turns before selecting a result");
+assert.match(spinnerPageSource, /saved\.names\.slice\(0, 8\)/, "spinner must keep the same eight-person limit as Web");
+assert.match(spinnerPageSource, /this\.data\.names\.length >= 8/, "spinner must reject a ninth participant like Web");
 assert.match(spinnerMarkup, /wheel-pointer[\s\S]*?wheel-rotor[\s\S]*?wheel-center/, "spinner must render a pointer, animated rotor, and center control");
 
 const readmeSource = fs.readFileSync(path.join(root, "..", "README.md"), "utf8");

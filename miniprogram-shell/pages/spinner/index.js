@@ -17,7 +17,7 @@ Page({
 
   onLoad() {
     const saved = wx.getStorageSync(STORAGE_KEY) || {}
-    const names = Array.isArray(saved.names) && saved.names.length ? saved.names.slice(0, 50) : DEFAULT_NAMES
+    const names = Array.isArray(saved.names) && saved.names.length ? saved.names.slice(0, 8) : DEFAULT_NAMES
     this.rotation = 0
     this.setData({
       names,
@@ -58,8 +58,8 @@ Page({
       wx.showToast({ title: '这个名字已经在转盘里', icon: 'none' })
       return
     }
-    if (this.data.names.length >= 50) {
-      wx.showToast({ title: '最多添加 50 人', icon: 'none' })
+    if (this.data.names.length >= 8) {
+      wx.showToast({ title: '最多添加 8 人', icon: 'none' })
       return
     }
     this.setData({ names: this.data.names.concat(name), newName: '', result: '' }, () => this.drawWheel())
