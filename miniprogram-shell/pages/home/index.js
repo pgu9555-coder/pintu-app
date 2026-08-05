@@ -47,7 +47,9 @@ Page({
     pendingAvatarUrl: '',
     profileAvatarCleanupPending: 0,
     avatarUploadPrefix: '',
-    canChooseAvatar: false
+    canChooseAvatar: false,
+    profilePanelOpen: false,
+    headerTopPx: 52
   },
 
   onLoad(options) {
@@ -57,11 +59,35 @@ Page({
     // the current account's trusted cloud profile so another account's
     // nickname is never flashed or reused.
     storage.saveName('')
+    const systemInfo = wx.getSystemInfoSync ? wx.getSystemInfoSync() : {}
+    const fallbackHeaderTop = Number(systemInfo.statusBarHeight || 20) + 52
+    let headerTopPx = fallbackHeaderTop
+    try {
+      const menuButton = wx.getMenuButtonBoundingClientRect && wx.getMenuButtonBoundingClientRect()
+      if (menuButton && menuButton.bottom) headerTopPx = Number(menuButton.bottom) + 8
+    } catch (_) {}
     this.setData({
-      canChooseAvatar: Boolean(wx.canIUse && wx.canIUse('button.open-type.chooseAvatar'))
+      canChooseAvatar: Boolean(wx.canIUse && wx.canIUse('button.open-type.chooseAvatar')),
+      headerTopPx
     })
     this.loadProfile()
   },
+
+  openProfilePanel() {
+    if (wx.hideTabBar) wx.hideTabBar({ animation: false, fail() {} })
+    this.setData({ profilePanelOpen: true })
+  },
+
+  closeProfilePanel() {
+    if (wx.showTabBar) wx.showTabBar({ animation: false, fail() {} })
+    this.setData({ profilePanelOpen: false })
+  },
+
+  onUnload() {
+    if (wx.showTabBar) wx.showTabBar({ animation: false, fail() {} })
+  },
+
+  preventClose() {},
 
   nameInput(event) {
     this.setData({ name: event.detail.value })
@@ -131,6 +157,7 @@ Page({
         profileAvatarCleanupPending: cleanupPendingCount(profile),
         name: profile.nickname
       })
+      this.closeProfilePanel()
       const pendingCount = cleanupPendingCount(profile)
       wx.showToast({
         title: cleanupNeedsManualAttention(profile) ? '资料已保存，旧头像未自动删除' : pendingCount ? '资料已保存，旧头像待清理' : '微信资料已保存',
@@ -204,6 +231,7 @@ Page({
             pendingAvatarUrl: '',
             profileAvatarCleanupPending: cleanupPendingCount(result)
           })
+          this.closeProfilePanel()
           const pendingCount = cleanupPendingCount(result)
           wx.showToast({ title: cleanupNeedsManualAttention(result) ? '资料已删除，旧头像未自动删除' : pendingCount ? '资料已删除，头像待清理' : '云端资料已删除', icon: cleanupNeedsManualAttention(result) || pendingCount ? 'none' : 'success' })
         } catch (error) {

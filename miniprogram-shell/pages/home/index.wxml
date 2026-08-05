@@ -1,65 +1,91 @@
-<view class="page">
-  <view class="title">拼途</view>
-  <view class="muted">一起出发，把见面和账目留在同一个房间。</view>
-
-  <view class="card profile-card">
-    <view class="profile-head">
-      <image wx:if="{{profileAvatarPreview}}" class="profile-avatar" src="{{profileAvatarPreview}}" mode="aspectFill" />
-      <view wx:else class="profile-avatar profile-avatar-placeholder">微</view>
-      <view class="profile-copy">
-        <view class="section-title">微信账号</view>
-        <view class="muted">{{profileLoaded ? (profileExists ? '资料已连接，可随时编辑或删除' : '可完善头像昵称；资料仅归你的微信账号') : '正在加载你的资料…'}}</view>
-      </view>
-      <button wx:if="{{canChooseAvatar}}" class="avatar-action" open-type="chooseAvatar" bindchooseavatar="chooseAvatar" disabled="{{profileBusy || !profileLoaded}}">换头像</button>
-      <view wx:else class="avatar-unsupported">当前微信版本不支持换头像</view>
+<view class="page" style="padding-top: {{headerTopPx}}px;">
+  <view class="brand-row">
+    <view class="brand">
+      <view class="brand-mark"><image class="brand-glyph" src="/assets/icons/brand-plane.svg" mode="aspectFit" /></view>
+      <text class="brand-name">拼途</text>
     </view>
-    <input class="input" type="nickname" placeholder="微信昵称" value="{{profileNickname}}" maxlength="24" bindinput="profileNicknameInput" disabled="{{!profileLoaded || profileBusy}}" />
-    <button class="btn profile-save" bindtap="saveProfile" loading="{{profileBusy}}" disabled="{{profileBusy || !profileLoaded}}">保存微信资料</button>
-    <view wx:if="{{profileAvatarCleanupPending}}" class="avatar-cleanup-warning">
-      <text>有 {{profileAvatarCleanupPending}} 个旧头像文件待清理</text>
-      <button class="profile-text-action" bindtap="retryAvatarCleanup" disabled="{{profileBusy}}">重试清理</button>
-    </view>
-    <view class="profile-actions">
-      <button class="profile-text-action" bindtap="removeAvatar" disabled="{{profileBusy || !profileLoaded}}">移除头像</button>
-      <button class="profile-text-action danger" bindtap="deleteProfile" disabled="{{profileBusy || !profileLoaded}}">删除云端资料</button>
+    <view class="account-trigger" bindtap="openProfilePanel" role="button" aria-label="打开微信账号资料" hover-class="account-trigger-active">
+      <image wx:if="{{profileAvatarPreview}}" class="trigger-avatar" src="{{profileAvatarPreview}}" mode="aspectFill" />
+      <view wx:else class="trigger-avatar trigger-avatar-placeholder">微</view>
+      <view class="account-state {{profileExists ? 'account-state-ready' : ''}}"></view>
     </view>
   </view>
 
-  <view class="card">
-    <view class="gold section-title">统一加入</view>
-    <input class="input" placeholder="你的名字" value="{{name}}" maxlength="24" bindinput="nameInput" />
-    <input class="input" placeholder="8 位房间码" value="{{code}}" maxlength="8" bindinput="codeInput" />
-    <button class="btn" bindtap="join" loading="{{busy}}" disabled="{{busy}}">{{busy ? '加入中…' : '加入房间'}}</button>
-  </view>
-
-  <view class="card">
-    <view class="section-title">开始一趟协作</view>
-    <view class="tool" bindtap="openMidpoint">
-      <view class="tool-icon">☷</view>
-      <view class="tool-copy">
-        <view>协作碰面</view>
-        <view class="muted">共享出发点，估算参考中点并共同选去处</view>
+  <view class="join-card">
+    <view class="join-heading">
+      <view class="ticket-icon"><image class="ticket-glyph" src="/assets/icons/ticket.svg" mode="aspectFit" /></view>
+      <view>
+        <view class="join-title">加入房间</view>
+        <view class="join-subtitle">输入任意碰面码或账本码，自动进入对应功能。</view>
       </view>
-      <text>›</text>
     </view>
-    <view class="tool" bindtap="openLedger">
-      <view class="tool-icon">账</view>
-      <view class="tool-copy">
-        <view>共享账本</view>
-        <view class="muted">记录支出，自动分摊结算</view>
-      </view>
-      <text>›</text>
-    </view>
-    <view class="tool" bindtap="openSpinner">
-      <view class="tool-icon">◎</view>
-      <view class="tool-copy">
-        <view>幸运转盘</view>
-        <view class="muted">转起来，再公布答案</view>
-      </view>
-      <text>›</text>
+    <input class="join-input" placeholder="你的名字" placeholder-class="input-placeholder" value="{{name}}" maxlength="24" bindinput="nameInput" />
+    <view class="join-code-row">
+      <input class="join-input code-input" placeholder="8 位房间码" placeholder-class="input-placeholder code-placeholder" value="{{code}}" maxlength="8" bindinput="codeInput" />
+      <view class="join-button {{busy ? 'join-button-disabled' : ''}}" bindtap="join" role="button">{{busy ? '加入中' : '加入'}}</view>
     </view>
   </view>
 
-  <button class="btn gold" bindtap="openTrips">查看我的房间</button>
-  <button class="privacy-link" bindtap="openPrivacy">隐私保护指引</button>
+  <view class="section-label">用完即走</view>
+  <view class="tool-list">
+    <view class="tool-card" bindtap="openMidpoint" role="button" hover-class="tool-card-active">
+      <view class="tool-icon tool-icon-blue"><image class="tool-glyph" src="/assets/icons/midpoint.svg" mode="aspectFit" /></view>
+      <view class="tool-copy">
+        <view class="tool-title">公平碰面 · 盲盒吃喝</view>
+        <view class="tool-desc">测出最公平碰面点</view>
+        <view class="tool-desc">顺手滑一滑选好去处</view>
+      </view>
+      <image class="tool-chevron" src="/assets/icons/arrow-right.svg" mode="aspectFit" />
+    </view>
+    <view class="tool-card" bindtap="openSpinner" role="button" hover-class="tool-card-active">
+      <view class="tool-icon tool-icon-coral"><image class="tool-glyph" src="/assets/icons/target.svg" mode="aspectFit" /></view>
+      <view class="tool-copy">
+        <view class="tool-title">谁买单 · 转盘</view>
+        <view class="tool-desc">这顿谁请？</view>
+        <view class="tool-desc">转一转，天意决定</view>
+      </view>
+      <image class="tool-chevron" src="/assets/icons/arrow-right.svg" mode="aspectFit" />
+    </view>
+    <view class="tool-card" bindtap="openLedger" role="button" hover-class="tool-card-active">
+      <view class="tool-icon tool-icon-pink"><image class="tool-glyph" src="/assets/icons/receipt.svg" mode="aspectFit" /></view>
+      <view class="tool-copy">
+        <view class="tool-title">行程账本</view>
+        <view class="tool-desc">出去玩几天，各付各的钱</view>
+        <view class="tool-desc">最后一键算清谁该转给谁</view>
+      </view>
+      <image class="tool-chevron" src="/assets/icons/arrow-right.svg" mode="aspectFit" />
+    </view>
+  </view>
+
+  <view wx:if="{{profilePanelOpen}}" class="profile-overlay" bindtap="closeProfilePanel">
+    <view class="profile-sheet" catchtap="preventClose">
+      <view class="sheet-handle"></view>
+      <view class="sheet-header">
+        <view>
+          <view class="sheet-title">微信账号</view>
+          <view class="sheet-subtitle">资料仅归你的微信账号</view>
+        </view>
+        <view class="sheet-close" bindtap="closeProfilePanel" role="button" aria-label="关闭">×</view>
+      </view>
+      <view class="profile-head">
+        <image wx:if="{{profileAvatarPreview}}" class="profile-avatar" src="{{profileAvatarPreview}}" mode="aspectFill" />
+        <view wx:else class="profile-avatar profile-avatar-placeholder">微</view>
+        <view wx:if="{{canChooseAvatar}}" class="avatar-action-wrap">
+          <button class="avatar-action" open-type="chooseAvatar" bindchooseavatar="chooseAvatar" disabled="{{profileBusy || !profileLoaded}}">换头像</button>
+        </view>
+        <view wx:else class="avatar-unsupported">当前微信版本不支持换头像</view>
+      </view>
+      <input class="profile-input" type="nickname" placeholder="微信昵称" placeholder-class="input-placeholder" value="{{profileNickname}}" maxlength="24" bindinput="profileNicknameInput" disabled="{{!profileLoaded || profileBusy}}" />
+      <button class="profile-save" bindtap="saveProfile" loading="{{profileBusy}}" disabled="{{profileBusy || !profileLoaded}}">保存微信资料</button>
+      <view wx:if="{{profileAvatarCleanupPending}}" class="avatar-cleanup-warning">
+        <text>有 {{profileAvatarCleanupPending}} 个旧头像文件待清理</text>
+        <button class="profile-text-action" bindtap="retryAvatarCleanup" disabled="{{profileBusy}}">重试清理</button>
+      </view>
+      <view class="profile-actions">
+        <button class="profile-text-action" bindtap="removeAvatar" disabled="{{profileBusy || !profileLoaded}}">移除头像</button>
+        <button class="profile-text-action danger" bindtap="deleteProfile" disabled="{{profileBusy || !profileLoaded}}">删除云端资料</button>
+      </view>
+      <button class="privacy-link" bindtap="openPrivacy">隐私保护指引</button>
+    </view>
+  </view>
 </view>
