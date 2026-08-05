@@ -38,6 +38,7 @@ Page({
     name: '',
     code: '',
     busy: false,
+    joinError: '',
     profileLoaded: false,
     profileBusy: false,
     profileExists: false,
@@ -90,7 +91,7 @@ Page({
   preventClose() {},
 
   nameInput(event) {
-    this.setData({ name: event.detail.value })
+    this.setData({ name: event.detail.value, joinError: '' })
   },
 
   profileNicknameInput(event) {
@@ -259,7 +260,7 @@ Page({
   },
 
   codeInput(event) {
-    this.setData({ code: cleanCode(event.detail.value) })
+    this.setData({ code: cleanCode(event.detail.value), joinError: '' })
   },
 
   openMidpoint() {
@@ -304,7 +305,7 @@ Page({
       return
     }
 
-    this.setData({ busy: true })
+    this.setData({ busy: true, joinError: '' })
     wx.showLoading({ title: '加入中' })
     try {
       const result = await gateway.join(code, 'auto', name)
@@ -318,7 +319,10 @@ Page({
         })
       })
     } catch (error) {
-      wx.showToast({ title: error.message || '加入失败，请稍后重试', icon: 'none' })
+      const message = error.message || '加入失败，请稍后重试'
+      console.error('[home join]', error)
+      this.setData({ joinError: message })
+      wx.showToast({ title: message, icon: 'none' })
     } finally {
       wx.hideLoading()
       this.setData({ busy: false })

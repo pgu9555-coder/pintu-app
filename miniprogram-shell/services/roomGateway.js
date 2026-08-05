@@ -15,8 +15,13 @@ function call(action, data) {
     })
     .catch((error) => {
       if (error && error.code && error.message) throw error
-      const wrapped = new Error('网络或房间服务暂不可用，请稍后重试')
-      wrapped.code = (error && error.errCode) || 'NETWORK_ERROR'
+      const diagnostic = error && (error.errMsg || error.message || error.errorMessage || String(error))
+      const cloudUnavailable = /-601034|没有权限，请先开通云开发或者云托管/.test(diagnostic || '')
+      const wrapped = new Error(cloudUnavailable
+        ? '小程序云服务尚未完成授权，请联系管理员'
+        : '网络或房间服务暂不可用，请稍后重试')
+      wrapped.code = cloudUnavailable ? 'CLOUD_ENV_UNAVAILABLE' : ((error && error.errCode) || 'NETWORK_ERROR')
+      wrapped.diagnostic = diagnostic
       wrapped.cause = error
       throw wrapped
     })

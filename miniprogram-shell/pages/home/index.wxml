@@ -24,6 +24,7 @@
       <input class="join-input code-input" placeholder="8 位房间码" placeholder-class="input-placeholder code-placeholder" value="{{code}}" maxlength="8" bindinput="codeInput" />
       <view class="join-button {{busy ? 'join-button-disabled' : ''}}" bindtap="join" role="button">{{busy ? '加入中' : '加入'}}</view>
     </view>
+    <view wx:if="{{joinError}}" class="join-error">{{joinError}}</view>
   </view>
 
   <view class="section-label">用完即走</view>

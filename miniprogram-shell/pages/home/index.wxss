@@ -24,6 +24,7 @@
 .code-placeholder { letter-spacing:0; font-family:-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif; }
 .join-button { display:flex; flex:0 0 auto; align-items:center; justify-content:center; min-width:102rpx; height:80rpx; padding:0 26rpx; box-sizing:border-box; border-radius:20rpx; background:#0F3D36; color:#FFFDF6; font-size:25rpx; font-weight:700; }
 .join-button-disabled { opacity:.62; }
+.join-error { margin-top:14rpx; color:#B54C3C; font-size:22rpx; line-height:1.45; }
 .section-label { margin:0 0 24rpx; color:#4C5C5B; font-size:25rpx; font-weight:600; letter-spacing:1.5rpx; }
 .tool-list { display:flex; flex-direction:column; gap:20rpx; }
 .tool-card { display:flex; align-items:center; gap:28rpx; min-height:184rpx; box-sizing:border-box; padding:28rpx; border:2rpx solid #DED8C6; border-radius:32rpx; background:#FFFDF6; }
