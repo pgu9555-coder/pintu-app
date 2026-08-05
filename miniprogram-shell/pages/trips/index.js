@@ -1,5 +1,6 @@
 const storage = require('../../utils/storage')
 const gateway = require('../../services/roomGateway')
+const layout = require('../../utils/layout')
 
 const PAGE_BY_TYPE = {
   midpoint: '/pages/midpoint/index',
@@ -9,8 +10,11 @@ const PAGE_BY_TYPE = {
 function displayRoom(entry) {
   const isMidpoint = entry.room.toolType === 'midpoint'
   return Object.assign({}, entry, {
-    typeLabel: isMidpoint ? '协作碰面' : '共享账本',
-    typeIcon: isMidpoint ? '☷' : '账'
+    typeLabel: isMidpoint ? '碰面' : '账本',
+    typeIcon: isMidpoint ? '/assets/icons/midpoint.svg' : '/assets/icons/receipt.svg',
+    iconTone: isMidpoint ? 'meetup' : 'ledger',
+    totalYuan: (Number(entry.totalCents || 0) / 100).toFixed(2),
+    showTotal: !isMidpoint && Number(entry.totalCents || 0) > 0
   })
 }
 
@@ -30,7 +34,12 @@ Page({
     loadingMore: false,
     cloudError: '',
     hasMore: false,
-    nextCursor: null
+    nextCursor: null,
+    headerTopPx: 72
+  },
+
+  onLoad() {
+    this.setData({ headerTopPx: layout.headerTopPx() })
   },
 
   onShow() {

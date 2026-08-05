@@ -369,8 +369,19 @@ function callerAccessPlatform() {
 }
 
 function hasRoomAccessPlatform(room, accessPlatform) {
-  /* Pre-v4 rooms are intentionally inaccessible until explicitly migrated. */
-  return !!room && room.accessPlatform === accessPlatform;
+  if (!room || !room.accessPlatform) return false;
+  const type = roomTypeFor(room);
+  /* Typed rooms created by the Web site and by the mini program share one
+     namespace.  v4 rooms are accepted as well so codes created before this
+     rollout do not suddenly become dead links; the next successful write
+     upgrades their access metadata.  Legacy dashboard rooms remain bound to
+     their original platform because the mini program has no legacy UI. */
+  if (type === "midpoint" || type === "ledger") {
+    return room.accessPlatform === "shared"
+      || room.accessPlatform === "web"
+      || room.accessPlatform === "wechat-mini-program";
+  }
+  return room.accessPlatform === accessPlatform;
 }
 
 function callerUid() {
@@ -415,8 +426,37 @@ function moderationChunks(values) {
   return chunks;
 }
 
-async function moderateMiniProgramText(values) {
-  const wechat = callerWechatContext();
+function miniProgramIdentityFromRoom(room) {
+  const uids = activeTopLevelMemberUids(room);
+  for (const uid of uids) {
+    const match = /^wx:([^:]+):(.+)$/.exec(uid);
+    if (match && match[1] && match[2]) return { appid: match[1], openid: match[2] };
+  }
+  return null;
+}
+
+function visibleRoomTexts(room) {
+  if (!room) return [];
+  const meetup = room.meetup && isPlainObject(room.meetup) ? room.meetup : {};
+  const decision = meetup.decision && isPlainObject(meetup.decision) ? meetup.decision : {};
+  const ledger = room.ledger && isPlainObject(room.ledger) ? room.ledger : {};
+  return [
+    room.name,
+    ...(Array.isArray(room.members) ? room.members.map((member) => member && member.name) : []),
+    ...(Array.isArray(meetup.people) ? meetup.people.flatMap((person) => [person && person.name, person && person.address]) : []),
+    ...(Array.isArray(decision.candidates) ? decision.candidates.flatMap((candidate) => [candidate && candidate.name, candidate && candidate.typeStr]) : []),
+    ledger.name,
+    ...(Array.isArray(ledger.members) ? ledger.members.map((member) => member && member.name) : []),
+    ...(Array.isArray(ledger.expenses) ? ledger.expenses.map((expense) => expense && expense.desc) : [])
+  ];
+}
+
+async function moderateMiniProgramText(values, room) {
+  /* Web edits must also be checked after a WeChat member has joined; otherwise
+     unreviewed Web text could be rendered inside the mini program.  The room's
+     WeChat identities were written only from trusted OPENID context, so one of
+     them can safely supply the OpenAPI moderation subject. */
+  const wechat = callerWechatContext() || miniProgramIdentityFromRoom(room);
   if (!wechat) return;
   const checker = wxCloud.openapi && wxCloud.openapi.security && wxCloud.openapi.security.msgSecCheck;
   if (typeof checker !== "function") {
@@ -747,8 +787,9 @@ function normalizeTypedRoom(source, uid, accessPlatform) {
   const room = {
     name: roomName,
     toolType: type,
-    schemaVersion: 4,
-    accessPlatform,
+    schemaVersion: 5,
+    accessPlatform: "shared",
+    creatorPlatform: accessPlatform,
     lifecycle: { policy: "owner-disband-only", createdAtMs: now },
     members: [member],
     memberUids: [uid],
@@ -824,7 +865,7 @@ async function createRoom(event, uid, accessPlatform) {
   await moderateMiniProgramText([
     room.name,
     ...(Array.isArray(room.members) ? room.members.map((member) => member && member.name) : [])
-  ]);
+  ], room);
   const requestKey = clientRequestId || `server_${crypto.randomBytes(16).toString("hex")}`;
 
   /* The room document ID is derived from the public code. That makes code
@@ -1134,10 +1175,7 @@ function listMyRoomsPage(event) {
 }
 
 function myRoomsWhere(memberPredicate, cursor) {
-  const base = {
-    accessPlatform: "wechat-mini-program",
-    memberUids: memberPredicate
-  };
+  const base = { memberUids: memberPredicate };
   if (!cursor) return base;
   const command = db.command;
   if (!command || typeof command.or !== "function" || typeof command.lt !== "function") {
@@ -1275,7 +1313,13 @@ async function joinRoom(event, uid, accessPlatform) {
   if ((type === "midpoint" || type === "ledger") && !name) {
     return failure("NAME_REQUIRED", "请先填写你自己的名字");
   }
-  await moderateMiniProgramText([name]);
+  /* A mini-program caller checks all existing Web-authored text before the
+     room is first exposed in WeChat.  A Web caller joining a room that already
+     has WeChat members is checked with one of those trusted identities. */
+  await moderateMiniProgramText(
+    callerWechatContext() ? visibleRoomTexts(room).concat(name) : [name],
+    room
+  );
 
   /* 加入涉及 memberUids、成员资料与碰面点等多个字段。放进同一个事务，
      避免网络中断或两个人同时加入时只写成一半。 */
@@ -1315,8 +1359,15 @@ async function joinRoom(event, uid, accessPlatform) {
       : existingMemberUids;
     const memberUids = uniqueUids([...trustedExistingUids, inferredOwnerUid, uid]);
     const patch = { memberUids };
+    if (currentType === "midpoint" || currentType === "ledger") {
+      patch.schemaVersion = 5;
+      patch.accessPlatform = "shared";
+      if (!current.creatorPlatform && current.accessPlatform !== "shared") {
+        patch.creatorPlatform = current.accessPlatform;
+      }
+    }
     if (!current.ownerUid) patch.ownerUid = inferredOwnerUid;
-    let updated = { ...current, memberUids, ownerUid: inferredOwnerUid };
+    let updated = { ...current, ...patch, memberUids, ownerUid: inferredOwnerUid };
 
     if (currentType === "midpoint" || currentType === "ledger") {
       const members = currentMembers;
@@ -1423,7 +1474,7 @@ async function syncLedger(event, uid, accessPlatform) {
     const moderationType = roomTypeFor(moderationRoom);
     if (moderationType === "ledger" || moderationType === "legacy") {
       const currentForModeration = normalizeLedger(moderationRoom.ledger || {}, now, true);
-      await moderateMiniProgramText(changedLedgerTexts(incoming, currentForModeration));
+      await moderateMiniProgramText(changedLedgerTexts(incoming, currentForModeration), moderationRoom);
     }
   }
 
@@ -1482,7 +1533,7 @@ async function setMeetupPoint(event, uid, accessPlatform) {
       ? moderationResponse.data[0]
       : moderationResponse && moderationResponse.data;
     if (hasRoomAccessPlatform(moderationRoom, accessPlatform) && isActiveRoomMember(moderationRoom, uid)) {
-      await moderateMiniProgramText([source.name, source.address]);
+      await moderateMiniProgramText([source.name, source.address], moderationRoom);
     }
   }
 
@@ -1594,7 +1645,10 @@ async function publishDecisionCandidates(event, uid, accessPlatform) {
     ? moderationResponse.data[0]
     : moderationResponse && moderationResponse.data;
   if (hasRoomAccessPlatform(moderationRoom, accessPlatform) && isActiveRoomMember(moderationRoom, uid)) {
-    await moderateMiniProgramText(event.candidates.flatMap((candidate) => [candidate && candidate.name, candidate && candidate.typeStr]));
+    await moderateMiniProgramText(
+      event.candidates.flatMap((candidate) => [candidate && candidate.name, candidate && candidate.typeStr]),
+      moderationRoom
+    );
   }
   return db.runTransaction(async (transaction) => {
     const ref = transaction.collection(ROOM_COLLECTION).doc(docId);
@@ -1767,7 +1821,7 @@ async function updateLegacyMembers(event, uid, accessPlatform) {
   if (!hasRoomAccessPlatform(moderationRoom, accessPlatform) || !isActiveRoomMember(moderationRoom, uid)) {
     return failure("ROOM_NOT_FOUND", "房间已结束或你已退出");
   }
-  if (operation === "add" && requestedName) await moderateMiniProgramText([requestedName]);
+  if (operation === "add" && requestedName) await moderateMiniProgramText([requestedName], moderationRoom);
 
   return db.runTransaction(async (transaction) => {
     const ref = transaction.collection(ROOM_COLLECTION).doc(docId);

@@ -84,7 +84,7 @@ async function ensureCollection(collectionName) {
 }
 
 async function ensureMyRoomsIndex() {
-  const indexName = "member_access_platform_created_id";
+  const indexName = "member_created_id";
   const exists = await cloudbase.database.checkIndexExists("rooms", indexName);
   if (!exists || !exists.Exists) {
     await cloudbase.database.updateCollection("rooms", {
@@ -94,7 +94,6 @@ async function ensureMyRoomsIndex() {
           MgoKeySchema: {
             MgoIsUnique: false,
             MgoIndexKeys: [
-              { Name: "accessPlatform", Direction: "1" },
               { Name: "memberUids", Direction: "1" },
               { Name: "createdAt", Direction: "-1" },
               { Name: "_id", Direction: "-1" }

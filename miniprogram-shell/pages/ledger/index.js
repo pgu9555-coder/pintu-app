@@ -1,6 +1,8 @@
 const gateway = require('../../services/roomGateway')
 const storage = require('../../utils/storage')
 const math = require('../../utils/ledger')
+const layout = require('../../utils/layout')
+const LOCAL_LEDGER_KEY = 'pintu-local-ledger-v3'
 
 function cleanCode(value) {
   return String(value || '')
@@ -21,12 +23,23 @@ function message(error, fallback) {
   return (error && error.message) || fallback
 }
 
+function emptyLocalLedger() {
+  const now = math.stamp()
+  return {
+    name: '', nameUpdatedAt: now, members: [], expenses: [],
+    memberTombstones: {}, expenseTombstones: {}, nextMemberId: 1,
+    nextExpenseId: 1, revision: now, updatedAt: now, updatedBy: 'local-device'
+  }
+}
+
 Page({
   data: {
     name: '',
     code: '',
     room: null,
     ledger: { members: [], expenses: [] },
+    step: 1,
+    tripName: '',
     memberName: '',
     desc: '',
     amount: '',
@@ -36,18 +49,27 @@ Page({
     memberNamesArray: [],
     memberNames: '',
     settlements: [],
+    balanceRows: [],
     totalYuan: '0.00',
     syncText: '已同步',
     isOwner: false,
-    busy: false
+    busy: false,
+    headerTopPx: 72
   },
 
   onLoad(options) {
     this.docId = (options && options.docId) || ''
     this.formDirty = false
     this.viewer = null
-    this.setData({ name: storage.getName() })
-    if (this.docId) this.fetchRoom()
+    this.setData({ name: storage.getName(), headerTopPx: layout.headerTopPx() })
+    if (this.docId) {
+      this.fetchRoom()
+    } else {
+      const saved = wx.getStorageSync(LOCAL_LEDGER_KEY)
+      const ledger = saved && Array.isArray(saved.members) && Array.isArray(saved.expenses) ? saved : emptyLocalLedger()
+      this.applyStandaloneLedger(ledger, false)
+      this.resetExpenseForm(ledger)
+    }
   },
 
   onShow() {
@@ -94,6 +116,34 @@ Page({
     this.setData({ memberName: event.detail.value })
   },
 
+  tripNameInput(event) {
+    this.setData({ tripName: event.detail.value })
+  },
+
+  goBack() {
+    wx.navigateBack({ fail: () => wx.switchTab({ url: '/pages/home/index' }) })
+  },
+
+  goStep(event) {
+    const next = Number(event.currentTarget.dataset.step)
+    if (![1, 2, 3].includes(next) || next === this.data.step) return
+    if (next > 1 && this.data.ledger.members.length < 2) {
+      wx.showToast({ title: '先添加至少 2 位同行人', icon: 'none' })
+      this.setData({ step: 1 })
+      return
+    }
+    this.setData({ step: next })
+  },
+
+  nextStep() {
+    const step = Math.min(3, this.data.step + 1)
+    this.goStep({ currentTarget: { dataset: { step } } })
+  },
+
+  previousStep() {
+    this.setData({ step: Math.max(1, this.data.step - 1) })
+  },
+
   descInput(event) {
     this.formDirty = true
     this.setData({ desc: event.detail.value })
@@ -112,6 +162,38 @@ Page({
   splitChange(event) {
     this.formDirty = true
     this.setData({ splitIds: event.detail.value || [] })
+  },
+
+  selectPayer(event) {
+    if (this.data.busy) return
+    const payerIndex = Number(event.currentTarget.dataset.index)
+    if (!Number.isInteger(payerIndex) || !this.data.ledger.members[payerIndex]) return
+    this.formDirty = true
+    this.setData({
+      payerIndex,
+      ledger: Object.assign({}, this.data.ledger, {
+        members: this.data.ledger.members.map((member, index) => Object.assign({}, member, {
+          payerSelected: index === payerIndex
+        }))
+      })
+    })
+  },
+
+  toggleSplit(event) {
+    if (this.data.busy) return
+    const id = String(event.currentTarget.dataset.id || '')
+    if (!id) return
+    const selected = this.data.splitIds.map(String)
+    const splitIds = selected.includes(id) ? selected.filter((item) => item !== id) : selected.concat(id)
+    this.formDirty = true
+    this.setData({
+      splitIds,
+      ledger: Object.assign({}, this.data.ledger, {
+        members: this.data.ledger.members.map((member) => Object.assign({}, member, {
+          checked: splitIds.includes(String(member.id))
+        }))
+      })
+    })
   },
 
   async create() {
@@ -204,19 +286,18 @@ Page({
   },
 
   viewerUid() {
-    return (this.viewer && this.viewer.uid) || ''
+    return (this.viewer && this.viewer.uid) || (this.docId ? '' : 'local-device')
   },
 
   viewerMembershipEpoch() {
     return (this.viewer && this.viewer.membershipEpoch) || ''
   },
 
-  applyRoom(room, viewer, preserveForm) {
-    const source = room.ledger || { members: [], expenses: [], memberTombstones: {}, expenseTombstones: {} }
+  applyLedger(source, preserveForm, room, viewer) {
     const members = source.members || []
     const currentPayerId = this.data.ledger.members[this.data.payerIndex] && this.data.ledger.members[this.data.payerIndex].id
     const shouldKeepForm = Boolean(preserveForm && (this.formDirty || this.data.editingId))
-    const activeViewer = this.rememberViewer(viewer)
+    const activeViewer = room ? this.rememberViewer(viewer) : null
 
     let payerIndex = members.findIndex((member) => String(member.id) === String(currentPayerId))
     if (payerIndex < 0) payerIndex = 0
@@ -224,11 +305,14 @@ Page({
     const checkedIds = shouldKeepForm ? validSplitIds : members.map((member) => String(member.id))
     const decorated = Object.assign({}, source, {
       members: members.map((member) => Object.assign({}, member, {
-        checked: checkedIds.map(String).includes(String(member.id))
+        checked: checkedIds.map(String).includes(String(member.id)),
+        payerSelected: String(member.id) === String(members[payerIndex] && members[payerIndex].id),
+        initial: String(member.name || '?').slice(0, 1)
       })),
       expenses: (source.expenses || []).map((expense) => Object.assign({}, expense, {
         amountYuan: (Number(expense.amountCents || 0) / 100).toFixed(2),
         payerName: (members.find((member) => String(member.id) === String(expense.payerId)) || {}).name || '未知',
+        payerInitial: String(((members.find((member) => String(member.id) === String(expense.payerId)) || {}).name || '?')).slice(0, 1),
         splitNames: (expense.splitIds || []).map((id) => {
           const member = members.find((item) => String(item.id) === String(id))
           return member ? member.name : '未知'
@@ -236,16 +320,26 @@ Page({
       }))
     })
     const patch = {
-      room,
+      room: room || null,
       ledger: decorated,
+      tripName: source.name || '',
       memberNamesArray: members.map((member) => member.name),
       memberNames: members.map((member) => member.name).join('、'),
       settlements: math.settlements(source).map((row, index) => Object.assign(row, {
         key: `${row.from}-${row.to}-${index}`,
         yuan: (row.cents / 100).toFixed(2)
       })),
+      balanceRows: math.balances(source).map((row) => ({
+        id: row.id,
+        name: row.name,
+        initial: String(row.name || '?').slice(0, 1),
+        status: row.cents > 0 ? '应收' : row.cents < 0 ? '应付' : '已结清',
+        yuan: (Math.abs(row.cents) / 100).toFixed(2),
+        tone: row.cents > 0 ? 'positive' : row.cents < 0 ? 'negative' : 'neutral'
+      })),
       totalYuan: (math.totalCents(source) / 100).toFixed(2),
-      isOwner: Boolean(activeViewer && activeViewer.isOwner)
+      isOwner: Boolean(activeViewer && activeViewer.isOwner),
+      syncText: room ? this.data.syncText : '本机保存'
     }
     if (shouldKeepForm) {
       patch.payerIndex = payerIndex
@@ -255,6 +349,15 @@ Page({
       patch.splitIds = checkedIds
     }
     this.setData(patch)
+  },
+
+  applyRoom(room, viewer, preserveForm) {
+    const source = room.ledger || { members: [], expenses: [], memberTombstones: {}, expenseTombstones: {} }
+    this.applyLedger(source, preserveForm, room, viewer)
+  },
+
+  applyStandaloneLedger(ledger, preserveForm) {
+    this.applyLedger(ledger, preserveForm, null, null)
   },
 
   resetExpenseForm(ledger) {
@@ -267,12 +370,21 @@ Page({
       payerIndex: 0,
       splitIds: members.map((member) => String(member.id)),
       ledger: Object.assign({}, this.data.ledger, {
-        members: this.data.ledger.members.map((member) => Object.assign({}, member, { checked: true }))
+        members: this.data.ledger.members.map((member, index) => Object.assign({}, member, {
+          checked: true,
+          payerSelected: index === 0
+        }))
       })
     })
   },
 
   async syncLedger(next) {
+    if (!this.docId) {
+      wx.setStorageSync(LOCAL_LEDGER_KEY, next)
+      this.applyStandaloneLedger(next, true)
+      this.setData({ syncText: '本机保存' })
+      return next
+    }
     this.setData({ syncText: '同步中' })
     try {
       const result = await gateway.syncLedger(this.docId, next, this.viewerMembershipEpoch())
@@ -286,6 +398,22 @@ Page({
       wx.showToast({ title: message(error, '保存失败，请重试'), icon: 'none' })
       throw error
     }
+  },
+
+  async saveTripName(event) {
+    if (this.data.busy) return
+    const name = String((event && event.detail && event.detail.value) || this.data.tripName || '').trim().slice(0, 80)
+    if (name === String(this.data.ledger.name || '')) return
+    const now = math.stamp()
+    const next = Object.assign({}, this.data.ledger, {
+      name,
+      nameUpdatedAt: now,
+      updatedAt: now,
+      updatedBy: this.viewerUid(),
+      revision: now
+    })
+    this.setData({ busy: true, tripName: name })
+    try { await this.syncLedger(next) } finally { this.setData({ busy: false }) }
   },
 
   async addMember() {
@@ -370,7 +498,7 @@ Page({
       return
     }
     const result = await new Promise((resolve) => wx.showModal({
-      title: '移除成员？', content: `将移除“${member.name}”，此操作会同步到所有成员。`,
+      title: '移除成员？', content: this.docId ? `将移除“${member.name}”，此操作会同步到所有成员。` : `将从本机账本移除“${member.name}”。`,
       success: resolve, fail: () => resolve({ confirm: false })
     }))
     if (!result.confirm) return
@@ -396,7 +524,7 @@ Page({
       wx.showToast({ title: '成员身份正在同步，请稍后重试', icon: 'none' })
       return
     }
-    if (!this.data.desc.trim() || !Number.isSafeInteger(cents) || cents <= 0 || !payer || !splitIds.length) {
+    if (!this.data.desc.trim() || !Number.isSafeInteger(cents) || cents <= 0 || cents > 1000000000000 || !payer || !splitIds.length) {
       wx.showToast({ title: '填写支出、金额、付款人和分摊人', icon: 'none' })
       return
     }
@@ -441,18 +569,25 @@ Page({
       payerIndex: payerIndex < 0 ? 0 : payerIndex,
       splitIds: (expense.splitIds || []).map(String),
       ledger: Object.assign({}, this.data.ledger, {
-        members: this.data.ledger.members.map((member) => Object.assign({}, member, {
-          checked: (expense.splitIds || []).map(String).includes(String(member.id))
+        members: this.data.ledger.members.map((member, index) => Object.assign({}, member, {
+          checked: (expense.splitIds || []).map(String).includes(String(member.id)),
+          payerSelected: index === (payerIndex < 0 ? 0 : payerIndex)
         }))
       })
     })
+    this.setData({ step: 2 })
   },
 
   cancelEdit() {
     if (this.data.busy) return
     this.formDirty = false
-    this.applyRoom(this.data.room, this.viewer, false)
-    this.resetExpenseForm(this.data.room.ledger)
+    if (this.data.room) {
+      this.applyRoom(this.data.room, this.viewer, false)
+      this.resetExpenseForm(this.data.room.ledger)
+    } else {
+      this.applyStandaloneLedger(this.data.ledger, false)
+      this.resetExpenseForm(this.data.ledger)
+    }
   },
 
   deleteExpense(event) {
@@ -460,7 +595,7 @@ Page({
     const id = event.currentTarget.dataset.id
     wx.showModal({
       title: '删除这笔支出？',
-      content: '删除后会同步给所有成员。',
+      content: this.docId ? '删除后会同步给所有成员。' : '删除后会从本机账本移除。',
       success: async (result) => {
         if (!result.confirm || this.data.busy) return
         const ledger = this.data.ledger

@@ -1,10 +1,26 @@
-.wheel { width:360rpx; height:360rpx; margin:36rpx auto; border-radius:50%; display:flex; align-items:center; justify-content:center; background:conic-gradient(#143D35 0 25%,#B8842A 25% 50%,#E5EEE8 50% 75%,#D6B77A 75%); color:#143D35; font-size:36rpx; font-weight:700; transition:transform 2s cubic-bezier(.1,.8,.2,1); }
-.wheel text { box-sizing:border-box; width:190rpx; min-height:190rpx; border-radius:50%; background:#FFFDF8; display:flex; align-items:center; justify-content:center; text-align:center; padding:20rpx; overflow-wrap:anywhere; }
-.spinning { transform:rotate(1440deg); }
-.participant-input { flex:1; min-width:0; }
-.add-button { flex:0 0 150rpx; margin:12rpx 0; }
-.participant-row { min-height:84rpx; display:flex; align-items:center; justify-content:space-between; border-bottom:1rpx solid #E6DBC8; }
-.participant-row:last-child { border-bottom:0; }
-.remove-name { margin:0; padding:0 18rpx; min-width:0; line-height:56rpx; background:#F3EBDD; color:#9C433A; font-size:24rpx; border-radius:28rpx; }
-.remove-name::after { border:0; }
-.empty { padding:20rpx 0 4rpx; }
+.spinner-page { padding-bottom:90rpx; }
+.spin-sub { margin:4rpx 0 28rpx; color:#4C5C5B; font-size:24rpx; line-height:1.62; }
+.decision-row { display:flex; align-items:center; gap:16rpx; margin-bottom:20rpx; }
+.decision-label { flex:0 0 auto; color:#4C5C5B; font-size:24rpx; }
+.decision-input { width:250rpx; height:72rpx; box-sizing:border-box; padding:0 20rpx; border:2rpx solid #DED8C6; border-radius:18rpx; background:#FFFDF6; color:#1B2A2E; font-size:26rpx; }
+.wheel-stage { position:relative; width:560rpx; height:580rpx; margin:0 auto 12rpx; }
+.wheel-pointer { position:absolute; z-index:5; top:-2rpx; left:50%; width:0; height:0; transform:translateX(-50%); border-left:24rpx solid transparent; border-right:24rpx solid transparent; border-top:42rpx solid #7C8580; }
+.wheel-rotor { position:absolute; left:0; top:20rpx; width:560rpx; height:560rpx; border-radius:50%; overflow:hidden; box-shadow:0 18rpx 48rpx rgba(27,42,46,.13); transition-property:transform; transition-timing-function:cubic-bezier(.12,.72,.14,1); }
+.wheel-canvas { width:560rpx; height:560rpx; display:block; }
+.wheel-center { position:absolute; z-index:6; left:50%; top:300rpx; width:112rpx; height:112rpx; transform:translate(-50%,-50%); display:flex; align-items:center; justify-content:center; border:7rpx solid #FFFDF6; border-radius:50%; background:#7E958E; color:#FFFDF6; font-size:34rpx; font-weight:800; box-shadow:0 4rpx 12rpx rgba(27,42,46,.18); }
+.wheel-center-busy { opacity:.8; }
+.spin-result { min-height:72rpx; display:flex; align-items:center; justify-content:center; margin:0 0 12rpx; color:#0F3D36; font-size:30rpx; font-weight:800; text-align:center; opacity:0; }
+.spin-result-show { opacity:1; }
+.people-label { margin-top:14rpx; }
+.people-card { padding:24rpx 28rpx; border:2rpx solid #DED8C6; border-radius:28rpx; background:#FFFDF6; }
+.add-row { display:flex; align-items:center; gap:14rpx; margin-bottom:10rpx; }
+.name-input { flex:1; min-width:0; height:78rpx; box-sizing:border-box; padding:0 22rpx; border:2rpx solid #DED8C6; border-radius:16rpx; background:#F6F3EA; color:#1B2A2E; font-size:26rpx; }
+.add-button { width:78rpx; height:78rpx; flex:0 0 78rpx; display:flex; align-items:center; justify-content:center; border-radius:16rpx; background:#7E958E; color:#FFFDF6; font-size:50rpx; font-weight:300; }
+.person-row { position:relative; min-height:76rpx; display:flex; align-items:center; gap:16rpx; padding:6rpx 4rpx; border-bottom:1rpx solid #EAE4D5; }
+.person-row:last-child { border-bottom:0; }
+.person-avatar { width:48rpx; height:48rpx; display:flex; align-items:center; justify-content:center; border-radius:50%; background:#7E958E; color:#FFFDF6; font-size:20rpx; font-weight:700; }
+.person-row:nth-child(3n+1) .person-avatar { background:#D2AC61; }
+.person-row:nth-child(3n+2) .person-avatar { background:#91AFBF; }
+.person-name { flex:1; min-width:0; font-size:26rpx; }
+.remove-button { width:42rpx; height:42rpx; display:flex; align-items:center; justify-content:center; border:4rpx solid #FFFDF6; border-radius:50%; background:#D98A73; color:#FFFDF6; font-size:30rpx; box-shadow:0 3rpx 8rpx rgba(192,91,60,.2); }
+.empty-row { padding:28rpx 0; color:#8B928D; font-size:23rpx; text-align:center; }

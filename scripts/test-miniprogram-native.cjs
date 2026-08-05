@@ -135,7 +135,12 @@ assert.match(midpointPageSource, /wx\.openLocation\([\s\S]*?共同候选地点/,
 assert.match(midpointMarkup, /从地图添加候选地点/, "midpoint must let members add a map-selected candidate");
 assert.match(midpointMarkup, /data-value="want"[\s\S]*?data-value="ok"[\s\S]*?data-value="no"/, "midpoint must expose all vote choices");
 assert.match(midpointMarkup, /重新选择共同去处/, "owners must be able to reopen a confirmed decision");
-assert.ok(!/公平中点/.test(midpointPageSource + midpointMarkup), "midpoint copy must describe a reference midpoint, not a guaranteed fair route midpoint");
+assert.match(midpointMarkup, /按坐标平均估算，最终请结合实际交通/, "the fair-midpoint title must be paired with an accuracy disclaimer");
+assert.match(midpointPageSource, /LOCAL_MIDPOINT_KEY/, "midpoint must preserve standalone multi-address work locally");
+assert.match(midpointPageSource, /chooseLocalPoint\(event\)/, "standalone midpoint must let each address be selected from the native map");
+assert.match(midpointPageSource, /startSwipe\(\)[\s\S]*?swipeAction\(event\)/, "midpoint must expose the same candidate blind-box flow as Web");
+assert.match(midpointMarkup, /再加一个出发点/, "standalone midpoint must support more than two addresses");
+assert.match(midpointMarkup, /不知道选哪个？盲盒帮你挑/, "midpoint must render the destination blind-box entry");
 
 const ledger = require(path.join(root, "utils", "ledger.js"));
 const ledgerFixture = {
@@ -159,5 +164,23 @@ assert.deepEqual(ledger.settlements(ledgerFixture), [
   { from: "Bob", to: "Alice", cents: 233 },
   { from: "Carol", to: "Alice", cents: 333 }
 ], "ledger settlements must reconcile every balance");
+
+const ledgerPageSource = fs.readFileSync(path.join(root, "pages", "ledger", "index.js"), "utf8");
+const ledgerMarkup = fs.readFileSync(path.join(root, "pages", "ledger", "index.wxml"), "utf8");
+assert.match(ledgerPageSource, /LOCAL_LEDGER_KEY/, "ledger must support a persistent standalone mode");
+assert.match(ledgerPageSource, /if \(!this\.docId\)[\s\S]*?wx\.setStorageSync\(LOCAL_LEDGER_KEY, next\)/, "standalone ledger writes must remain local");
+assert.match(ledgerPageSource, /gateway\.syncLedger\(this\.docId, next, this\.viewerMembershipEpoch\(\)\)/, "shared ledger writes must still use the guarded cloud gateway");
+assert.match(ledgerMarkup, /同行的人[\s\S]*?记支出[\s\S]*?谁转给谁/, "ledger must retain the Web three-step workflow");
+assert.match(ledgerMarkup, /(?:bind|catch)tap="editExpense"/, "existing expenses must be editable");
+assert.match(ledgerMarkup, /最少转账方案/, "ledger must render final settlement instructions");
+
+const spinnerPageSource = fs.readFileSync(path.join(root, "pages", "spinner", "index.js"), "utf8");
+const spinnerMarkup = fs.readFileSync(path.join(root, "pages", "spinner", "index.wxml"), "utf8");
+assert.match(spinnerPageSource, /wx\.createCanvasContext\(['"]spinnerCanvas['"]/, "spinner must draw a labeled segmented wheel");
+assert.match(spinnerPageSource, /this\.rotation \+= 5 \* 360 \+ delta/, "spinner must visibly rotate through several turns before selecting a result");
+assert.match(spinnerMarkup, /wheel-pointer[\s\S]*?wheel-rotor[\s\S]*?wheel-center/, "spinner must render a pointer, animated rotor, and center control");
+
+const readmeSource = fs.readFileSync(path.join(root, "..", "README.md"), "utf8");
+assert.match(readmeSource, /同一个 8 位房间码可在两端加入/, "documentation must describe Web/mini-program room interoperability");
 
 console.log(`Native miniprogram checks passed (${jsonFiles.length} JSON files, ${jsFiles.length} JavaScript files).`);

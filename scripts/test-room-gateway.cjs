@@ -288,8 +288,9 @@ async function main() {
   assert.deepEqual(wxCreated.data.room.memberUids, [wxOwnerUid]);
   assert.equal(wxCreated.data.viewer.uid, wxOwnerUid);
   assert.equal(wxCreated.data.viewer.isOwner, true);
-  assert.equal(wxCreated.data.room.schemaVersion, 4);
-  assert.equal(wxCreated.data.room.accessPlatform, "wechat-mini-program");
+  assert.equal(wxCreated.data.room.schemaVersion, 5);
+  assert.equal(wxCreated.data.room.accessPlatform, "shared");
+  assert.equal(wxCreated.data.room.creatorPlatform, "wechat-mini-program");
   assert.ok(wxCreated.data.viewer.memberId);
   assert.ok(wxCreated.data.viewer.membershipEpoch);
   assert.equal(moderationCalls.some((call) => call.openid === "openid-owner" && call.version === 2), true);
@@ -340,11 +341,12 @@ async function main() {
   const myRooms = await callWx("openid-owner", { action: "listMyRooms", userInfo: { uid: "forged-owner" } });
   assert.equal(myRooms.ok, true);
   assert.deepEqual(
-    myRooms.data.rooms.filter((item) => item.docId !== wxDocId).map((item) => item.docId).slice(0, 2),
-    ["room-my-newer", "room-my-older"],
-    "my rooms are sorted newest first"
+    myRooms.data.rooms.filter((item) => item.docId !== wxDocId).map((item) => item.docId).slice(0, 3),
+    ["room-my-web", "room-my-newer", "room-my-older"],
+    "my rooms include both clients and are sorted newest first"
   );
-  assert.equal(myRooms.data.rooms.some((item) => item.docId === "room-my-web" || item.docId === "room-my-left"), false, "platform isolation and departed members must be excluded");
+  assert.equal(myRooms.data.rooms.some((item) => item.docId === "room-my-web"), true, "Web-created rooms must be recoverable in the mini program");
+  assert.equal(myRooms.data.rooms.some((item) => item.docId === "room-my-left"), false, "departed members must be excluded");
   const myRoomSummary = myRooms.data.rooms.find((item) => item.docId === "room-my-older");
   assert.deepEqual(
     { memberCount: myRoomSummary.memberCount, expenseCount: myRoomSummary.expenseCount, totalCents: myRoomSummary.totalCents },
@@ -427,19 +429,26 @@ async function main() {
     action: "getRoom", docId: wxDocId, userInfo: { uid: wxOwnerUid }
   });
   assert.equal(wxForgedIdentity.data.room, null, "event.userInfo cannot impersonate a WeChat room owner");
-  const forgedPlatformRead = await call(wxOwnerUid, {
+  const crossPlatformOutsiderRead = await call("web-outsider", {
     action: "getRoom", docId: wxDocId, accessPlatform: "wechat-mini-program"
   });
-  assert.equal(forgedPlatformRead.data.room, null, "event platform fields cannot expose a mini-program room to web callers");
-  const forgedPlatformJoin = await call("web-joiner", {
+  assert.equal(crossPlatformOutsiderRead.data.room, null, "event platform fields cannot bypass room membership");
+  const webJoinedMiniRoom = await call("web-joiner", {
     action: "join", code: wxCreated.data.room.code, type: "ledger", name: "Web forged platform", accessPlatform: "wechat-mini-program"
   });
-  assert.equal(forgedPlatformJoin.code, "ROOM_NOT_FOUND");
-  const forgedPlatformWrite = await call(wxOwnerUid, {
-    action: "syncLedger", docId: wxDocId, ledger: wxLedger, membershipEpoch: wxCreated.data.viewer.membershipEpoch,
+  assert.equal(webJoinedMiniRoom.ok, true, "a Web identity can join a mini-program-created room");
+  assert.equal(webJoinedMiniRoom.data.room.accessPlatform, "shared");
+  const webCrossPlatformLedger = clone(webJoinedMiniRoom.data.room.ledger);
+  webCrossPlatformLedger.name = "网页与微信共享账本";
+  webCrossPlatformLedger.nameUpdatedAt = Date.now() + 10;
+  webCrossPlatformLedger.updatedAt = webCrossPlatformLedger.nameUpdatedAt;
+  webCrossPlatformLedger.revision = webCrossPlatformLedger.nameUpdatedAt;
+  const webCrossPlatformWrite = await call("web-joiner", {
+    action: "syncLedger", docId: wxDocId, ledger: webCrossPlatformLedger, membershipEpoch: webJoinedMiniRoom.data.viewer.membershipEpoch,
     accessPlatform: "wechat-mini-program"
   });
-  assert.equal(forgedPlatformWrite.code, "ROOM_NOT_FOUND", "web writes must not cross into a mini-program room");
+  assert.equal(webCrossPlatformWrite.ok, true, "Web ledger writes must sync into a mini-program-created room");
+  assert.equal(moderationCalls.some((entry) => entry.openid === "openid-owner" && entry.content.includes("网页与微信共享账本")), true, "Web text shown in WeChat must be moderated");
   const platformRequestId = "platform_idempotency_123";
   const wxIdempotent = await callWx("openid-idempotent", {
     action: "create", clientRequestId: platformRequestId,
@@ -451,8 +460,8 @@ async function main() {
     accessPlatform: "wechat-mini-program"
   });
   assert.equal(crossPlatformRetry.ok, true);
-  assert.notEqual(crossPlatformRetry.data.docId, wxIdempotent.data.docId, "create idempotency must not reuse a room from another platform");
-  assert.equal(crossPlatformRetry.data.room.accessPlatform, "web");
+  assert.equal(crossPlatformRetry.data.docId, wxIdempotent.data.docId, "shared-room create retries are idempotent regardless of the forged event platform field");
+  assert.equal(crossPlatformRetry.data.room.accessPlatform, "shared");
 
   const wxMidpoint = await callWx("openid-owner", {
     action: "create", room: { toolType: "midpoint", name: "微信碰面", members: [{ name: "微信房主" }] }
@@ -498,8 +507,9 @@ async function main() {
     { uid: "owner", isOwner: true }
   );
   assert.deepEqual(created.data.room.memberUids, ["owner"]);
-  assert.equal(created.data.room.schemaVersion, 4);
-  assert.equal(created.data.room.accessPlatform, "web");
+  assert.equal(created.data.room.schemaVersion, 5);
+  assert.equal(created.data.room.accessPlatform, "shared");
+  assert.equal(created.data.room.creatorPlatform, "web");
   assert.deepEqual(created.data.room.lifecycle.policy, "owner-disband-only");
   assert.equal(typeof created.data.room.lifecycle.createdAtMs, "number");
   assert.equal(Object.hasOwn(created.data.room, "expiresAt"), false);
@@ -509,19 +519,24 @@ async function main() {
   assert.equal(ownerRead.ok, true);
   assert.equal(ownerRead.data.room._id, docId);
   assert.equal(ownerRead.data.viewer.uid, "owner");
-  const miniForgedWebRead = await callWx("openid-owner", {
+  const miniOutsiderWebRead = await callWx("openid-cross-outsider", {
     action: "getRoom", docId, accessPlatform: "web"
   });
-  assert.equal(miniForgedWebRead.data.room, null, "event platform fields cannot expose a web room to mini-program callers");
-  const miniForgedWebJoin = await callWx("openid-member", {
+  assert.equal(miniOutsiderWebRead.data.room, null, "event platform fields cannot bypass room membership from WeChat");
+  const miniJoinedWebRoom = await callWx("openid-cross-member", {
     action: "join", code: created.data.room.code, type: "ledger", name: "Mini forged platform", accessPlatform: "web"
   });
-  assert.equal(miniForgedWebJoin.code, "ROOM_NOT_FOUND");
-  const miniForgedWebWrite = await callWx("openid-owner", {
-    action: "syncLedger", docId, ledger: clone(created.data.room.ledger), membershipEpoch: created.data.viewer.membershipEpoch,
+  assert.equal(miniJoinedWebRoom.ok, true, "a mini-program identity can join a Web-created room");
+  const miniCrossPlatformLedger = clone(miniJoinedWebRoom.data.room.ledger);
+  miniCrossPlatformLedger.name = "微信改网页账本";
+  miniCrossPlatformLedger.nameUpdatedAt = Date.now() + 20;
+  miniCrossPlatformLedger.updatedAt = miniCrossPlatformLedger.nameUpdatedAt;
+  miniCrossPlatformLedger.revision = miniCrossPlatformLedger.nameUpdatedAt;
+  const miniCrossPlatformWrite = await callWx("openid-cross-member", {
+    action: "syncLedger", docId, ledger: miniCrossPlatformLedger, membershipEpoch: miniJoinedWebRoom.data.viewer.membershipEpoch,
     accessPlatform: "web"
   });
-  assert.equal(miniForgedWebWrite.code, "ROOM_NOT_FOUND", "mini-program writes must not cross into a web room");
+  assert.equal(miniCrossPlatformWrite.ok, true, "mini-program writes must sync into a Web-created room");
   const outsiderRead = await call("not-a-member", { action: "getRoom", docId });
   assert.equal(outsiderRead.ok, true);
   assert.equal(outsiderRead.data.room, null, "getRoom must not expose rooms to non-members");
@@ -697,7 +712,7 @@ async function main() {
     room: { toolType: "midpoint", name: "碰面测试", members: [{ name: "碰面房主" }] }
   });
   assert.equal(midpointCreated.ok, true);
-  assert.equal(midpointCreated.data.room.schemaVersion, 4);
+  assert.equal(midpointCreated.data.room.schemaVersion, 5);
   assert.deepEqual(midpointCreated.data.room.lifecycle.policy, "owner-disband-only");
   assert.equal(typeof midpointCreated.data.room.lifecycle.createdAtMs, "number");
   assert.equal(Object.hasOwn(midpointCreated.data.room, "expiresAt"), false);

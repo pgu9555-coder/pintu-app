@@ -23,7 +23,8 @@ assert.equal(profiles.update, false, "clients must not update user profiles dire
 assert.equal(profiles.delete, false, "clients must not delete user profiles directly");
 assert.deepEqual(cleanupTasks, { read: false, create: false, update: false, delete: false }, "avatar cleanup retry records must remain cloud-function-only");
 assert.match(applyScript, /createCollectionIfNotExists/, "deployment must create required collections automatically");
-assert.match(applyScript, /member_access_platform_created_id/, "deployment must create the stable my-rooms cursor index");
+assert.match(applyScript, /member_created_id/, "deployment must create the cross-platform my-rooms cursor index");
+assert.doesNotMatch(applyScript, /MgoIndexKeys:[\s\S]*?accessPlatform/, "my-rooms index must not hide rooms created on another client");
 assert.match(applyScript, /createdAt/, "the my-rooms cursor index must use immutable creation time");
 assert.doesNotMatch(applyScript, /(?:setStorageAcl|getStorageAcl|READONLY)/, "deployment must never make the whole storage bucket public-read");
 

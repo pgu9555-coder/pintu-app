@@ -1,25 +1,31 @@
-<view class="page">
-  <view class="title">我的房间</view>
-  <view class="muted">使用同一微信账号可跨设备找回所有仍有权限房间。</view>
+<view class="page trips-page" style="padding-top: {{headerTopPx}}px;">
+  <view class="trips-header">
+    <view class="trips-mark"><image src="/assets/icons/brand-plane.svg" mode="aspectFit" /></view>
+    <view class="page-title">行程</view>
+  </view>
+  <view class="section-label trips-label">进行中的房间</view>
 
-  <view wx:if="{{loading}}" class="card muted">正在同步你的云端房间…</view>
-  <view wx:if="{{cloudError}}" class="card cloud-error">{{cloudError}}；为保护账号隐私，未显示本机缓存。</view>
-  <view wx:if="{{!loading && !rooms.length}}" class="card muted">还没有可访问的房间，可从首页创建或输入房间码加入。</view>
+  <view wx:if="{{loading}}" class="state-card"><view class="state-spinner"></view><text>正在同步你的云端房间…</text></view>
+  <view wx:if="{{cloudError}}" class="state-card error-state">{{cloudError}}；为保护账号隐私，未显示本机缓存。</view>
+  <view wx:if="{{!loading && !rooms.length && !cloudError}}" class="state-card empty-state">
+    <view class="empty-icon">⌁</view><view class="empty-title">还没有进行中的房间</view><view class="muted">从首页创建房间，或输入房间码加入。</view>
+  </view>
 
   <view
     wx:for="{{rooms}}"
     wx:key="docId"
-    class="card trip-row"
+    class="trip-row"
     bindtap="open"
     data-id="{{item.docId}}"
-    data-type="{{item.room.toolType}}"
   >
-    <view class="trip-icon">{{item.typeIcon}}</view>
+    <view class="trip-icon trip-icon-{{item.iconTone}}"><image src="{{item.typeIcon}}" mode="aspectFit" /></view>
     <view class="trip-copy">
       <view class="trip-name">{{item.room.name}}</view>
-      <view class="muted">{{item.typeLabel}} · 房间码 {{item.room.code}}</view>
-      <view class="trip-meta">{{item.memberCount || 0}} 位成员 · {{item.expenseCount || 0}} 笔支出</view>
+      <view class="trip-meta">{{item.typeLabel}} · {{item.memberCount || 0}} 人 · {{item.expenseCount || 0}} 笔支出 · 房号 {{item.room.code}}</view>
     </view>
+    <view wx:if="{{item.showTotal}}" class="trip-total">¥{{item.totalYuan}}</view>
+    <view wx:else class="trip-arrow">›</view>
   </view>
-  <button wx:if="{{hasMore}}" class="btn load-more" bindtap="loadMore" loading="{{loadingMore}}" disabled="{{loadingMore}}">{{loadingMore ? '加载中…' : '加载更多'}}</button>
+
+  <button wx:if="{{hasMore}}" class="btn secondary load-more" bindtap="loadMore" loading="{{loadingMore}}" disabled="{{loadingMore}}">{{loadingMore ? '加载中…' : '加载更多房间'}}</button>
 </view>

@@ -1,6 +1,32 @@
 const gateway = require('../../services/roomGateway')
 const storage = require('../../utils/storage')
 const midpoint = require('../../utils/midpoint')
+const layout = require('../../utils/layout')
+const LOCAL_MIDPOINT_KEY = 'pintu-local-midpoint-v2'
+
+function emptyLocalPoints() {
+  return [
+    { id: 'local-1', name: '地点 1', address: '', lat: null, lng: null },
+    { id: 'local-2', name: '地点 2', address: '', lat: null, lng: null }
+  ]
+}
+
+function validLocalState(value) {
+  const points = value && Array.isArray(value.points) ? value.points : emptyLocalPoints()
+  const candidates = value && Array.isArray(value.candidates) ? value.candidates : []
+  return { points: points.length >= 2 ? points : emptyLocalPoints(), candidates }
+}
+
+function distanceMeters(from, to) {
+  if (!from || !to) return 0
+  const rad = (value) => value * Math.PI / 180
+  const lat1 = rad(Number(from.latitude))
+  const lat2 = rad(Number(to.lat))
+  const dLat = lat2 - lat1
+  const dLng = rad(Number(to.lng) - Number(from.longitude))
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2
+  return Math.round(6371000 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)))
+}
 
 function cleanCode(value) {
   return String(value || '')
@@ -107,6 +133,16 @@ Page({
     decision: currentDecision(null),
     decisionCandidates: [],
     decisionConfirmed: false,
+    localPoints: emptyLocalPoints(),
+    localCandidates: [],
+    localCalculated: false,
+    screen: 'main',
+    swipeDeck: [],
+    swipeIndex: 0,
+    swipeCurrent: null,
+    swipeLikes: [],
+    swipeFinished: false,
+    headerTopPx: 72,
     isOwner: false,
     busy: false,
     syncText: '已同步'
@@ -115,7 +151,15 @@ Page({
   onLoad(options) {
     this.docId = (options && options.docId) || ''
     this.viewer = null
-    this.setData({ name: storage.getName() })
+    const localState = validLocalState(wx.getStorageSync(LOCAL_MIDPOINT_KEY))
+    this.setData({
+      name: storage.getName(),
+      headerTopPx: layout.headerTopPx(),
+      localPoints: localState.points.map((point, index) => Object.assign({}, point, {
+        initial: String(point.name || `地点 ${index + 1}`).slice(0, 1)
+      })),
+      localCandidates: localState.candidates
+    })
   },
 
   onShow() {
@@ -156,6 +200,14 @@ Page({
 
   codeInput(event) {
     this.setData({ code: cleanCode(event.detail.value) })
+  },
+
+  goBack() {
+    if (this.data.screen === 'swipe') {
+      this.backFromSwipe()
+      return
+    }
+    wx.navigateBack({ fail: () => wx.switchTab({ url: '/pages/home/index' }) })
   },
 
   async create() {
@@ -250,7 +302,7 @@ Page({
   },
 
   async requestLocation(onSuccess) {
-    if (!this.data.room || this.data.busy) return
+    if (this.data.busy) return
     try {
       await requirePrivacyAuthorization()
     } catch (_) {
@@ -293,6 +345,69 @@ Page({
 
   chooseLocation() {
     this.requestLocation((location) => this.saveMeetupLocation(location))
+  },
+
+  saveLocalState(points, candidates) {
+    wx.setStorageSync(LOCAL_MIDPOINT_KEY, { points, candidates })
+  },
+
+  addLocalPoint() {
+    if (this.data.localPoints.length >= 10) {
+      wx.showToast({ title: '最多添加 10 个出发地', icon: 'none' })
+      return
+    }
+    const index = this.data.localPoints.length + 1
+    const points = this.data.localPoints.concat({
+      id: `local-${Date.now()}-${index}`,
+      name: `地点 ${index}`,
+      initial: '地',
+      address: '',
+      lat: null,
+      lng: null
+    })
+    this.saveLocalState(points, this.data.localCandidates)
+    this.setData({ localPoints: points, localCalculated: false, center: null, markers: [] })
+  },
+
+  removeLocalPoint(event) {
+    if (this.data.localPoints.length <= 2) {
+      wx.showToast({ title: '至少保留 2 个出发地', icon: 'none' })
+      return
+    }
+    const id = String(event.currentTarget.dataset.id || '')
+    const points = this.data.localPoints.filter((point) => String(point.id) !== id)
+    this.saveLocalState(points, this.data.localCandidates)
+    this.setData({ localPoints: points, localCalculated: false, center: null, markers: [] })
+  },
+
+  chooseLocalPoint(event) {
+    const id = String(event.currentTarget.dataset.id || '')
+    if (!id) return
+    this.requestLocation((location) => {
+      const points = this.data.localPoints.map((point) => String(point.id) === id ? Object.assign({}, point, {
+        name: String(location.name || location.address || point.name).slice(0, 48),
+        initial: String(location.name || '地').slice(0, 1),
+        address: String(location.address || location.name || '地图地点').slice(0, 120),
+        lat: Number(location.latitude),
+        lng: Number(location.longitude)
+      }) : point)
+      this.saveLocalState(points, this.data.localCandidates)
+      this.setData({ localPoints: points, localCalculated: false, center: null, markers: [] })
+    })
+  },
+
+  calculateLocalMidpoint() {
+    const valid = this.data.localPoints.filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lng))
+    if (valid.length < 2) {
+      wx.showToast({ title: '至少选择 2 个出发地', icon: 'none' })
+      return
+    }
+    const room = { meetup: { people: valid } }
+    this.setData({
+      center: midpoint.average(room),
+      markers: midpoint.markers(room),
+      localCalculated: true
+    })
   },
 
   async saveMeetupLocation(location) {
@@ -370,6 +485,85 @@ Page({
       return
     }
     this.requestLocation((location) => this.publishLocationCandidate(location))
+  },
+
+  addLocalCandidate() {
+    if (!this.data.center) {
+      wx.showToast({ title: '先算出公平中点', icon: 'none' })
+      return
+    }
+    if (this.data.localCandidates.length >= 12) {
+      wx.showToast({ title: '最多添加 12 个候选地点', icon: 'none' })
+      return
+    }
+    this.requestLocation((location) => {
+      const base = locationCandidate(location)
+      if (!Number.isFinite(base.lat) || !Number.isFinite(base.lng)) return
+      if (this.data.localCandidates.some((item) => item.name === base.name && item.lat === base.lat && item.lng === base.lng)) {
+        wx.showToast({ title: '这个地点已经添加过了', icon: 'none' })
+        return
+      }
+      const candidate = Object.assign(base, {
+        id: `local-candidate-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        dist: distanceMeters(this.data.center, base)
+      })
+      const candidates = this.data.localCandidates.concat(candidate)
+      this.saveLocalState(this.data.localPoints, candidates)
+      this.setData({ localCandidates: candidates })
+    })
+  },
+
+  removeLocalCandidate(event) {
+    const id = String(event.currentTarget.dataset.id || '')
+    const candidates = this.data.localCandidates.filter((candidate) => String(candidate.id) !== id)
+    this.saveLocalState(this.data.localPoints, candidates)
+    this.setData({ localCandidates: candidates })
+  },
+
+  activeSwipeCandidates() {
+    return this.data.room ? this.data.decisionCandidates : this.data.localCandidates
+  },
+
+  startSwipe() {
+    const deck = this.activeSwipeCandidates().map((candidate) => Object.assign({}, candidate, {
+      initial: String(candidate.name || '?').slice(0, 1)
+    }))
+    if (!deck.length) {
+      wx.showToast({ title: '先添加几个候选去处', icon: 'none' })
+      return
+    }
+    this.setData({
+      screen: 'swipe',
+      swipeDeck: deck,
+      swipeIndex: 0,
+      swipeCurrent: deck[0],
+      swipeLikes: [],
+      swipeFinished: false
+    })
+  },
+
+  swipeAction(event) {
+    const action = event.currentTarget.dataset.action
+    const current = this.data.swipeCurrent
+    if (!current || !['like', 'pass'].includes(action)) return
+    const likes = action === 'like' ? this.data.swipeLikes.concat(current) : this.data.swipeLikes
+    const nextIndex = this.data.swipeIndex + 1
+    const finished = nextIndex >= this.data.swipeDeck.length
+    this.setData({
+      swipeLikes: likes,
+      swipeIndex: nextIndex,
+      swipeCurrent: finished ? null : this.data.swipeDeck[nextIndex],
+      swipeFinished: finished
+    })
+  },
+
+  restartSwipe() {
+    const deck = this.data.swipeDeck
+    this.setData({ swipeIndex: 0, swipeCurrent: deck[0] || null, swipeLikes: [], swipeFinished: !deck.length })
+  },
+
+  backFromSwipe() {
+    this.setData({ screen: 'main', swipeCurrent: null, swipeFinished: false })
   },
 
   async publishLocationCandidate(location) {
