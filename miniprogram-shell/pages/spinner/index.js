@@ -208,9 +208,14 @@ Page({
       // setting the target. This avoids a jump after the second spin.
       spinDuration: 0,
       wheelRotation: startAngle
+    }, () => {
+      // Wait until the zero-duration starting frame has reached the native
+      // view layer before applying the target angle. A fixed delay alone is
+      // unreliable on iOS, where consecutive setData updates can be batched
+      // and make the wheel jump straight to the result without animating.
+      if (sequence !== this.spinSequence || !this.data.spinning) return
+      this.spinStartTimer = setTimeout(() => this.startSpin(plan), 16)
     })
-
-    this.spinStartTimer = setTimeout(() => this.startSpin(plan), 30)
   },
 
   startSpin(plan) {

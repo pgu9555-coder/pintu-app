@@ -357,6 +357,7 @@ assert.match(spinnerPageSource, /const DEFAULT_NAMES = \[\]/, "native spinner mu
 assert.match(spinnerPageSource, /windowWidth = Number\(system\.windowWidth\)/, "native spinner canvas must derive its size from the viewport");
 assert.match(spinnerPageSource, /canvasSize = Math\.max\(1, Math\.round\(wheelCssPx\)\)/, "native spinner canvas must match the legacy context's viewport-pixel coordinate space");
 assert.match(spinnerPageSource, /Number\(this\.data\.canvasSize\)/, "native wheel drawing must use its bound canvas size");
+assert.match(spinnerPageSource, /wheelRotation:\s*startAngle[\s\S]*?\},\s*\(\)\s*=>\s*\{[\s\S]*?this\.spinStartTimer\s*=\s*setTimeout\(\(\)\s*=>\s*this\.startSpin\(plan\)/, "spinner must commit its starting frame before beginning the iOS transition");
 assert.ok(!/getStorageSync|setStorageSync|pintu-spinner-v3/.test(spinnerPageSource), "spinner must stay session-only like Web and never leak a prior account's list");
 assert.match(spinnerMarkup, /wheel-pointer[\s\S]*?wheel-rotor[\s\S]*?wheel-center/, "spinner must render a pointer, animated rotor, and center control");
 assert.match(spinnerMarkup, /width="\{\{canvasSize\}\}" height="\{\{canvasSize\}\}"/, "native canvas markup must bind the viewport-matched buffer");
