@@ -76,9 +76,11 @@
       <block wx:if="{{room}}">
         <view class="active-room">
           <view class="active-room-main"><view class="active-room-label">正在协作 · 房间码</view><view class="active-room-code">{{room.code}}</view></view>
-          <button class="text-action" bindtap="copyCode" disabled="{{busy}}">复制</button>
-          <button class="text-action" open-type="share" disabled="{{busy}}">邀请</button>
-          <button class="text-action" bindtap="exitRoom" disabled="{{busy}}">{{isOwner ? '解散' : '退出'}}</button>
+          <view class="active-room-actions">
+            <button class="text-action" bindtap="copyCode" disabled="{{busy}}">复制</button>
+            <button class="text-action" open-type="share" disabled="{{busy}}">邀请</button>
+            <button class="text-action" bindtap="exitRoom" disabled="{{busy}}">{{isOwner ? '解散' : '退出'}}</button>
+          </view>
         </view>
       </block>
       <block wx:else>

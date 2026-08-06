@@ -103,9 +103,11 @@ button::after { border:0; }
 .room-small-button { min-width:102rpx; height:76rpx; display:flex; align-items:center; justify-content:center; margin:0; padding:0 20rpx; border-radius:16rpx; background:#0F3D36; color:#FFFDF6; font-size:24rpx; font-weight:700; }
 .room-small-button.outline { border:2rpx solid #0F3D36; background:#FFFDF6; color:#0F3D36; }
 .active-room { display:flex; align-items:center; gap:16rpx; padding:18rpx 20rpx; border:2rpx solid #9AB7C7; border-radius:18rpx; background:#DCE7EC; }
-.active-room-main { flex:1; min-width:0; }
-.active-room-label { color:#4C5C5B; font-size:21rpx; }
+.active-room-main { width:0; min-width:0; flex:1 1 auto; }
+.active-room-label { overflow:hidden; color:#4C5C5B; font-size:21rpx; line-height:1.4; text-overflow:ellipsis; white-space:nowrap; }
 .active-room-code { margin-top:3rpx; color:#3E6E8E; font-family:monospace; font-size:27rpx; font-weight:700; letter-spacing:3rpx; }
+.active-room-actions { display:flex; flex:0 0 auto; align-items:center; gap:8rpx; }
+.active-room-actions .text-action { display:flex; width:68rpx; min-width:68rpx; max-width:68rpx; height:52rpx; flex:0 0 68rpx; align-items:center; justify-content:center; box-sizing:border-box; line-height:1; }
 .text-action { min-width:0; margin:0; padding:0; background:transparent; color:#0F3D36; font-size:23rpx; line-height:56rpx; }
 
 .stepper { display:flex; align-items:flex-start; justify-content:center; margin:28rpx auto 34rpx; padding:0 24rpx; }

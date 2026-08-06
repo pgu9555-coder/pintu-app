@@ -37,6 +37,7 @@ for (const page of app.pages) {
 }
 
 const appSource = fs.readFileSync(path.join(root, "app.js"), "utf8");
+const appStyles = fs.readFileSync(path.join(root, "app.wxss"), "utf8");
 assert.match(
   appSource,
   /wx\.cloud\.init\s*\(\s*\{[\s\S]*?\benv\s*:\s*['"]pintu-d4g77ecn24b674fa0['"]/,
@@ -344,6 +345,10 @@ assert.ok(!/restoreRoomSnapshot\(docId, previousSnapshot\)/.test(ledgerPageSourc
 assert.match(ledgerMarkup, /同行的人[\s\S]*?记支出[\s\S]*?谁转给谁/, "ledger must retain the Web three-step workflow");
 assert.match(ledgerMarkup, /(?:bind|catch)tap="editExpense"/, "existing expenses must be editable");
 assert.match(ledgerMarkup, /最少转账方案/, "ledger must render final settlement instructions");
+assert.match(ledgerMarkup, /active-room-actions[\s\S]*?copyCode[\s\S]*?open-type="share"[\s\S]*?exitRoom/, "ledger room actions must stay in a dedicated compact row");
+assert.match(appStyles, /\.active-room-main\s*\{[^}]*width\s*:\s*0[^}]*flex\s*:\s*1 1 auto/, "room copy must retain usable width on iPhone");
+assert.match(appStyles, /\.active-room-label\s*\{[^}]*text-overflow\s*:\s*ellipsis[^}]*white-space\s*:\s*nowrap/, "room label must not wrap one character per line");
+assert.match(appStyles, /\.active-room-actions \.text-action\s*\{[^}]*width\s*:\s*68rpx[^}]*flex\s*:\s*0 0 68rpx/, "room action buttons must use compact fixed widths");
 
 const spinnerPageSource = fs.readFileSync(path.join(root, "pages", "spinner", "index.js"), "utf8");
 const spinnerMarkup = fs.readFileSync(path.join(root, "pages", "spinner", "index.wxml"), "utf8");
