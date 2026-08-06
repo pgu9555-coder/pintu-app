@@ -128,7 +128,7 @@
       <block wx:else>
         <view wx:for="{{localPoints}}" wx:key="id" class="point-row selectable" bindtap="chooseLocalPoint" data-id="{{item.id}}">
           <view class="point-avatar local-avatar">{{index + 1}}</view>
-          <view class="point-copy"><view class="point-name">{{item.address ? item.name : '选择第 ' + (index + 1) + ' 个出发点'}}</view><view class="point-address">{{item.address || '点这里打开地图搜索具体位置'}}</view></view>
+          <view class="point-copy"><view class="point-name">{{item.address ? item.name : (index === 0 ? '选择第一个出发点' : (index === 1 ? '选择第二个出发点' : '选择第 ' + (index + 1) + ' 个出发点'))}}</view><view class="point-address">{{item.address || '点这里打开地图搜索具体位置'}}</view></view>
           <button wx:if="{{localPoints.length > 2}}" class="remove-point" catchtap="removeLocalPoint" data-id="{{item.id}}">×</button>
           <view wx:else class="row-arrow">›</view>
         </view>

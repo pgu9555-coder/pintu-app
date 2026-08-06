@@ -90,4 +90,20 @@
       <button class="privacy-link" bindtap="openPrivacy">隐私保护指引</button>
     </view>
   </view>
+
+  <view wx:if="{{wechatLoginVisible}}" class="wechat-login-overlay" catchtouchmove="preventClose">
+    <view class="wechat-login-dialog">
+      <view class="wechat-login-mark">微</view>
+      <view class="wechat-login-title">使用微信账号登录</view>
+      <view class="wechat-login-subtitle">登录后才能安全识别房主、找回房间并同步多人数据。</view>
+      <view class="wechat-login-points">
+        <view class="wechat-login-point"><text class="wechat-login-check">✓</text><text>识别你是哪个房间成员，防止他人冒充房主</text></view>
+        <view class="wechat-login-point"><text class="wechat-login-check">✓</text><text>跨设备同步碰面地点、候选结果和行程账本</text></view>
+        <view class="wechat-login-point"><text class="wechat-login-check">✓</text><text>不会自动读取头像或昵称；只有你主动选择并保存时才上传</text></view>
+        <view class="wechat-login-point"><text class="wechat-login-check">✓</text><text>位置只在你主动选择地点时使用</text></view>
+      </view>
+      <button class="wechat-login-button" bindtap="confirmWechatLogin" loading="{{wechatLoginBusy}}" disabled="{{wechatLoginBusy}}">微信登录并继续</button>
+      <button class="wechat-login-privacy" bindtap="openPrivacy">查看隐私保护指引</button>
+    </view>
+  </view>
 </view>

@@ -109,6 +109,12 @@ assert.match(source, /schemaVersion:\s*4[\s\S]*?policy:\s*['"]owner-disband-only
 assert.match(source, /document\.execCommand\(['"]copy['"]\)\s*===\s*true/, "clipboard fallback must verify that copying actually succeeded");
 assert.match(source, /function\s+copyRoomCode\s*\(/, "room code copying needs reliable success/failure feedback");
 
+assert.match(source, /var\s+spinnerNames\s*=\s*\[\]\s*;/, "standalone spinner must begin with no prefilled friends");
+assert.match(source, /else if\s*\(!roomMode\)\s*\{[\s\S]*?spinnerNames\s*=\s*\[\]/, "a standalone spinner opening must reset to a neutral empty wheel");
+assert.match(source, /room\.members\.map\(function\(m\)\{\s*return m\.name;\s*\}\)/, "room spinner must still initialize from room members");
+assert.match(source, /translate3d\(0,0,0\) rotate\(/, "spinner rotation must stay on a compositor-friendly layer");
+assert.match(source, /@media\(max-width:600px\)\{[\s\S]*?#spinNameInput\{font-size:16px/, "mobile spinner name input must avoid iOS text zoom");
+
 assert.match(source, /var\s+GL_MAX_EXPENSE_CENTS\s*=\s*1000000000000\s*;/, "ledger client cap must match roomGateway's 1e12-cent cap");
 assert.match(
   source,

@@ -1,6 +1,6 @@
 const layout = require('../../utils/layout')
 
-const DEFAULT_NAMES = ['我', '朋友A', '朋友B']
+const DEFAULT_NAMES = []
 // Keep this in the same order as the web spinner so a person's list colour
 // always agrees with their wheel segment.
 const COLORS = ['#0F3D36', '#B8842A', '#3E6E8E', '#A8506E', '#C05B3C', '#4C5C5B', '#6B8E7A', '#C99A3C']
@@ -19,7 +19,8 @@ Page({
     wheelRotation: 0,
     spinDuration: 0,
     motionReduced: false,
-    headerTopPx: 72
+    headerTopPx: 72,
+    canvasSize: 280
   },
 
   onLoad() {
@@ -29,11 +30,18 @@ Page({
     // The web spinner is intentionally local to the current visit. Do not
     // restore the old fixed storage key: it could expose another account's list.
     this.statusTickMs = Number(system.benchmarkLevel) > 0 && Number(system.benchmarkLevel) <= 5 ? 140 : 90
+    const windowWidth = Number(system.windowWidth) || 375
+    // Legacy WeChat canvas drawing coordinates use CSS pixels. Matching the
+    // actual 560rpx viewport size avoids iOS clipping while the compositor
+    // handles rotation; multiplying by DPR breaks the legacy canvas context.
+    const wheelCssPx = windowWidth * 560 / 750
+    const canvasSize = Math.max(1, Math.round(wheelCssPx))
     this.setData({
       names: DEFAULT_NAMES.slice(),
       decision: '谁买单',
       headerTopPx: layout.headerTopPx(),
-      motionReduced: Boolean(system.prefersReducedMotion || system.reduceMotion || system.reducedMotion)
+      motionReduced: Boolean(system.prefersReducedMotion || system.reduceMotion || system.reducedMotion),
+      canvasSize
     })
     this.readMotionPreference()
   },
@@ -115,8 +123,9 @@ Page({
   drawWheel() {
     const names = this.data.names
     const ctx = wx.createCanvasContext('spinnerCanvas', this)
-    const size = 280
-    const radius = 136
+    const size = Number(this.data.canvasSize) || 280
+    const scale = size / 280
+    const radius = size / 2 - 4 * scale
     const center = size / 2
     ctx.clearRect(0, 0, size, size)
 
@@ -126,7 +135,7 @@ Page({
       ctx.arc(center, center, radius, 0, Math.PI * 2)
       ctx.fill()
       ctx.setFillStyle('#8B928D')
-      ctx.setFontSize(14)
+      ctx.setFontSize(14 * scale)
       ctx.setTextAlign('center')
       ctx.setTextBaseline('middle')
       ctx.fillText('先加人', center, center)
@@ -149,19 +158,19 @@ Page({
       ctx.translate(center, center)
       ctx.rotate(start + arc / 2)
       ctx.setFillStyle('#FFFDF6')
-      ctx.setFontSize(names.length > 6 ? 12 : 14)
+      ctx.setFontSize((names.length > 6 ? 12 : 14) * scale)
       ctx.setTextAlign('right')
       ctx.setTextBaseline('middle')
-      ctx.fillText(name.length > 6 ? `${name.slice(0, 6)}…` : name, radius - 16, 0)
+      ctx.fillText(name.length > 6 ? `${name.slice(0, 6)}…` : name, radius - 16 * scale, 0)
       ctx.restore()
     })
 
     ctx.beginPath()
-    ctx.arc(center, center, 23, 0, Math.PI * 2)
+    ctx.arc(center, center, 23 * scale, 0, Math.PI * 2)
     ctx.setFillStyle('rgba(255,255,255,0.14)')
     ctx.fill()
     ctx.setStrokeStyle('#FFFDF6')
-    ctx.setLineWidth(2)
+    ctx.setLineWidth(2 * scale)
     ctx.beginPath()
     ctx.arc(center, center, radius, 0, Math.PI * 2)
     ctx.stroke()

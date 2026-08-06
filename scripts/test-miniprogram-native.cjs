@@ -111,6 +111,10 @@ assert.match(homePageSource, /storage\.saveName\(profile\.nickname\)/, "saved pr
 assert.match(homePageSource, /onLoad\(options\)[\s\S]*?storage\.saveName\(['"]['"]\)/, "home must clear a previous WeChat account's cached nickname before resolving the current profile");
 assert.ok(!/profile\.nickname\s*\|\|\s*storage\.getName\(\)/.test(homePageSource), "profile loading must not fall back to another account's cached nickname");
 assert.ok(!/wx\.getUserProfile/.test(homePageSource + homeMarkup), "the deprecated getUserProfile API must not be used");
+assert.ok(!/wx\.login\s*\(/.test(homePageSource), "trusted CloudBase OpenID must not be replaced by a client login identifier");
+assert.match(homeMarkup, /使用微信账号登录[\s\S]*?微信登录并继续/, "home must explain WeChat identity use before entering the app");
+assert.match(homePageSource, /confirmWechatLogin\(\)[\s\S]*?ensurePrivacyAuthorized\(\)[\s\S]*?loadProfile\(\)/, "WeChat entry must authorize privacy before loading the trusted profile");
+assert.match(homePageSource, /wx\.getPrivacySetting[\s\S]*?wx\.requirePrivacyAuthorize/, "WeChat entry must use the current privacy authorization flow when required");
 
 const tripsPageSource = fs.readFileSync(path.join(root, "pages", "trips", "index.js"), "utf8");
 const tripsMarkup = fs.readFileSync(path.join(root, "pages", "trips", "index.wxml"), "utf8");
@@ -155,6 +159,7 @@ assert.match(midpointPageSource, /chooseLocalPoint\(event\)/, "standalone midpoi
 assert.match(midpointPageSource, /if \(!amap\.configuredKey\(\)\)[\s\S]*?this\.addDecisionCandidate\(\)/, "room candidate search must fall back to native map selection when AMap is unavailable");
 assert.match(midpointPageSource, /startSwipe\(\)[\s\S]*?swipeAction\(event\)/, "midpoint must expose the same candidate blind-box flow as Web");
 assert.match(midpointMarkup, /再加一个出发点/, "standalone midpoint must support more than two addresses");
+assert.match(midpointMarkup, /选择第一个出发点[\s\S]*?选择第二个出发点/, "standalone midpoint must clearly expose the first and second departure-point choices");
 assert.match(midpointMarkup, /不知道选哪个？盲盒帮你挑/, "midpoint must render the destination blind-box entry");
 
 const ledger = require(path.join(root, "utils", "ledger.js"));
@@ -226,8 +231,13 @@ assert.match(spinnerPageSource, /targetAngle = this\.rotation \+ turns \* 360 \+
 assert.match(spinnerPageSource, /COLORS\s*=\s*\[[\s\S]*?#C99A3C['"]\]/, "spinner must keep the same eight-colour palette as Web");
 assert.match(spinnerPageSource, /this\.data\.names\.length >= 8/, "spinner must reject a ninth participant like Web");
 assert.match(spinnerPageSource, /names\.length < 2/, "spinner must require at least two participants");
+assert.match(spinnerPageSource, /const DEFAULT_NAMES = \[\]/, "native spinner must begin with no prefilled friends");
+assert.match(spinnerPageSource, /windowWidth = Number\(system\.windowWidth\)/, "native spinner canvas must derive its size from the viewport");
+assert.match(spinnerPageSource, /canvasSize = Math\.max\(1, Math\.round\(wheelCssPx\)\)/, "native spinner canvas must match the legacy context's viewport-pixel coordinate space");
+assert.match(spinnerPageSource, /Number\(this\.data\.canvasSize\)/, "native wheel drawing must use its bound canvas size");
 assert.ok(!/getStorageSync|setStorageSync|pintu-spinner-v3/.test(spinnerPageSource), "spinner must stay session-only like Web and never leak a prior account's list");
 assert.match(spinnerMarkup, /wheel-pointer[\s\S]*?wheel-rotor[\s\S]*?wheel-center/, "spinner must render a pointer, animated rotor, and center control");
+assert.match(spinnerMarkup, /width="\{\{canvasSize\}\}" height="\{\{canvasSize\}\}"/, "native canvas markup must bind the viewport-matched buffer");
 
 assert.match(midpointPageSource, /typeof wx\.chooseLocation !== ['"]function['"]/, "midpoint must guard unsupported native map APIs");
 assert.match(midpointPageSource, /translateX\(\$\{delta\}px\)/, "blind-box drag distance must use the same pixel unit as touch coordinates");

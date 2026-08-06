@@ -13,8 +13,8 @@
 
   <view class="wheel-stage">
     <view class="wheel-pointer {{spinning && !motionReduced ? 'wheel-pointer-ticking' : ''}}"></view>
-    <view class="wheel-rotor" style="transform:rotate({{wheelRotation}}deg);transition-duration:{{spinDuration}}ms;">
-      <canvas class="wheel-canvas" canvas-id="spinnerCanvas" width="280" height="280"></canvas>
+    <view class="wheel-rotor" style="transform:translate3d(0,0,0) rotate({{wheelRotation}}deg);-webkit-transform:translate3d(0,0,0) rotate({{wheelRotation}}deg);transition-duration:{{spinDuration}}ms;">
+      <canvas class="wheel-canvas" canvas-id="spinnerCanvas" width="{{canvasSize}}" height="{{canvasSize}}"></canvas>
     </view>
     <view class="wheel-center {{spinning ? 'wheel-center-busy' : ''}}" catchtap="spin">{{spinButtonText}}</view>
   </view>

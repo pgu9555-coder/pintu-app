@@ -557,17 +557,17 @@
   .spin-decision-input{flex:1;max-width:160px;}
   .spin-wheel-wrap{position:relative;width:280px;height:280px;margin:6px auto 10px;}
   #spinCanvas{width:280px;height:280px;display:block;
-    transform:rotate(0deg);border-radius:50%;
-    transform-origin:50% 50%;will-change:transform;
+    transform:translate3d(0,0,0) rotate(0deg);-webkit-transform:translate3d(0,0,0) rotate(0deg);border-radius:50%;
+    transform-origin:50% 50%;will-change:transform;-webkit-backface-visibility:hidden;backface-visibility:hidden;
     box-shadow:0 10px 30px rgba(15,25,22,0.18);}
-  .spin-pointer{position:absolute;top:-4px;left:50%;transform:translateX(-50%);z-index:3;
+  .spin-pointer{position:absolute;top:-4px;left:50%;transform:translate3d(-50%,0,0);-webkit-transform:translate3d(-50%,0,0);z-index:3;
     width:0;height:0;border-left:12px solid transparent;border-right:12px solid transparent;
-    border-top:20px solid var(--ink);filter:drop-shadow(0 2px 2px rgba(0,0,0,.2));}
+    border-top:20px solid var(--ink);filter:drop-shadow(0 2px 2px rgba(0,0,0,.2));-webkit-backface-visibility:hidden;backface-visibility:hidden;}
   .spin-wheel-wrap.spinning .spin-pointer{animation:spinPointerTick .14s ease-in-out infinite alternate;}
   .spin-wheel-wrap.spinning #spinCanvas{filter:saturate(1.08);box-shadow:0 14px 36px rgba(15,25,22,0.24);}
   @keyframes spinPointerTick{
-    from{transform:translateX(-50%) rotate(-7deg);}
-    to{transform:translateX(-50%) rotate(7deg);}
+    from{transform:translate3d(-50%,0,0) rotate(-7deg);}
+    to{transform:translate3d(-50%,0,0) rotate(7deg);}
   }
   .spin-go-btn{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:2;
     width:64px;height:64px;border-radius:50%;border:4px solid #fff;cursor:pointer;
@@ -584,6 +584,9 @@
   .spin-result.pop{animation:spinPop .5s ease;}
   @keyframes spinStatusPulse{from{opacity:.5;transform:scale(.98);}to{opacity:1;transform:scale(1.02);}}
   @keyframes spinPop{0%{transform:scale(0.6);opacity:0;}60%{transform:scale(1.12);}100%{transform:scale(1);opacity:1;}}
+  @media(max-width:600px){
+    .spin-decision-input,#spinNameInput{font-size:16px;}
+  }
   .tool-icon .sys-icon{font-size:19px;}
   .tool-copy{flex:1;min-width:0;}
   .tool-title{font-weight:600;font-size:13px;color:var(--ink);margin-bottom:3px;}
@@ -5742,7 +5745,7 @@ Object.assign(SVG_PATHS, {
 });
 
 var SPIN_COLORS = ['#0F3D36','#B8842A','#3E6E8E','#A8506E','#C05B3C','#4C5C5B','#6B8E7A','#C99A3C'];
-var spinnerNames = ['我', '朋友A', '朋友B'];
+var spinnerNames = [];
 var spinnerAngle = 0;      /* 当前累计旋转角度 */
 var spinnerBusy = false;   /* 转动中，禁止重复点 */
 var spinnerRaf = null;     /* 用逐帧动画代替 CSS transition，兼容微信 WebView */
@@ -5759,7 +5762,12 @@ function openSpinner(roomMode){
     var room = rmCurrentRoom();
     if (room && room.members && room.members.length){
       spinnerNames = room.members.map(function(m){ return m.name; });
+    } else {
+      spinnerNames = [];
     }
+  } else if (!roomMode) {
+    /* A standalone visit always starts with a neutral, empty wheel. */
+    spinnerNames = [];
   }
   spinnerClearResult();
   spinnerRenderNames();
@@ -5908,7 +5916,7 @@ function spinnerSpin(){
     if (!spinnerBusy) return;
     if (spinnerRaf){ cancelAnimationFrame(spinnerRaf); spinnerRaf = null; }
     spinnerAngle = targetAngle;
-    if (canvas) canvas.style.transform = 'rotate(' + spinnerAngle + 'deg)';
+    if (canvas) canvas.style.transform = 'translate3d(0,0,0) rotate(' + spinnerAngle + 'deg)';
     if (wrap) wrap.classList.remove('spinning');
     var r = resultEl;
     if (r){
@@ -5934,7 +5942,7 @@ function spinnerSpin(){
     var eased = 1 - Math.pow(1 - progress, 5);
     var angle = startAngle + (targetAngle - startAngle) * eased;
     spinnerAngle = angle;
-    if (canvas) canvas.style.transform = 'rotate(' + angle + 'deg)';
+    if (canvas) canvas.style.transform = 'translate3d(0,0,0) rotate(' + angle + 'deg)';
 
     /* 动画过程中实时显示当前掠过的名字，让过程不是“等几秒只弹答案”。 */
     if (resultEl){

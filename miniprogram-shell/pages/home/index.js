@@ -51,6 +51,8 @@ Page({
     avatarUploadPrefix: '',
     canChooseAvatar: false,
     profilePanelOpen: false,
+    wechatLoginVisible: true,
+    wechatLoginBusy: false,
     headerTopPx: 52
   },
 
@@ -76,7 +78,49 @@ Page({
       canChooseAvatar: Boolean(wx.canIUse && wx.canIUse('button.open-type.chooseAvatar')),
       headerTopPx
     })
-    this.loadProfile()
+  },
+
+  ensurePrivacyAuthorized() {
+    return new Promise((resolve, reject) => {
+      if (typeof wx.getPrivacySetting !== 'function') {
+        resolve()
+        return
+      }
+      wx.getPrivacySetting({
+        success: (setting) => {
+          if (!setting || !setting.needAuthorization) {
+            resolve()
+            return
+          }
+          if (typeof wx.requirePrivacyAuthorize !== 'function') {
+            reject(new Error('当前微信版本无法完成隐私授权，请更新微信后重试'))
+            return
+          }
+          wx.requirePrivacyAuthorize({
+            success: resolve,
+            fail: () => reject(new Error('需要同意隐私保护指引后才能使用云端房间'))
+          })
+        },
+        fail: () => reject(new Error('暂时无法确认隐私授权，请检查网络后重试'))
+      })
+    })
+  },
+
+  async confirmWechatLogin() {
+    if (this.data.wechatLoginBusy) return
+    this.setData({ wechatLoginBusy: true })
+    try {
+      await this.ensurePrivacyAuthorized()
+      this.setData({ wechatLoginVisible: false })
+      await this.loadProfile()
+    } catch (error) {
+      wx.showToast({
+        title: error && error.message ? error.message : '微信登录暂时失败，请重试',
+        icon: 'none'
+      })
+    } finally {
+      this.setData({ wechatLoginBusy: false })
+    }
   },
 
   openProfilePanel() {
