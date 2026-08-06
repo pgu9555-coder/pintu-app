@@ -18,6 +18,9 @@ Page({
     spinButtonText: '转',
     wheelRotation: 0,
     spinDuration: 0,
+    wheelAnimation: {},
+    wheelImage: '',
+    wheelReady: false,
     motionReduced: false,
     headerTopPx: 72,
     canvasSize: 280
@@ -27,6 +30,7 @@ Page({
     const system = this.getSystemInfo()
     this.rotation = 0
     this.spinSequence = 0
+    this.wheelRenderSequence = 0
     // The web spinner is intentionally local to the current visit. Do not
     // restore the old fixed storage key: it could expose another account's list.
     this.statusTickMs = Number(system.benchmarkLevel) > 0 && Number(system.benchmarkLevel) <= 5 ? 140 : 90
@@ -52,6 +56,7 @@ Page({
 
   onUnload() {
     this.spinSequence += 1
+    this.wheelRenderSequence += 1
     this.clearSpinTimers()
   },
 
@@ -123,6 +128,7 @@ Page({
   drawWheel() {
     const names = this.data.names
     const ctx = wx.createCanvasContext('spinnerCanvas', this)
+    const renderSequence = ++this.wheelRenderSequence
     const size = Number(this.data.canvasSize) || 280
     const scale = size / 280
     const radius = size / 2 - 4 * scale
@@ -139,7 +145,7 @@ Page({
       ctx.setTextAlign('center')
       ctx.setTextBaseline('middle')
       ctx.fillText('先加人', center, center)
-      ctx.draw()
+      this.exportWheelImage(ctx, size, renderSequence)
       return
     }
 
@@ -174,7 +180,33 @@ Page({
     ctx.beginPath()
     ctx.arc(center, center, radius, 0, Math.PI * 2)
     ctx.stroke()
-    ctx.draw()
+    this.exportWheelImage(ctx, size, renderSequence)
+  },
+
+  exportWheelImage(ctx, size, renderSequence) {
+    this.setData({ wheelReady: false })
+    ctx.draw(false, () => {
+      if (renderSequence !== this.wheelRenderSequence) return
+      wx.canvasToTempFilePath({
+        canvasId: 'spinnerCanvas',
+        x: 0,
+        y: 0,
+        width: size,
+        height: size,
+        destWidth: size,
+        destHeight: size,
+        fileType: 'png',
+        success: (result) => {
+          if (renderSequence !== this.wheelRenderSequence) return
+          this.setData({ wheelImage: result.tempFilePath, wheelReady: true })
+        },
+        fail: () => {
+          if (renderSequence !== this.wheelRenderSequence) return
+          this.setData({ wheelImage: '', wheelReady: false })
+          wx.showToast({ title: '转盘准备失败，请返回后重试', icon: 'none' })
+        }
+      }, this)
+    })
   },
 
   spin() {
@@ -182,6 +214,10 @@ Page({
     const names = this.data.names.slice()
     if (names.length < 2) {
       wx.showToast({ title: '至少要有 2 个人才能转哦', icon: 'none' })
+      return
+    }
+    if (!this.data.wheelReady || !this.data.wheelImage) {
+      wx.showToast({ title: '转盘正在准备，请稍等一下', icon: 'none' })
       return
     }
 
@@ -197,6 +233,8 @@ Page({
     const sequence = ++this.spinSequence
     const decision = this.data.decision.trim() || '谁买单'
     const plan = { sequence, names, winnerIndex, segment, startAngle, targetAngle, duration, decision }
+    const startAnimation = wx.createAnimation({ duration: 0, timingFunction: 'linear', transformOrigin: '50% 50%' })
+    startAnimation.rotate(startAngle).step({ duration: 0 })
 
     this.clearSpinTimers()
     this.setData({
@@ -207,7 +245,8 @@ Page({
       // Establish the starting position with transitions disabled before
       // setting the target. This avoids a jump after the second spin.
       spinDuration: 0,
-      wheelRotation: startAngle
+      wheelRotation: startAngle,
+      wheelAnimation: startAnimation.export()
     }, () => {
       // Wait until the zero-duration starting frame has reached the native
       // view layer before applying the target angle. A fixed delay alone is
@@ -220,8 +259,18 @@ Page({
 
   startSpin(plan) {
     if (plan.sequence !== this.spinSequence || !this.data.spinning) return
+    const animation = wx.createAnimation({
+      duration: plan.duration,
+      timingFunction: 'ease-out',
+      transformOrigin: '50% 50%'
+    })
+    animation.rotate(plan.targetAngle).step()
     this.rotation = plan.targetAngle
-    this.setData({ spinDuration: plan.duration, wheelRotation: plan.targetAngle })
+    this.setData({
+      spinDuration: plan.duration,
+      wheelRotation: plan.targetAngle,
+      wheelAnimation: animation.export()
+    })
     this.startStatusTicker(plan)
     this.spinFinishTimer = setTimeout(() => this.finishSpin(plan), plan.duration + 40)
   },

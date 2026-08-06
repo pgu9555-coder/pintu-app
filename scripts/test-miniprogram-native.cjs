@@ -358,9 +358,13 @@ assert.match(spinnerPageSource, /windowWidth = Number\(system\.windowWidth\)/, "
 assert.match(spinnerPageSource, /canvasSize = Math\.max\(1, Math\.round\(wheelCssPx\)\)/, "native spinner canvas must match the legacy context's viewport-pixel coordinate space");
 assert.match(spinnerPageSource, /Number\(this\.data\.canvasSize\)/, "native wheel drawing must use its bound canvas size");
 assert.match(spinnerPageSource, /wheelRotation:\s*startAngle[\s\S]*?\},\s*\(\)\s*=>\s*\{[\s\S]*?this\.spinStartTimer\s*=\s*setTimeout\(\(\)\s*=>\s*this\.startSpin\(plan\)/, "spinner must commit its starting frame before beginning the iOS transition");
+assert.match(spinnerPageSource, /wx\.canvasToTempFilePath\([\s\S]*?wheelImage:\s*result\.tempFilePath/, "spinner must rasterize its canvas before animation so iOS never transforms a native canvas layer");
+assert.match(spinnerPageSource, /wx\.createAnimation\([\s\S]*?transformOrigin:\s*['"]50% 50%['"][\s\S]*?animation\.rotate\(plan\.targetAngle\)\.step\(\)/, "spinner must use a native animation with an explicit center origin");
 assert.ok(!/getStorageSync|setStorageSync|pintu-spinner-v3/.test(spinnerPageSource), "spinner must stay session-only like Web and never leak a prior account's list");
 assert.match(spinnerMarkup, /wheel-pointer[\s\S]*?wheel-rotor[\s\S]*?wheel-center/, "spinner must render a pointer, animated rotor, and center control");
 assert.match(spinnerMarkup, /width="\{\{canvasSize\}\}" height="\{\{canvasSize\}\}"/, "native canvas markup must bind the viewport-matched buffer");
+assert.match(spinnerMarkup, /wheel-render-canvas[\s\S]*?wheel-rotor" animation="\{\{wheelAnimation\}\}"[\s\S]*?<image/, "the visible wheel must be an image animated separately from the offscreen canvas");
+assert.ok(!/wheel-rotor" style=/.test(spinnerMarkup), "the visible wheel must not rely on an inline CSS transition that diverges on iOS");
 
 assert.match(midpointPageSource, /typeof wx\.chooseLocation !== ['"]function['"]/, "midpoint must guard unsupported native map APIs");
 assert.match(midpointPageSource, /translateX\(\$\{delta\}px\)/, "blind-box drag distance must use the same pixel unit as touch coordinates");

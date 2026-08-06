@@ -3,11 +3,13 @@
 .decision-row { display:flex; flex-wrap:wrap; align-items:center; gap:16rpx; margin-bottom:20rpx; }
 .decision-label { flex:0 0 auto; color:#4C5C5B; font-size:24rpx; }
 .decision-input { width:250rpx; max-width:100%; height:72rpx; box-sizing:border-box; padding:0 20rpx; border:2rpx solid #DED8C6; border-radius:18rpx; background:#FFFDF6; color:#1B2A2E; font-size:28rpx; }
+.wheel-render-canvas { position:fixed; left:-10000px; top:0; width:560rpx; height:560rpx; opacity:0; pointer-events:none; }
 .wheel-stage { position:relative; width:560rpx; max-width:100%; height:580rpx; margin:6rpx auto 12rpx; }
 .wheel-pointer { position:absolute; z-index:5; top:-2rpx; left:50%; width:0; height:0; transform:translate3d(-50%,0,0); -webkit-transform:translate3d(-50%,0,0); border-left:24rpx solid transparent; border-right:24rpx solid transparent; border-top:42rpx solid #1B2A2E; filter:drop-shadow(0 4rpx 4rpx rgba(0,0,0,.18)); transform-origin:50% 0; -webkit-backface-visibility:hidden; backface-visibility:hidden; }
 .wheel-pointer-ticking { animation:wheel-pointer-tick .14s ease-in-out infinite alternate; }
-.wheel-rotor { position:absolute; left:0; top:20rpx; width:560rpx; height:560rpx; max-width:100%; border-radius:50%; overflow:hidden; box-shadow:0 18rpx 48rpx rgba(27,42,46,.18); transition-property:transform,-webkit-transform; transition-timing-function:cubic-bezier(.12,.72,.14,1); will-change:transform; -webkit-backface-visibility:hidden; backface-visibility:hidden; }
-.wheel-canvas { width:560rpx; height:560rpx; max-width:100%; display:block; }
+.wheel-rotor { position:absolute; left:0; top:20rpx; width:560rpx; height:560rpx; max-width:100%; border-radius:50%; overflow:hidden; background:#EDE8DA; box-shadow:0 18rpx 48rpx rgba(27,42,46,.18); transform-origin:280rpx 280rpx; -webkit-transform-origin:280rpx 280rpx; will-change:transform; -webkit-backface-visibility:hidden; backface-visibility:hidden; }
+.wheel-image { width:100%; height:100%; display:block; border-radius:50%; }
+.wheel-placeholder { width:100%; height:100%; display:flex; align-items:center; justify-content:center; color:#8B928D; font-size:24rpx; }
 .wheel-center { position:absolute; z-index:6; left:50%; top:300rpx; width:112rpx; height:112rpx; transform:translate(-50%,-50%); display:flex; align-items:center; justify-content:center; border:7rpx solid #FFFDF6; border-radius:50%; background:#0F3D36; color:#FFFDF6; font-size:28rpx; font-weight:800; letter-spacing:1rpx; box-shadow:0 4rpx 12rpx rgba(27,42,46,.28); }
 .wheel-center:active { transform:translate(-50%,-50%) scale(.92); }
 .wheel-center-busy { background:#4C5C5B; opacity:.92; }

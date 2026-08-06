@@ -11,12 +11,15 @@
     <input class="decision-input" maxlength="10" value="{{decision}}" bindinput="decisionInput" disabled="{{spinning}}" />
   </view>
 
+  <canvas class="wheel-render-canvas" canvas-id="spinnerCanvas" width="{{canvasSize}}" height="{{canvasSize}}"></canvas>
+
   <view class="wheel-stage">
     <view class="wheel-pointer {{spinning && !motionReduced ? 'wheel-pointer-ticking' : ''}}"></view>
-    <view class="wheel-rotor" style="transform:translate3d(0,0,0) rotate({{wheelRotation}}deg);-webkit-transform:translate3d(0,0,0) rotate({{wheelRotation}}deg);transition-duration:{{spinDuration}}ms;">
-      <canvas class="wheel-canvas" canvas-id="spinnerCanvas" width="{{canvasSize}}" height="{{canvasSize}}"></canvas>
+    <view class="wheel-rotor" animation="{{wheelAnimation}}">
+      <image wx:if="{{wheelImage}}" class="wheel-image" src="{{wheelImage}}" mode="aspectFit"></image>
+      <view wx:else class="wheel-placeholder">转盘准备中…</view>
     </view>
-    <view class="wheel-center {{spinning ? 'wheel-center-busy' : ''}}" catchtap="spin">{{spinButtonText}}</view>
+    <view class="wheel-center {{spinning || !wheelReady ? 'wheel-center-busy' : ''}}" catchtap="spin">{{wheelReady ? spinButtonText : '准备'}}</view>
   </view>
 
   <view class="spin-result {{result ? 'spin-result-show' : ''}} spin-result-{{resultMode}}">{{result}}</view>
