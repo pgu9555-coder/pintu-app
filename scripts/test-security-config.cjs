@@ -9,6 +9,11 @@ const profiles = rules.user_profiles || {};
 const cleanupTasks = rules.profile_avatar_cleanup || {};
 const applyScript = fs.readFileSync(path.join(__dirname, "apply-cloudbase-security.cjs"), "utf8");
 const gatewayConfig = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "cloudfunctions", "roomGateway", "config.json"), "utf8"));
+const mapGatewayConfig = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "cloudfunctions", "mapGateway", "config.json"), "utf8"));
+const mapGatewayPackage = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "cloudfunctions", "mapGateway", "package.json"), "utf8"));
+const functionRules = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "cloudbase-function-security-rules.json"), "utf8"));
+const cloudbaseConfig = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "cloudbaserc.json"), "utf8"));
+const deployWorkflow = fs.readFileSync(path.join(__dirname, "..", ".github", "workflows", "deploy-cloudbase.yml"), "utf8");
 
 assert.equal(
   rooms.read,
@@ -32,5 +37,19 @@ assert.ok(
   gatewayConfig.permissions && Array.isArray(gatewayConfig.permissions.openapi) && gatewayConfig.permissions.openapi.includes("security.msgSecCheck"),
   "roomGateway must declare the WeChat text-security cloud-call permission"
 );
+assert.deepEqual(mapGatewayConfig.permissions, { openapi: [] }, "mapGateway must remain an auth-only proxy with no broad OpenAPI permissions");
+assert.equal(mapGatewayPackage.dependencies["wx-server-sdk"], "3.0.1", "mapGateway dependencies must be pinned");
+assert.equal(functionRules["*"].invoke, false, "unknown cloud functions must remain closed by default");
+assert.equal(functionRules.roomGateway.invoke, "auth != null", "roomGateway must require authentication");
+assert.equal(functionRules.mapGateway.invoke, "auth != null", "mapGateway must require authentication");
+assert.ok(cloudbaseConfig.functions.some((item) => item.name === "mapGateway"), "CloudBase deployment must include mapGateway");
+assert.match(deployWorkflow, /secrets\.AMAP_WEB_SERVICE_KEY/, "deployment must source the map key from a GitHub secret");
+assert.match(deployWorkflow, /id:\s*map-secret[\s\S]*?GITHUB_OUTPUT/, "deployment must detect whether the optional map secret exists without exposing it");
+assert.match(deployWorkflow, /echo "available=false" >> "\$GITHUB_OUTPUT"/, "a missing map secret must produce an explicit false guard output");
+assert.match(deployWorkflow, /name:\s*Deploy map search gateway\s*\r?\n\s*if:\s*\$\{\{\s*steps\.map-secret\.outputs\.available\s*==\s*'true'\s*\}\}/, "mapGateway deployment must be skipped when the optional map secret is absent");
+assert.match(deployWorkflow, /name:\s*Configure map search secret\s*\r?\n\s*if:\s*\$\{\{\s*steps\.map-secret\.outputs\.available\s*==\s*'true'\s*\}\}/, "mapGateway configuration must be skipped when the optional map secret is absent");
+assert.doesNotMatch(deployWorkflow, /Missing AMAP_WEB_SERVICE_KEY/, "a missing optional map secret must not fail the website and room deployment");
+assert.match(deployWorkflow, /config update fn mapGateway[\s\S]*?--env-mode merge/, "deployment must merge the map secret into the function configuration");
+assert.ok(!/AMAP_WEB_SERVICE_KEY\s*[:=]\s*[0-9a-z]{16,}/i.test(deployWorkflow), "deployment workflow must not contain a literal map key");
 
 console.log("CloudBase security configuration checks passed.");

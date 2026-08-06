@@ -10,6 +10,15 @@
       "timeout": 15,
       "memorySize": 256,
       "installDependency": true
+    },
+    {
+      "name": "mapGateway",
+      "type": "Event",
+      "handler": "index.main",
+      "runtime": "Nodejs20.19",
+      "timeout": 8,
+      "memorySize": 128,
+      "installDependency": true
     }
   ]
 }

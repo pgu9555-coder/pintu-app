@@ -18,6 +18,7 @@ on:
       - scripts/test-index-html.cjs
       - scripts/test-security-config.cjs
       - scripts/test-miniprogram-native.cjs
+      - scripts/test-map-gateway.cjs
       - "miniprogram-shell/**"
       - .github/workflows/deploy-cloudbase.yml
   workflow_dispatch:
@@ -44,6 +45,30 @@ jobs:
     steps:
       - name: Checkout main
         uses: actions/checkout@v5
+
+      - name: Validate deployment secrets
+        env:
+          TCB_SECRET_ID: ${{ secrets.TCB_SECRET_ID }}
+          TCB_SECRET_KEY: ${{ secrets.TCB_SECRET_KEY }}
+        shell: bash
+        run: |
+          if [ -z "$TCB_SECRET_ID" ] || [ -z "$TCB_SECRET_KEY" ]; then
+            echo "Missing TCB_SECRET_ID or TCB_SECRET_KEY in GitHub Actions secrets."
+            exit 1
+          fi
+
+      - name: Detect optional map service secret
+        id: map-secret
+        env:
+          AMAP_WEB_SERVICE_KEY: ${{ secrets.AMAP_WEB_SERVICE_KEY }}
+        shell: bash
+        run: |
+          if [ -n "$AMAP_WEB_SERVICE_KEY" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "AMAP_WEB_SERVICE_KEY is not configured; mapGateway deployment will be skipped."
+          fi
 
       - name: Set up Node.js
         uses: actions/setup-node@v5
@@ -79,6 +104,7 @@ jobs:
           node scripts/test-index-html.cjs
           node scripts/test-security-config.cjs
           node scripts/test-miniprogram-native.cjs
+          node scripts/test-map-gateway.cjs
 
       - name: Install deployment dependencies
         run: npm install --no-save @cloudbase/manager-node@5.6.6 @cloudbase/node-sdk@3.18.3
@@ -93,6 +119,22 @@ jobs:
 
       - name: Deploy room access gateway
         run: tcb fn deploy roomGateway --force --yes
+
+      - name: Deploy map search gateway
+        if: ${{ steps.map-secret.outputs.available == 'true' }}
+        run: tcb fn deploy mapGateway --force --yes
+
+      - name: Configure map search secret
+        if: ${{ steps.map-secret.outputs.available == 'true' }}
+        env:
+          AMAP_WEB_SERVICE_KEY: ${{ secrets.AMAP_WEB_SERVICE_KEY }}
+        shell: bash
+        run: |
+          tcb config update fn mapGateway \
+            --env "AMAP_WEB_SERVICE_KEY=$AMAP_WEB_SERVICE_KEY" \
+            --env-mode merge \
+            -e pintu-d4g77ecn24b674fa0 \
+            --yes
 
       - name: Apply and verify function security rules
         env:

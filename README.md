@@ -7,6 +7,7 @@
 - `index.html`：已上线的 Web 版，单文件原生前端。
 - `miniprogram-shell/`：原生微信小程序版，不使用 `web-view`。
 - `cloudfunctions/roomGateway/`：房间权限、内容安全和多人数据同步网关。
+- `cloudfunctions/mapGateway/`：小程序地址联想和附近地点搜索代理；高德 Web Service Key 只保存在云端。
 
 ## 当前功能
 
@@ -53,6 +54,7 @@ node scripts/test-migrate-room-members.cjs
 node scripts/test-index-html.cjs
 node scripts/test-security-config.cjs
 node scripts/test-miniprogram-native.cjs
+node scripts/test-map-gateway.cjs
 ```
 
 原生小程序请用微信开发者工具导入 `miniprogram-shell/`。项目 AppID 为 `wxe1fe19432c29e3cd`，CloudBase 环境为 `pintu-d4g77ecn24b674fa0`。
@@ -67,6 +69,8 @@ node scripts/test-miniprogram-native.cjs
 4. 保持头像文件在 CloudBase 默认私有存储中；仅资料本人可通过自己的资料页使用。
 5. 将根目录的 Web 文件部署到 CloudBase 静态托管。
 
+若要启用小程序地址搜索，需要在 GitHub 仓库的 Actions secrets 中配置 `AMAP_WEB_SERVICE_KEY`。它必须是高德控制台创建的“Web 服务”Key，不能复用网页里的“Web 端（JS API）”Key。流水线会把它以合并模式写入 `mapGateway` 的云函数环境变量，不会提交到 Git；密钥尚未配置时只跳过地图网关，网站和房间同步仍会正常部署。
+
 微信小程序代码不会随网站自动发布到微信。它仍需在微信开发者工具或其 CLI 中上传版本，然后到微信公众平台提交审核并发布。
 
 ## 小程序发布前的后台事项
@@ -74,6 +78,7 @@ node scripts/test-miniprogram-native.cjs
 - 将小程序账号与 CloudBase 环境关联，并确认 `roomGateway` 已部署。
 - 在隐私保护指引中勾选：用户信息（微信昵称、头像）、发布内容、选择的位置信息、剪切板，以及自定义“用户标识符（OpenID）”；不要误选宽泛的“位置信息”。
 - 开通并声明 `wx.chooseLocation` 所需的位置接口。
+- 小程序地图联想统一调用 `mapGateway`，不需要把 `restapi.amap.com` 加入小程序 request 合法域名，也不要把高德 Web Service Key 写进小程序源码。
 - 完成小程序备案；需要搜索与分享能力时，再完成认证并处理当前搜索限制。
 - 使用至少两台真机验证：创建、加入、位置同步、候选投票、账本增删改、成员退出与房主解散。
 
@@ -84,6 +89,7 @@ node scripts/test-miniprogram-native.cjs
 ├── index.html
 ├── miniprogram-shell/
 ├── cloudfunctions/roomGateway/
+├── cloudfunctions/mapGateway/
 ├── cloudbase-security-rules.json
 ├── cloudbase-function-security-rules.json
 ├── scripts/

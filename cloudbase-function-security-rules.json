@@ -4,5 +4,8 @@
   },
   "roomGateway": {
     "invoke": "auth != null"
+  },
+  "mapGateway": {
+    "invoke": "auth != null"
   }
 }

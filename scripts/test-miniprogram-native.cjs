@@ -38,6 +38,7 @@ for (const page of app.pages) {
 
 const appSource = fs.readFileSync(path.join(root, "app.js"), "utf8");
 const appStyles = fs.readFileSync(path.join(root, "app.wxss"), "utf8");
+const amapSource = fs.readFileSync(path.join(root, "utils", "amap.js"), "utf8");
 assert.match(
   appSource,
   /wx\.cloud\.init\s*\(\s*\{[\s\S]*?\benv\s*:\s*['"]pintu-d4g77ecn24b674fa0['"]/,
@@ -65,6 +66,32 @@ for (const file of jsFiles) {
     assert.ok(!pattern.test(source), `${path.relative(root, file)} must not use ${name}`);
   }
 }
+
+assert.match(amapSource, /wx\.cloud\.callFunction/, "map utility must call the CloudBase map gateway");
+assert.match(amapSource, /name:\s*['"]mapGateway['"]/, "map utility must use the dedicated mapGateway function");
+assert.match(amapSource, /function configuredKey\(\)\s*\{[\s\S]*?return true/, "map utility must preserve configuredKey as an availability contract");
+assert.doesNotMatch(amapSource, /wx\.request|restapi\.amap\.com|amapMiniKey|\.key\b/, "map utility must not expose a provider key or call the provider directly");
+
+let mapClientCall = null;
+const mapClientSandbox = {
+  module: { exports: {} },
+  wx: { cloud: { callFunction(options) {
+    mapClientCall = options;
+    return Promise.resolve({ result: { ok: true, data: [{ id: "safe-result" }] } });
+  } } }
+};
+vm.runInNewContext(amapSource, mapClientSandbox, { filename: "utils/amap.js" });
+const amapClient = mapClientSandbox.module.exports;
+assert.equal(amapClient.configuredKey(), true, "the server-backed map client must remain enabled without a bundled key");
+amapClient.inputTips("coffee").then((items) => assert.equal(items[0].id, "safe-result"));
+assert.equal(mapClientCall.name, "mapGateway", "text search must use the map gateway");
+assert.equal(mapClientCall.data.action, "inputTips", "text search must use the bounded gateway action");
+assert.equal(mapClientCall.data.keywords, "coffee", "text search must forward only the typed query");
+amapClient.nearby({ latitude: 22.5, longitude: 114.1 }).then((items) => assert.equal(items[0].id, "safe-result"));
+assert.equal(mapClientCall.name, "mapGateway", "nearby search must use the map gateway");
+assert.equal(mapClientCall.data.action, "nearby", "nearby search must use the bounded gateway action");
+assert.equal(mapClientCall.data.latitude, 22.5, "nearby search must send only fixed coordinate inputs to the gateway");
+assert.equal(mapClientCall.data.longitude, 114.1, "nearby search must send only fixed coordinate inputs to the gateway");
 
 for (const file of jsFiles) {
   const source = fs.readFileSync(file, "utf8");

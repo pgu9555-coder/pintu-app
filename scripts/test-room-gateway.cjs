@@ -669,6 +669,129 @@ async function main() {
     accessPlatform: "web"
   });
   assert.equal(miniCrossPlatformWrite.ok, true, "mini-program writes must sync into a Web-created room");
+
+  // Exercise the full shared-ledger lifecycle with a clean room and fresh reads
+  // from the opposite client after each mutation. This represents the two
+  // independent client caches rather than sharing a response object.
+  const crossLedgerCreated = await callWx("openid-cross-ledger-owner", {
+    action: "create",
+    room: { toolType: "ledger", name: "Cross client ledger", members: [{ name: "Mini owner" }] }
+  });
+  const crossLedgerDocId = crossLedgerCreated.data.docId;
+  const crossLedgerWebJoin = await call("cross-ledger-web", {
+    action: "join", type: "ledger", code: crossLedgerCreated.data.room.code, name: "Web member"
+  });
+  const crossLedgerMiniEpoch = crossLedgerCreated.data.viewer.membershipEpoch;
+  const crossLedgerWebEpoch = crossLedgerWebJoin.data.viewer.membershipEpoch;
+  const crossLedgerBase = clone(crossLedgerWebJoin.data.room.ledger);
+  const crossLedgerOwner = crossLedgerBase.members.find((member) => member.uid === "wx:wx-test-pintu:openid-cross-ledger-owner");
+  const crossLedgerWebMember = crossLedgerBase.members.find((member) => member.uid === "cross-ledger-web");
+  const crossLedgerAt = Date.now() - 1000;
+  const crossLedgerExpense = {
+    id: "cross-client-expense",
+    desc: "Shared taxi",
+    amountCents: 2560,
+    payerId: crossLedgerOwner.id,
+    splitIds: [crossLedgerOwner.id, crossLedgerWebMember.id],
+    createdAt: crossLedgerAt,
+    updatedAt: crossLedgerAt,
+    updatedBy: "wx:wx-test-pintu:openid-cross-ledger-owner"
+  };
+  const miniAddedCrossExpense = await callWx("openid-cross-ledger-owner", {
+    action: "syncLedger",
+    docId: crossLedgerDocId,
+    membershipEpoch: crossLedgerMiniEpoch,
+    ledger: { ...crossLedgerBase, expenses: [crossLedgerExpense], revision: crossLedgerAt, updatedAt: crossLedgerAt }
+  });
+  assert.equal(miniAddedCrossExpense.ok, true);
+  const webFreshAfterAdd = await call("cross-ledger-web", { action: "getRoom", docId: crossLedgerDocId });
+  assert.equal(webFreshAfterAdd.data.room.ledger.expenses[0].desc, "Shared taxi", "a mini-created expense persists to a fresh Web read");
+  const webEditedLedger = clone(webFreshAfterAdd.data.room.ledger);
+  webEditedLedger.expenses[0] = { ...webEditedLedger.expenses[0], desc: "Shared taxi edited on Web", updatedAt: crossLedgerAt + 1, updatedBy: "cross-ledger-web" };
+  webEditedLedger.revision = crossLedgerAt + 1;
+  webEditedLedger.updatedAt = crossLedgerAt + 1;
+  const webEditedCrossExpense = await call("cross-ledger-web", {
+    action: "syncLedger", docId: crossLedgerDocId, membershipEpoch: crossLedgerWebEpoch, ledger: webEditedLedger
+  });
+  assert.equal(webEditedCrossExpense.ok, true);
+  const miniFreshAfterEdit = await callWx("openid-cross-ledger-owner", { action: "getRoom", docId: crossLedgerDocId });
+  assert.equal(miniFreshAfterEdit.data.room.ledger.expenses[0].desc, "Shared taxi edited on Web", "a Web edit persists to a fresh mini-program read");
+  const webDeletedLedger = clone(webEditedCrossExpense.data.ledger);
+  webDeletedLedger.expenses = [];
+  webDeletedLedger.expenseTombstones[crossLedgerExpense.id] = { deletedAt: crossLedgerAt + 2, deletedBy: "cross-ledger-web" };
+  webDeletedLedger.revision = crossLedgerAt + 2;
+  webDeletedLedger.updatedAt = crossLedgerAt + 2;
+  const webDeletedCrossExpense = await call("cross-ledger-web", {
+    action: "syncLedger", docId: crossLedgerDocId, membershipEpoch: crossLedgerWebEpoch, ledger: webDeletedLedger
+  });
+  assert.equal(webDeletedCrossExpense.ok, true);
+  const miniFreshAfterDelete = await callWx("openid-cross-ledger-owner", { action: "getRoom", docId: crossLedgerDocId });
+  assert.equal(miniFreshAfterDelete.data.room.ledger.expenses.some((expense) => expense.id === crossLedgerExpense.id), false, "a Web delete persists to a fresh mini-program read");
+  const duplicateReorderedRetry = clone(webEditedLedger);
+  duplicateReorderedRetry.expenses = [...duplicateReorderedRetry.expenses].reverse();
+  duplicateReorderedRetry.revision = crossLedgerAt + 1;
+  duplicateReorderedRetry.updatedAt = crossLedgerAt + 1;
+  const retriedDeletedExpense = await call("cross-ledger-web", {
+    action: "syncLedger", docId: crossLedgerDocId, membershipEpoch: crossLedgerWebEpoch, ledger: duplicateReorderedRetry
+  });
+  assert.equal(retriedDeletedExpense.ok, true);
+  assert.equal(retriedDeletedExpense.data.ledger.expenses.some((expense) => expense.id === crossLedgerExpense.id), false, "a duplicate, reordered stale retry cannot resurrect a deleted expense");
+  const leftCrossLedger = await call("cross-ledger-web", { action: "leave", docId: crossLedgerDocId });
+  assert.equal(leftCrossLedger.ok, true);
+  assert.equal((await call("cross-ledger-web", { action: "getRoom", docId: crossLedgerDocId })).data.room, null, "leave is visible immediately to the other client session's room read");
+  const crossLedgerRejoined = await call("cross-ledger-web", {
+    action: "join", type: "ledger", code: crossLedgerCreated.data.room.code, name: "Web member"
+  });
+  const staleQueuedCrossLedgerWrite = await call("cross-ledger-web", {
+    action: "syncLedger", docId: crossLedgerDocId, membershipEpoch: crossLedgerWebEpoch, ledger: duplicateReorderedRetry
+  });
+  assert.equal(staleQueuedCrossLedgerWrite.code, "STALE_MEMBERSHIP", "a queued pre-leave Web mutation is rejected after rejoining");
+  assert.notEqual(crossLedgerRejoined.data.viewer.membershipEpoch, crossLedgerWebEpoch);
+
+  const crossMidpointCreated = await call("cross-midpoint-web-owner", {
+    action: "create", room: { toolType: "midpoint", name: "Cross client midpoint", members: [{ name: "Web owner" }] }
+  });
+  const crossMidpointDocId = crossMidpointCreated.data.docId;
+  const crossMidpointMiniJoin = await callWx("openid-cross-midpoint-member", {
+    action: "join", type: "midpoint", code: crossMidpointCreated.data.room.code, name: "Mini member"
+  });
+  const crossMidpointWebEpoch = crossMidpointCreated.data.viewer.membershipEpoch;
+  const crossMidpointMiniEpoch = crossMidpointMiniJoin.data.viewer.membershipEpoch;
+  assert.equal((await callWx("openid-cross-midpoint-member", {
+    action: "setMeetupPoint", docId: crossMidpointDocId, membershipEpoch: crossMidpointMiniEpoch, mutationAt: crossLedgerAt + 10,
+    person: { name: "Mini point", address: "Mini address", lat: 22.5, lng: 113.9 }
+  })).ok, true);
+  assert.equal((await call("cross-midpoint-web-owner", {
+    action: "setMeetupPoint", docId: crossMidpointDocId, membershipEpoch: crossMidpointWebEpoch, mutationAt: crossLedgerAt + 11,
+    person: { name: "Web point", address: "Web address", lat: 22.51, lng: 113.91 }
+  })).ok, true);
+  assert.equal((await callWx("openid-cross-midpoint-member", { action: "getRoom", docId: crossMidpointDocId })).data.room.meetup.people.length, 2, "midpoint points converge across fresh client reads");
+  const crossCandidates = [{ name: "Cross cafe", lat: 22.51, lng: 113.91, typeStr: "Cafe", dist: 1, isMall: false, isDrink: true }];
+  const crossPublished = await call("cross-midpoint-web-owner", {
+    action: "publishDecisionCandidates", docId: crossMidpointDocId, membershipEpoch: crossMidpointWebEpoch, candidates: crossCandidates
+  });
+  assert.equal(crossPublished.ok, true);
+  const crossCandidateId = crossPublished.data.decision.candidates[0].id;
+  const crossVoted = await callWx("openid-cross-midpoint-member", {
+    action: "setDecisionVote", docId: crossMidpointDocId, membershipEpoch: crossMidpointMiniEpoch,
+    roundId: crossPublished.data.decision.roundId, revision: crossPublished.data.decision.revision, candidateId: crossCandidateId, value: "want"
+  });
+  assert.equal(crossVoted.ok, true);
+  const crossConfirmed = await call("cross-midpoint-web-owner", {
+    action: "confirmDecisionCandidate", docId: crossMidpointDocId, membershipEpoch: crossMidpointWebEpoch,
+    roundId: crossVoted.data.decision.roundId, revision: crossVoted.data.decision.revision, candidateId: crossCandidateId
+  });
+  assert.equal(crossConfirmed.ok, true);
+  const crossReopened = await callWx("openid-cross-midpoint-member", {
+    action: "reopenDecision", docId: crossMidpointDocId, membershipEpoch: crossMidpointMiniEpoch,
+    roundId: crossConfirmed.data.decision.roundId, revision: crossConfirmed.data.decision.revision
+  });
+  assert.equal(crossReopened.code, "NOT_OWNER", "cross-client midpoint confirmation remains owner-gated");
+  const crossOwnerReopened = await call("cross-midpoint-web-owner", {
+    action: "reopenDecision", docId: crossMidpointDocId, membershipEpoch: crossMidpointWebEpoch,
+    roundId: crossConfirmed.data.decision.roundId, revision: crossConfirmed.data.decision.revision
+  });
+  assert.equal(crossOwnerReopened.ok, true, "cross-client midpoint candidates, votes, confirmation, and reopening converge");
   const outsiderRead = await call("not-a-member", { action: "getRoom", docId });
   assert.equal(outsiderRead.ok, true);
   assert.equal(outsiderRead.data.room, null, "getRoom must not expose rooms to non-members");
