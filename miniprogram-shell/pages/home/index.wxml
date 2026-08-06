@@ -93,17 +93,39 @@
 
   <view wx:if="{{wechatLoginVisible}}" class="wechat-login-overlay" catchtouchmove="preventClose">
     <view class="wechat-login-dialog">
-      <view class="wechat-login-mark">微</view>
-      <view class="wechat-login-title">使用微信账号登录</view>
-      <view class="wechat-login-subtitle">登录后才能安全识别房主、找回房间并同步多人数据。</view>
-      <view class="wechat-login-points">
-        <view class="wechat-login-point"><text class="wechat-login-check">✓</text><text>识别你是哪个房间成员，防止他人冒充房主</text></view>
-        <view class="wechat-login-point"><text class="wechat-login-check">✓</text><text>跨设备同步碰面地点、候选结果和行程账本</text></view>
-        <view class="wechat-login-point"><text class="wechat-login-check">✓</text><text>不会自动读取头像或昵称；只有你主动选择并保存时才上传</text></view>
-        <view class="wechat-login-point"><text class="wechat-login-check">✓</text><text>位置只在你主动选择地点时使用</text></view>
-      </view>
-      <button class="wechat-login-button" bindtap="confirmWechatLogin" loading="{{wechatLoginBusy}}" disabled="{{wechatLoginBusy}}">微信登录并继续</button>
-      <button class="wechat-login-privacy" bindtap="openPrivacy">查看隐私保护指引</button>
+      <block wx:if="{{!wechatProfileConfirming}}">
+        <view class="wechat-login-mark">微</view>
+        <view class="wechat-login-title">使用微信账号登录</view>
+        <view class="wechat-login-subtitle">登录后才能安全识别房主、找回房间并同步多人数据。</view>
+        <view class="wechat-login-points">
+          <view class="wechat-login-point"><text class="wechat-login-check">✓</text><text>识别你是哪个房间成员，防止他人冒充房主</text></view>
+          <view class="wechat-login-point"><text class="wechat-login-check">✓</text><text>跨设备同步碰面地点、候选结果和行程账本</text></view>
+          <view class="wechat-login-point"><text class="wechat-login-check">✓</text><text>不会自动读取头像或昵称；只有你主动选择并保存时才上传</text></view>
+          <view class="wechat-login-point"><text class="wechat-login-check">✓</text><text>位置只在你主动选择地点时使用</text></view>
+        </view>
+        <button class="wechat-login-button" bindtap="confirmWechatLogin" loading="{{wechatLoginBusy}}" disabled="{{wechatLoginBusy}}">微信登录并继续</button>
+        <button class="wechat-login-privacy" bindtap="openPrivacy">查看隐私保护指引</button>
+      </block>
+      <block wx:else>
+        <view class="wechat-login-mark">微</view>
+        <view class="wechat-login-title">确认你的资料</view>
+        <view class="wechat-login-subtitle">资料仅归你的微信账号。微信要求你主动选择头像；我们无法也不会静默读取头像。</view>
+        <view class="profile-head wechat-profile-head">
+          <image wx:if="{{profileAvatarPreview}}" class="profile-avatar" src="{{profileAvatarPreview}}" mode="aspectFill" />
+          <view wx:else class="profile-avatar profile-avatar-placeholder">微</view>
+          <view wx:if="{{canChooseAvatar}}" class="avatar-action-wrap">
+            <button class="avatar-action" open-type="chooseAvatar" bindchooseavatar="chooseAvatar" disabled="{{profileBusy || !profileLoaded}}">选择头像</button>
+          </view>
+          <view wx:else class="avatar-unsupported">当前微信版本不支持选择头像</view>
+        </view>
+        <input class="profile-input" type="nickname" placeholder="微信昵称" placeholder-class="input-placeholder" value="{{profileNickname}}" maxlength="24" bindinput="profileNicknameInput" disabled="{{!profileLoaded || profileBusy}}" />
+        <button class="wechat-login-button" bindtap="saveProfile" loading="{{profileBusy}}" disabled="{{profileBusy || !profileLoaded}}">保存资料并进入</button>
+        <view wx:if="{{profileAvatarCleanupPending}}" class="avatar-cleanup-warning">
+          <text>有 {{profileAvatarCleanupPending}} 个旧头像文件待清理</text>
+          <button class="profile-text-action" bindtap="retryAvatarCleanup" disabled="{{profileBusy}}">重试清理</button>
+        </view>
+        <button class="wechat-login-privacy" bindtap="openPrivacy">查看隐私保护指引</button>
+      </block>
     </view>
   </view>
 </view>

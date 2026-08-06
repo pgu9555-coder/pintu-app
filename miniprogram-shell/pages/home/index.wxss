@@ -42,6 +42,7 @@
 .wechat-login-mark { display:flex; align-items:center; justify-content:center; width:88rpx; height:88rpx; margin:0 auto 22rpx; border-radius:26rpx; background:#DDECE7; color:#0F3D36; font-size:34rpx; font-weight:800; }
 .wechat-login-title { color:#1B2A2E; font-size:36rpx; font-weight:800; line-height:1.3; }
 .wechat-login-subtitle { margin:12rpx auto 24rpx; color:#4C5C5B; font-size:23rpx; line-height:1.55; }
+.wechat-profile-head { justify-content:center; margin:2rpx 0 22rpx; }
 .wechat-login-points { padding:20rpx; border-radius:20rpx; background:#F6F3EA; text-align:left; }
 .wechat-login-point { display:flex; align-items:flex-start; gap:12rpx; padding:8rpx 0; color:#344744; font-size:22rpx; line-height:1.5; }
 .wechat-login-check { flex:0 0 auto; color:#2E745F; font-weight:800; }

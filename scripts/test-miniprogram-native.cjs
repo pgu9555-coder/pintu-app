@@ -113,7 +113,15 @@ assert.ok(!/profile\.nickname\s*\|\|\s*storage\.getName\(\)/.test(homePageSource
 assert.ok(!/wx\.getUserProfile/.test(homePageSource + homeMarkup), "the deprecated getUserProfile API must not be used");
 assert.ok(!/wx\.login\s*\(/.test(homePageSource), "trusted CloudBase OpenID must not be replaced by a client login identifier");
 assert.match(homeMarkup, /使用微信账号登录[\s\S]*?微信登录并继续/, "home must explain WeChat identity use before entering the app");
-assert.match(homePageSource, /confirmWechatLogin\(\)[\s\S]*?ensurePrivacyAuthorized\(\)[\s\S]*?loadProfile\(\)/, "WeChat entry must authorize privacy before loading the trusted profile");
+assert.match(homeMarkup, /wechatProfileConfirming[\s\S]*?open-type="chooseAvatar"[\s\S]*?type="nickname"[\s\S]*?保存资料并进入/, "first login must require an explicit native avatar and nickname confirmation step");
+assert.match(homeMarkup, /无法也不会静默读取头像/, "first login must accurately explain WeChat avatar privacy behavior");
+assert.match(homePageSource, /confirmWechatLogin\(\)[\s\S]*?ensurePrivacyAuthorized\(\)[\s\S]*?ensureAccountScope\(\)[\s\S]*?loadProfile\(\)[\s\S]*?wechatProfileConfirming:\s*true/, "WeChat entry must bind the trusted account before showing profile confirmation");
+assert.match(homePageSource, /if \(profile && profile\.exists\)[\s\S]*?wechatLoginVisible:\s*false[\s\S]*?else[\s\S]*?wechatProfileConfirming:\s*true/, "returning users must not be forced to rewrite an already-saved profile");
+assert.match(homePageSource, /const completesWechatLogin = this\.data\.wechatProfileConfirming[\s\S]*?wechatLoginVisible:\s*completesWechatLogin \? false/, "the blocking login overlay must close only after profile persistence succeeds");
+assert.match(appSource, /applyAccountProfile\(profile\)[\s\S]*?storage\.setAccountScope\(nextProfile\)[\s\S]*?globalData\.accountProfile = nextProfile/, "saved profile changes must refresh the global trusted-account cache");
+assert.match(homePageSource, /gateway\.updateProfile\([\s\S]*?applyAccountProfile\(profile\)/, "saving a profile must refresh the account cache with the server result");
+assert.match(homePageSource, /isAmbiguousProfileUpdateError[\s\S]*?gateway\.getProfile\(\)[\s\S]*?latestProfile\.avatarFileId[\s\S]*?PROFILE_UPDATE_UNCONFIRMED/, "ambiguous avatar updates must reconcile before any cleanup");
+assert.match(homePageSource, /cleanupUploadedOnFailure\s*\?[\s\S]*?deleteUnsavedAvatarUpload\(uploadedFileId\)[\s\S]*?头像已保留，避免损坏云端资料/, "an unconfirmed avatar update must preserve the uploaded file");
 assert.match(homePageSource, /wx\.getPrivacySetting[\s\S]*?wx\.requirePrivacyAuthorize/, "WeChat entry must use the current privacy authorization flow when required");
 
 const tripsPageSource = fs.readFileSync(path.join(root, "pages", "trips", "index.js"), "utf8");
@@ -158,8 +166,122 @@ assert.match(midpointPageSource, /LOCAL_MIDPOINT_KEY/, "midpoint must preserve s
 assert.match(midpointPageSource, /chooseLocalPoint\(event\)/, "standalone midpoint must let each address be selected from the native map");
 assert.match(midpointPageSource, /if \(!amap\.configuredKey\(\)\)[\s\S]*?this\.addDecisionCandidate\(\)/, "room candidate search must fall back to native map selection when AMap is unavailable");
 assert.match(midpointPageSource, /startSwipe\(\)[\s\S]*?swipeAction\(event\)/, "midpoint must expose the same candidate blind-box flow as Web");
-assert.match(midpointMarkup, /再加一个出发点/, "standalone midpoint must support more than two addresses");
-assert.match(midpointMarkup, /选择第一个出发点[\s\S]*?选择第二个出发点/, "standalone midpoint must clearly expose the first and second departure-point choices");
+assert.match(midpointPageSource, /const MAX_LOCAL_POINTS = 4/, "standalone midpoint must cap the compact people list at four");
+assert.match(midpointMarkup, /item\.isSelf && item\.avatarFileId[\s\S]*?point-avatar-image[\s\S]*?item\.initial/, "the first local person must show the saved WeChat avatar with a 我 fallback");
+assert.ok(!/point-avatar local-avatar[^>]*>\{\{index \+ 1\}\}/.test(midpointMarkup), "standalone midpoint must not show numbered placeholder avatars");
+assert.match(midpointMarkup, /添加一位出发的朋友/, "standalone midpoint must add friends on demand");
+assert.match(midpointPageSource, /localFriendLetter\(index - 1\)/, "added people must be labelled B, C and D after the self row");
+assert.match(midpointPageSource, /points\.length < 2[\s\S]*?points\.some\(\(point\) => !hasLocalCoordinates\(point\)\)/, "local midpoint must require every displayed person to choose a location");
+assert.match(midpointPageSource, /String\(point && point\.id \|\| ''\) !== `local-\$\{index \+ 1\}`/, "legacy migration must not delete newly-added blank friends");
+
+let midpointPageDefinition = null;
+const midpointStorageWrites = [];
+const midpointToasts = [];
+const midpointStorageStub = {
+  setScoped(key, value) {
+    midpointStorageWrites.push({ key, value });
+    return true;
+  }
+};
+const midpointUtilStub = {
+  average(room) {
+    const people = room.meetup.people;
+    return {
+      latitude: people.reduce((sum, person) => sum + Number(person.lat), 0) / people.length,
+      longitude: people.reduce((sum, person) => sum + Number(person.lng), 0) / people.length
+    };
+  },
+  markers() { return []; }
+};
+const midpointSandbox = {
+  require(request) {
+    if (/storage$/.test(request)) return midpointStorageStub;
+    if (/midpoint$/.test(request)) return midpointUtilStub;
+    if (/amap$/.test(request)) return { configuredKey() { return false; } };
+    return {};
+  },
+  Page(definition) { midpointPageDefinition = definition; },
+  wx: { showToast(options) { midpointToasts.push(options); } },
+  console,
+  setTimeout,
+  clearTimeout,
+  globalThis: null
+};
+midpointSandbox.globalThis = midpointSandbox;
+vm.runInNewContext(
+  `${midpointPageSource}\n;globalThis.__localPointTest = { emptyLocalPoints, validLocalState, normalizeLocalPoints, hasLocalCoordinates };`,
+  midpointSandbox,
+  { filename: "pages/midpoint/index.js" }
+);
+assert.ok(midpointPageDefinition, "midpoint page definition must load in the test sandbox");
+const localPointTest = midpointSandbox.__localPointTest;
+const defaultLocalPoints = localPointTest.emptyLocalPoints();
+assert.equal(defaultLocalPoints.length, 1, "standalone midpoint must start with only the current user");
+assert.equal(defaultLocalPoints[0].initial, "我", "the default current-user avatar fallback must be 我");
+assert.equal(defaultLocalPoints[0].isSelf, true, "the default row must be marked as the current user");
+assert.equal(localPointTest.hasLocalCoordinates({ lat: null, lng: null }), false, "null coordinates must never be treated as zero coordinates");
+assert.equal(localPointTest.hasLocalCoordinates({ lat: " ", lng: " " }), false, "whitespace coordinates must never be treated as zero coordinates");
+assert.equal(localPointTest.hasLocalCoordinates({ lat: 91, lng: 0 }), false, "latitudes outside the geographic range must be rejected");
+assert.equal(localPointTest.hasLocalCoordinates({ lat: 0, lng: 181 }), false, "longitudes outside the geographic range must be rejected");
+assert.equal(localPointTest.hasLocalCoordinates({ lat: 0, lng: 0 }), true, "real zero coordinates must remain valid");
+const migratedLegacy = localPointTest.validLocalState({ points: [
+  { id: "local-1", name: "地点 1", address: "", lat: null, lng: null },
+  { id: "local-2", name: "地点 2", address: "", lat: null, lng: null }
+] }, { nickname: "测试用户", avatarFileId: "cloud://avatar" });
+assert.equal(migratedLegacy.points.length, 1, "untouched legacy two-row drafts must migrate to the new one-person default");
+assert.equal(migratedLegacy.points[0].avatarFileId, "cloud://avatar", "the current user's saved avatar must decorate the first row");
+const deliberateBlankFriend = localPointTest.validLocalState({ points: [
+  { id: "local-self", isSelf: true, label: "我", address: "", lat: null, lng: null },
+  { id: "local-friend-1", isSelf: false, label: "朋友 B", address: "", lat: null, lng: null }
+] }, {});
+assert.equal(deliberateBlankFriend.points.length, 2, "a deliberately-added blank friend must survive page reload");
+assert.equal(deliberateBlankFriend.points[1].initial, "B", "the first added friend must be B");
+
+function createMidpointContext(points) {
+  const context = Object.assign({}, midpointPageDefinition);
+  context.data = {
+    localPoints: points,
+    localCandidates: [],
+    localCalculated: false,
+    center: null,
+    markers: [],
+    mapSearchMessage: ''
+  };
+  context.accountProfile = { nickname: "测试用户", avatarFileId: "cloud://avatar" };
+  context.localStorageReady = true;
+  context.localSearchVersion = 0;
+  context.setData = function setData(update, callback) {
+    this.data = Object.assign({}, this.data, update);
+    if (callback) callback();
+  };
+  context.searchLocalCandidates = function searchLocalCandidates() {};
+  return context;
+}
+
+midpointStorageWrites.length = 0;
+const midpointBehavior = createMidpointContext(defaultLocalPoints);
+midpointBehavior.addLocalPoint();
+assert.equal(Array.from(midpointBehavior.data.localPoints, (point) => point.initial).join(','), "我,B", "the first add action must create friend B");
+midpointBehavior.addLocalPoint();
+midpointBehavior.addLocalPoint();
+assert.equal(Array.from(midpointBehavior.data.localPoints, (point) => point.initial).join(','), "我,B,C,D", "friend additions must remain sequential through D");
+midpointBehavior.removeLocalPoint({ currentTarget: { dataset: { id: midpointBehavior.data.localPoints[1].id } } });
+assert.equal(Array.from(midpointBehavior.data.localPoints, (point) => point.initial).join(','), "我,B,C", "deleting a middle friend must renumber the remaining friends");
+const latestMidpointWrite = midpointStorageWrites[midpointStorageWrites.length - 1];
+assert.ok(latestMidpointWrite && latestMidpointWrite.key === "pintu-local-midpoint-v2", "local people changes must use account-scoped storage");
+assert.ok(!Object.hasOwn(latestMidpointWrite.value.points[0], "avatarFileId"), "the profile avatar must never be persisted in the midpoint draft");
+
+const midpointCalculation = createMidpointContext(localPointTest.normalizeLocalPoints([
+  { id: "local-self", address: "位置一", lat: 22.5, lng: 114 },
+  { id: "local-friend-1", address: "", lat: null, lng: null }
+], {}));
+midpointCalculation.calculateLocalMidpoint();
+assert.equal(midpointCalculation.data.localCalculated, false, "an added friend without a location must block calculation");
+midpointCalculation.data.localPoints[1] = Object.assign({}, midpointCalculation.data.localPoints[1], { address: "位置二", lat: 22.7, lng: 114.2 });
+midpointCalculation.calculateLocalMidpoint();
+assert.equal(midpointCalculation.data.localCalculated, true, "all displayed people with locations must calculate");
+assert.equal(midpointCalculation.data.center.latitude, 22.6, "behavioral midpoint latitude must be averaged");
+assert.equal(midpointCalculation.data.center.longitude, 114.1, "behavioral midpoint longitude must be averaged");
 assert.match(midpointMarkup, /不知道选哪个？盲盒帮你挑/, "midpoint must render the destination blind-box entry");
 
 const ledger = require(path.join(root, "utils", "ledger.js"));

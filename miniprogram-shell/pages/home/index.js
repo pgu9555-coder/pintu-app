@@ -33,6 +33,12 @@ function cleanupNeedsManualAttention(result) {
   return Boolean(result && result.avatarCleanup && result.avatarCleanup.status === 'unmanaged')
 }
 
+function isAmbiguousProfileUpdateError(error) {
+  const code = String(error && error.code || '')
+  const message = String(error && (error.diagnostic || error.message) || '')
+  return code === 'NETWORK_ERROR' || /^-?\d+$/.test(code) || /network|timeout|request:fail|socket|连接|超时/i.test(message)
+}
+
 Page({
   data: {
     name: '',
@@ -53,6 +59,7 @@ Page({
     profilePanelOpen: false,
     wechatLoginVisible: true,
     wechatLoginBusy: false,
+    wechatProfileConfirming: false,
     headerTopPx: 52
   },
 
@@ -111,8 +118,22 @@ Page({
     this.setData({ wechatLoginBusy: true })
     try {
       await this.ensurePrivacyAuthorized()
-      this.setData({ wechatLoginVisible: false })
-      await this.loadProfile()
+      // This tap establishes the CloudBase account scope, but it never asks
+      // WeChat to disclose an avatar or nickname automatically.
+      const app = getApp()
+      if (app && typeof app.ensureAccountScope === 'function') await app.ensureAccountScope()
+      const profile = await this.loadProfile()
+      if (this.data.profileError) return
+      if (profile && profile.exists) {
+        // Returning users have already confirmed and saved their profile. The
+        // identity explanation still appears at launch, but they are not
+        // forced to rewrite the same cloud profile on every visit.
+        this.setData({ wechatLoginVisible: false, wechatProfileConfirming: false })
+      } else {
+        // Keep the blocking overlay in place until a first-time user actively
+        // confirms the profile with the official WeChat controls.
+        this.setData({ wechatProfileConfirming: true })
+      }
     } catch (error) {
       wx.showToast({
         title: error && error.message ? error.message : '微信登录暂时失败，请重试',
@@ -175,6 +196,7 @@ Page({
         avatarUploadPrefix: profile.avatarUploadPrefix || '',
         name: nextName
       })
+      return profile
     } catch (error) {
       storage.clearAccountScope()
       this.setData({
@@ -182,6 +204,7 @@ Page({
         profileError: error && error.message ? error.message : '微信账号暂时无法识别'
       })
       wx.showToast({ title: '微信账号暂时无法识别', icon: 'none' })
+      return null
     }
   },
 
@@ -215,6 +238,7 @@ Page({
     }
     this.setData({ profileBusy: true })
     let uploadedFileId = ''
+    let cleanupUploadedOnFailure = true
     try {
       let avatarFileId = this.data.profileAvatarFileId || ''
       const pendingAvatarUrl = this.data.pendingAvatarUrl
@@ -229,12 +253,47 @@ Page({
         uploadedFileId = upload && upload.fileID
         if (!uploadedFileId) throw new Error('头像上传失败，请稍后重试')
         avatarFileId = uploadedFileId
+        cleanupUploadedOnFailure = false
       }
-      const profile = await gateway.updateProfile({
-        nickname,
-        avatarFileId
-      })
+      let profile
+      try {
+        profile = await gateway.updateProfile({ nickname, avatarFileId })
+      } catch (updateError) {
+        if (!isAmbiguousProfileUpdateError(updateError)) {
+          cleanupUploadedOnFailure = true
+          throw updateError
+        }
+
+        let latestProfile = null
+        try {
+          latestProfile = await gateway.getProfile()
+        } catch (_) {}
+        if (
+          latestProfile &&
+          String(latestProfile.nickname || '') === nickname &&
+          String(latestProfile.avatarFileId || '') === String(avatarFileId || '')
+        ) {
+          // The function committed but its response was lost. Reconcile from
+          // the authoritative profile instead of deleting the referenced file.
+          profile = latestProfile
+        } else if (latestProfile) {
+          // The server is reachable and confirms that this upload is unused.
+          cleanupUploadedOnFailure = true
+          throw updateError
+        } else {
+          const uncertainError = new Error('资料保存结果暂时无法确认，请稍后重新打开查看')
+          uncertainError.code = 'PROFILE_UPDATE_UNCONFIRMED'
+          uncertainError.cause = updateError
+          throw uncertainError
+        }
+      }
+      // The server has accepted the uploaded FileID at this point. Do not
+      // clean it up if a later local UI/cache operation happens to fail.
+      uploadedFileId = ''
+      const app = getApp()
+      if (app && typeof app.applyAccountProfile === 'function') app.applyAccountProfile(profile)
       storage.saveName(profile.nickname)
+      const completesWechatLogin = this.data.wechatProfileConfirming
       this.setData({
         profileExists: Boolean(profile.exists),
         profileNickname: profile.nickname,
@@ -242,18 +301,25 @@ Page({
         profileAvatarPreview: profile.avatarFileId || '',
         pendingAvatarUrl: '',
         profileAvatarCleanupPending: cleanupPendingCount(profile),
-        name: profile.nickname
+        name: profile.nickname,
+        wechatLoginVisible: completesWechatLogin ? false : this.data.wechatLoginVisible,
+        wechatProfileConfirming: completesWechatLogin ? false : this.data.wechatProfileConfirming
       })
-      this.closeProfilePanel()
+      if (!completesWechatLogin) this.closeProfilePanel()
       const pendingCount = cleanupPendingCount(profile)
       wx.showToast({
         title: cleanupNeedsManualAttention(profile) ? '资料已保存，旧头像未自动删除' : pendingCount ? '资料已保存，旧头像待清理' : '微信资料已保存',
         icon: cleanupNeedsManualAttention(profile) || pendingCount ? 'none' : 'success'
       })
     } catch (error) {
-      const cleanup = await deleteUnsavedAvatarUpload(uploadedFileId)
+      const cleanup = cleanupUploadedOnFailure
+        ? await deleteUnsavedAvatarUpload(uploadedFileId)
+        : { deleted: false, error: '' }
       const message = error.message || '资料保存失败，请稍后重试'
-      wx.showToast({ title: cleanup.deleted || !uploadedFileId ? message : `${message}；新头像待清理`, icon: 'none' })
+      const title = !cleanupUploadedOnFailure && uploadedFileId
+        ? `${message}；头像已保留，避免损坏云端资料`
+        : (cleanup.deleted || !uploadedFileId ? message : `${message}；新头像待清理`)
+      wx.showToast({ title, icon: 'none' })
     } finally {
       this.setData({ profileBusy: false })
     }
@@ -281,6 +347,8 @@ Page({
     this.setData({ profileBusy: true })
     try {
       const profile = await gateway.updateProfile({ avatarFileId: '' })
+      const app = getApp()
+      if (app && typeof app.applyAccountProfile === 'function') app.applyAccountProfile(profile)
       this.setData({
         profileExists: Boolean(profile.exists),
         profileAvatarFileId: '',
@@ -308,6 +376,10 @@ Page({
         this.setData({ profileBusy: true })
         try {
           const result = await gateway.deleteProfile()
+          const app = getApp()
+          if (app && typeof app.applyAccountProfile === 'function') {
+            app.applyAccountProfile({ exists: false, nickname: '', avatarFileId: '' })
+          }
           storage.saveName('')
           this.setData({
             name: '',

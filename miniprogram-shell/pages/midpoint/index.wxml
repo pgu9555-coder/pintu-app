@@ -95,7 +95,7 @@
 
     <view class="card point-card">
       <view class="section-heading">
-        <view><view class="section-title">{{room ? '大家的出发点' : '填写出发点'}}</view><view class="muted">{{room ? people.length : localPoints.length}} 个位置参与计算</view></view>
+        <view><view class="section-title">{{room ? '大家的出发点' : '大家的出发地址'}}</view><view class="muted">{{room ? people.length : localPoints.length}} 位出发的人</view></view>
       </view>
 
       <block wx:if="{{room}}">
@@ -126,13 +126,16 @@
       </block>
 
       <block wx:else>
-        <view wx:for="{{localPoints}}" wx:key="id" class="point-row selectable" bindtap="chooseLocalPoint" data-id="{{item.id}}">
-          <view class="point-avatar local-avatar">{{index + 1}}</view>
-          <view class="point-copy"><view class="point-name">{{item.address ? item.name : (index === 0 ? '选择第一个出发点' : (index === 1 ? '选择第二个出发点' : '选择第 ' + (index + 1) + ' 个出发点'))}}</view><view class="point-address">{{item.address || '点这里打开地图搜索具体位置'}}</view></view>
-          <button wx:if="{{localPoints.length > 2}}" class="remove-point" catchtap="removeLocalPoint" data-id="{{item.id}}">×</button>
+        <view wx:for="{{localPoints}}" wx:key="id" class="point-row local-person-row selectable" bindtap="chooseLocalPoint" data-id="{{item.id}}">
+          <view class="point-avatar {{item.isSelf ? 'self-avatar' : 'friend-avatar'}}">
+            <image wx:if="{{item.isSelf && item.avatarFileId}}" class="point-avatar-image" src="{{item.avatarFileId}}" mode="aspectFill" />
+            <text wx:else>{{item.initial}}</text>
+          </view>
+          <view class="point-copy"><view class="point-name">{{item.label}}</view><view class="point-address">{{item.address || '点击选择出发地点'}}</view></view>
+          <view wx:if="{{!item.isSelf}}" class="remove-point" catchtap="removeLocalPoint" data-id="{{item.id}}" role="button" aria-label="删除这位朋友">×</view>
           <view wx:else class="row-arrow">›</view>
         </view>
-        <button class="dashed-button" bindtap="addLocalPoint">＋ 再加一个出发点</button>
+        <button wx:if="{{localPoints.length < 4}}" class="dashed-button" bindtap="addLocalPoint">＋ 添加一位出发的朋友</button>
         <button class="btn calculate-button" bindtap="calculateLocalMidpoint">算公平中点和找去处</button>
       </block>
     </view>

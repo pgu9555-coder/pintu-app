@@ -18,6 +18,19 @@ App({
     this.globalData.accountPromise = null
   },
 
+  // Keep the trusted profile returned by CloudBase in one place. Pages that
+  // have just saved a profile use this too, so room pages do not retain an
+  // out-of-date avatar or nickname in memory.
+  applyAccountProfile(profile) {
+    const nextProfile = Object.assign({}, this.globalData.accountProfile || {}, profile || {})
+    if (!storage.setAccountScope(nextProfile)) {
+      throw new Error('微信账号识别凭据无效，请重新打开小程序')
+    }
+    this.globalData.accountProfile = nextProfile
+    this.globalData.accountPromise = null
+    return nextProfile
+  },
+
   ensureAccountScope() {
     if (storage.isAccountScoped() && this.globalData.accountProfile) {
       return Promise.resolve(this.globalData.accountProfile)
@@ -25,14 +38,7 @@ App({
     if (this.globalData.accountPromise) return this.globalData.accountPromise
 
     this.globalData.accountPromise = gateway.getProfile()
-      .then((profile) => {
-        if (!storage.setAccountScope(profile)) {
-          throw new Error('微信账号识别凭据无效，请重新打开小程序')
-        }
-        this.globalData.accountProfile = profile
-        this.globalData.accountPromise = null
-        return profile
-      })
+      .then((profile) => this.applyAccountProfile(profile))
       .catch((error) => {
         storage.clearAccountScope()
         this.globalData.accountProfile = null

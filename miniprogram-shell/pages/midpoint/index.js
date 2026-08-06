@@ -6,20 +6,72 @@ const amap = require('../../utils/amap')
 const LOCAL_MIDPOINT_KEY = 'pintu-local-midpoint-v2'
 const PENDING_CREATE_KEY = 'pintu-midpoint-pending-create-v1'
 const POINT_OUTBOX_PREFIX = 'pintu-midpoint-point-outbox-v1:'
-const MAX_LOCAL_POINTS = 6
+const MAX_LOCAL_POINTS = 4
 
-function emptyLocalPoints() {
-  return [
-    { id: 'local-1', name: '地点 1', address: '', lat: null, lng: null },
-    { id: 'local-2', name: '地点 2', address: '', lat: null, lng: null }
-  ]
+function localFriendLetter(index) {
+  return String.fromCharCode(66 + index)
 }
 
-function validLocalState(value) {
-  const points = value && Array.isArray(value.points) ? value.points : emptyLocalPoints()
+function hasLocalCoordinates(point) {
+  const lat = point && point.lat
+  const lng = point && point.lng
+  if (lat === null || lat === undefined || lng === null || lng === undefined) return false
+  if (typeof lat === 'boolean' || typeof lng === 'boolean') return false
+  if ((typeof lat === 'string' && !lat.trim()) || (typeof lng === 'string' && !lng.trim())) return false
+  const latitude = Number(lat)
+  const longitude = Number(lng)
+  return Number.isFinite(latitude) && Number.isFinite(longitude) &&
+    latitude >= -90 && latitude <= 90 && longitude >= -180 && longitude <= 180
+}
+
+function isUntouchedLegacyPoints(points) {
+  if (!Array.isArray(points) || points.length !== 2) return false
+  return points.every((point, index) => {
+    if (String(point && point.id || '') !== `local-${index + 1}`) return false
+    const name = String(point && point.name || '').trim()
+    const address = String(point && point.address || '').trim()
+    return !hasLocalCoordinates(point) && !address && (!name || name === `地点 ${index + 1}`)
+  })
+}
+
+function localPointLabel(point, index, profile) {
+  if (index === 0) return String((profile && profile.nickname) || point && point.label || '我').trim() || '我'
+  return `朋友 ${localFriendLetter(index - 1)}`
+}
+
+function localPointInitial(point, index) {
+  return index === 0 ? '我' : localFriendLetter(index - 1)
+}
+
+function normalizeLocalPoints(points, profile) {
+  const source = Array.isArray(points) ? points : []
+  const rows = isUntouchedLegacyPoints(source) ? [] : source.slice(0, MAX_LOCAL_POINTS)
+  const base = rows.length ? rows : [{}]
+  return base.map((point, index) => {
+    const isSelf = index === 0
+    return {
+      id: isSelf ? 'local-self' : String(point && point.id || `local-friend-${index}`),
+      isSelf,
+      label: localPointLabel(point, index, profile),
+      name: String(point && point.name || '').slice(0, 48),
+      initial: localPointInitial(point, index),
+      avatarFileId: isSelf ? String(profile && profile.avatarFileId || '') : '',
+      address: String(point && point.address || '').slice(0, 120),
+      lat: hasLocalCoordinates(point) ? Number(point.lat) : null,
+      lng: hasLocalCoordinates(point) ? Number(point.lng) : null
+    }
+  })
+}
+
+function emptyLocalPoints() {
+  return normalizeLocalPoints([])
+}
+
+function validLocalState(value, profile) {
+  const points = value && Array.isArray(value.points) ? value.points : []
   const candidates = value && Array.isArray(value.candidates) ? value.candidates : []
   return {
-    points: points.length >= 2 ? points.slice(0, MAX_LOCAL_POINTS) : emptyLocalPoints(),
+    points: normalizeLocalPoints(points, profile),
     candidates: candidates.slice(0, 12)
   }
 }
@@ -247,15 +299,17 @@ Page({
     this.pendingMeetupMutation = null
     this.pointFlushBusy = false
     this.lastMeetupMutationAt = 0
-    let localState = validLocalState(null)
+    let accountProfile = null
+    let localState = validLocalState(null, accountProfile)
     let localStorageMessage = ''
     try {
       const app = typeof getApp === 'function' ? getApp() : null
       if (!app || typeof app.ensureAccountScope !== 'function') throw new Error('账户存储初始化不可用')
-      await app.ensureAccountScope()
+      accountProfile = await app.ensureAccountScope()
+      this.accountProfile = accountProfile
       if (typeof storage.isAccountScoped === 'function' && !storage.isAccountScoped()) throw new Error('当前账户存储不可用')
       if (typeof storage.getScoped !== 'function' || typeof storage.setScoped !== 'function') throw new Error('账户存储版本不支持')
-      localState = validLocalState(storage.getScoped(LOCAL_MIDPOINT_KEY, null))
+      localState = validLocalState(storage.getScoped(LOCAL_MIDPOINT_KEY, null), accountProfile)
       const pendingCreateRaw = storage.getScoped(PENDING_CREATE_KEY, null)
       const pendingCreate = validPendingCreate(pendingCreateRaw)
       if (pendingCreateRaw && !pendingCreate && typeof storage.removeScoped === 'function') storage.removeScoped(PENDING_CREATE_KEY)
@@ -272,9 +326,7 @@ Page({
       headerTopPx: layout.headerTopPx(),
       amapConfigured: Boolean(amap.configuredKey()),
       localStorageMessage,
-      localPoints: localState.points.map((point, index) => Object.assign({}, point, {
-        initial: String(point.name || `地点 ${index + 1}`).slice(0, 1)
-      })),
+      localPoints: localState.points,
       localCandidates: localState.candidates
     })
     if (wx.onNetworkStatusChange) {
@@ -728,14 +780,27 @@ Page({
 
   saveLocalState(points, candidates) {
     if (!this.localStorageReady || typeof storage.setScoped !== 'function') return false
-    return storage.setScoped(LOCAL_MIDPOINT_KEY, { points, candidates })
+    // The avatar belongs to the account profile only.  Local midpoint drafts keep
+    // locations, while shared rooms never receive profile/avatar fields.
+    const savedPoints = (points || []).map((point) => ({
+      id: point.id,
+      isSelf: Boolean(point.isSelf),
+      name: point.name,
+      label: point.label,
+      initial: point.initial,
+      address: point.address,
+      lat: point.lat,
+      lng: point.lng
+    }))
+    return storage.setScoped(LOCAL_MIDPOINT_KEY, { points: savedPoints, candidates })
   },
 
   resetLocalCalculation(points) {
+    const normalizedPoints = normalizeLocalPoints(points, this.accountProfile)
     this.localSearchVersion += 1
-    this.saveLocalState(points, [])
+    this.saveLocalState(normalizedPoints, [])
     this.setData({
-      localPoints: points,
+      localPoints: normalizedPoints,
       localCandidates: [],
       localCalculated: false,
       center: null,
@@ -746,14 +811,16 @@ Page({
 
   addLocalPoint() {
     if (this.data.localPoints.length >= MAX_LOCAL_POINTS) {
-      wx.showToast({ title: '最多添加 6 个出发地', icon: 'none' })
+      wx.showToast({ title: '最多 4 位出发的人', icon: 'none' })
       return
     }
-    const index = this.data.localPoints.length + 1
+    const index = this.data.localPoints.length
     const points = this.data.localPoints.concat({
-      id: `local-${Date.now()}-${index}`,
-      name: `地点 ${index}`,
-      initial: '地',
+      id: `local-friend-${Date.now()}-${index}`,
+      isSelf: false,
+      label: `朋友 ${localFriendLetter(index - 1)}`,
+      name: '',
+      initial: localFriendLetter(index - 1),
       address: '',
       lat: null,
       lng: null
@@ -762,11 +829,9 @@ Page({
   },
 
   removeLocalPoint(event) {
-    if (this.data.localPoints.length <= 2) {
-      wx.showToast({ title: '至少保留 2 个出发地', icon: 'none' })
-      return
-    }
     const id = String(event.currentTarget.dataset.id || '')
+    const target = this.data.localPoints.find((point) => String(point.id) === id)
+    if (!target || target.isSelf) return
     const points = this.data.localPoints.filter((point) => String(point.id) !== id)
     this.resetLocalCalculation(points)
   },
@@ -777,7 +842,6 @@ Page({
     this.requestLocation((location) => {
       const points = this.data.localPoints.map((point) => String(point.id) === id ? Object.assign({}, point, {
         name: String(location.name || location.address || point.name).slice(0, 48),
-        initial: String(location.name || '地').slice(0, 1),
         address: String(location.address || location.name || '地图地点').slice(0, 120),
         lat: Number(location.latitude),
         lng: Number(location.longitude)
@@ -787,12 +851,16 @@ Page({
   },
 
   calculateLocalMidpoint() {
-    const valid = this.data.localPoints.filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lng))
-    if (valid.length < 2) {
-      wx.showToast({ title: '至少选择 2 个出发地', icon: 'none' })
+    const points = this.data.localPoints
+    if (points.length < 2) {
+      wx.showToast({ title: '请至少添加一位出发的朋友', icon: 'none' })
       return
     }
-    const room = { meetup: { people: valid } }
+    if (points.some((point) => !hasLocalCoordinates(point))) {
+      wx.showToast({ title: '请为每位出发的人选择地点', icon: 'none' })
+      return
+    }
+    const room = { meetup: { people: points } }
     const center = midpoint.average(room)
     this.setData({
       center,
