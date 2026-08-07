@@ -14,6 +14,8 @@ const mapGatewayPackage = JSON.parse(fs.readFileSync(path.join(__dirname, "..", 
 const functionRules = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "cloudbase-function-security-rules.json"), "utf8"));
 const cloudbaseConfig = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "cloudbaserc.json"), "utf8"));
 const deployWorkflow = fs.readFileSync(path.join(__dirname, "..", ".github", "workflows", "deploy-cloudbase.yml"), "utf8");
+const mapConfigScript = fs.readFileSync(path.join(__dirname, "prepare-map-gateway-config.cjs"), "utf8");
+const { withMapGatewaySecret } = require("./prepare-map-gateway-config.cjs");
 
 assert.equal(
   rooms.read,
@@ -46,10 +48,17 @@ assert.ok(cloudbaseConfig.functions.some((item) => item.name === "mapGateway"), 
 assert.match(deployWorkflow, /secrets\.AMAP_WEB_SERVICE_KEY/, "deployment must source the map key from a GitHub secret");
 assert.match(deployWorkflow, /id:\s*map-secret[\s\S]*?GITHUB_OUTPUT/, "deployment must detect whether the optional map secret exists without exposing it");
 assert.match(deployWorkflow, /echo "available=false" >> "\$GITHUB_OUTPUT"/, "a missing map secret must produce an explicit false guard output");
+assert.match(deployWorkflow, /name:\s*Prepare map search deployment configuration\s*\r?\n\s*if:\s*\$\{\{\s*steps\.map-secret\.outputs\.available\s*==\s*'true'\s*\}\}/, "mapGateway environment preparation must be skipped when the optional map secret is absent");
+assert.match(deployWorkflow, /run:\s*node scripts\/prepare-map-gateway-config\.cjs/, "deployment must prepare the map function environment through the tested script");
 assert.match(deployWorkflow, /name:\s*Deploy map search gateway\s*\r?\n\s*if:\s*\$\{\{\s*steps\.map-secret\.outputs\.available\s*==\s*'true'\s*\}\}/, "mapGateway deployment must be skipped when the optional map secret is absent");
-assert.match(deployWorkflow, /name:\s*Configure map search secret\s*\r?\n\s*if:\s*\$\{\{\s*steps\.map-secret\.outputs\.available\s*==\s*'true'\s*\}\}/, "mapGateway configuration must be skipped when the optional map secret is absent");
 assert.doesNotMatch(deployWorkflow, /Missing AMAP_WEB_SERVICE_KEY/, "a missing optional map secret must not fail the website and room deployment");
-assert.match(deployWorkflow, /config update fn mapGateway[\s\S]*?--env-mode merge/, "deployment must merge the map secret into the function configuration");
+assert.doesNotMatch(deployWorkflow, /config update fn mapGateway|--env-mode|--env\s/, "deployment must not use unsupported CloudBase CLI environment flags");
 assert.ok(!/AMAP_WEB_SERVICE_KEY\s*[:=]\s*[0-9a-z]{16,}/i.test(deployWorkflow), "deployment workflow must not contain a literal map key");
+assert.doesNotMatch(mapConfigScript, /console\.|process\.stdout|process\.stderr/, "map configuration preparation must never print the secret");
+const preparedConfig = withMapGatewaySecret(cloudbaseConfig, "test-map-key-0123456789");
+const preparedMapGateway = preparedConfig.functions.find((item) => item.name === "mapGateway");
+assert.equal(preparedMapGateway.envVariables.AMAP_WEB_SERVICE_KEY, "test-map-key-0123456789", "mapGateway deployment configuration must receive the secret");
+assert.equal(cloudbaseConfig.functions.find((item) => item.name === "mapGateway").envVariables, undefined, "secret preparation must not mutate the checked-in configuration object");
+assert.throws(() => withMapGatewaySecret(cloudbaseConfig, " short "), /missing or invalid/, "invalid map secrets must be rejected before deployment");
 
 console.log("CloudBase security configuration checks passed.");

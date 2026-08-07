@@ -69,7 +69,7 @@ node scripts/test-map-gateway.cjs
 4. 保持头像文件在 CloudBase 默认私有存储中；仅资料本人可通过自己的资料页使用。
 5. 将根目录的 Web 文件部署到 CloudBase 静态托管。
 
-若要启用小程序地址搜索，需要在 GitHub 仓库的 Actions secrets 中配置 `AMAP_WEB_SERVICE_KEY`。它必须是高德控制台创建的“Web 服务”Key，不能复用网页里的“Web 端（JS API）”Key。流水线会把它以合并模式写入 `mapGateway` 的云函数环境变量，不会提交到 Git；密钥尚未配置时只跳过地图网关，网站和房间同步仍会正常部署。
+若要启用小程序地址搜索，需要在 GitHub 仓库的 Actions secrets 中配置 `AMAP_WEB_SERVICE_KEY`。它必须是高德控制台创建的“Web 服务”Key，不能复用网页里的“Web 端（JS API）”Key。流水线只会在临时运行器中把它注入 `mapGateway` 的云函数部署配置，不会提交到 Git 或客户端源码；密钥尚未配置时只跳过地图网关，网站和房间同步仍会正常部署。
 
 微信小程序代码不会随网站自动发布到微信。它仍需在微信开发者工具或其 CLI 中上传版本，然后到微信公众平台提交审核并发布。
 

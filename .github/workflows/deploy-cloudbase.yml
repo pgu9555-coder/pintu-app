@@ -17,6 +17,7 @@ on:
       - scripts/test-room-gateway.cjs
       - scripts/test-index-html.cjs
       - scripts/test-security-config.cjs
+      - scripts/prepare-map-gateway-config.cjs
       - scripts/test-miniprogram-native.cjs
       - scripts/test-map-gateway.cjs
       - "miniprogram-shell/**"
@@ -120,21 +121,15 @@ jobs:
       - name: Deploy room access gateway
         run: tcb fn deploy roomGateway --force --yes
 
-      - name: Deploy map search gateway
-        if: ${{ steps.map-secret.outputs.available == 'true' }}
-        run: tcb fn deploy mapGateway --force --yes
-
-      - name: Configure map search secret
+      - name: Prepare map search deployment configuration
         if: ${{ steps.map-secret.outputs.available == 'true' }}
         env:
           AMAP_WEB_SERVICE_KEY: ${{ secrets.AMAP_WEB_SERVICE_KEY }}
-        shell: bash
-        run: |
-          tcb config update fn mapGateway \
-            --env "AMAP_WEB_SERVICE_KEY=$AMAP_WEB_SERVICE_KEY" \
-            --env-mode merge \
-            -e pintu-d4g77ecn24b674fa0 \
-            --yes
+        run: node scripts/prepare-map-gateway-config.cjs
+
+      - name: Deploy map search gateway
+        if: ${{ steps.map-secret.outputs.available == 'true' }}
+        run: tcb fn deploy mapGateway --force --yes
 
       - name: Apply and verify function security rules
         env:
