@@ -55,10 +55,11 @@ assert.doesNotMatch(deployWorkflow, /Missing AMAP_WEB_SERVICE_KEY/, "a missing o
 assert.doesNotMatch(deployWorkflow, /config update fn mapGateway|--env-mode|--env\s/, "deployment must not use unsupported CloudBase CLI environment flags");
 assert.ok(!/AMAP_WEB_SERVICE_KEY\s*[:=]\s*[0-9a-z]{16,}/i.test(deployWorkflow), "deployment workflow must not contain a literal map key");
 assert.doesNotMatch(mapConfigScript, /console\.|process\.stdout|process\.stderr/, "map configuration preparation must never print the secret");
-const preparedConfig = withMapGatewaySecret(cloudbaseConfig, "test-map-key-0123456789");
+const preparedConfig = withMapGatewaySecret(cloudbaseConfig, "\n testmapkey0123456789 \r\n");
 const preparedMapGateway = preparedConfig.functions.find((item) => item.name === "mapGateway");
-assert.equal(preparedMapGateway.envVariables.AMAP_WEB_SERVICE_KEY, "test-map-key-0123456789", "mapGateway deployment configuration must receive the secret");
+assert.equal(preparedMapGateway.envVariables.AMAP_WEB_SERVICE_KEY, "testmapkey0123456789", "mapGateway deployment configuration must normalize copied whitespace without changing the key");
 assert.equal(cloudbaseConfig.functions.find((item) => item.name === "mapGateway").envVariables, undefined, "secret preparation must not mutate the checked-in configuration object");
 assert.throws(() => withMapGatewaySecret(cloudbaseConfig, " short "), /missing or invalid/, "invalid map secrets must be rejected before deployment");
+assert.throws(() => withMapGatewaySecret(cloudbaseConfig, "test map key 0123456789"), /missing or invalid/, "embedded whitespace in map secrets must be rejected before deployment");
 
 console.log("CloudBase security configuration checks passed.");

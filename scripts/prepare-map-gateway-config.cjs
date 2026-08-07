@@ -7,7 +7,8 @@ function isPlainObject(value) {
 
 function withMapGatewaySecret(sourceConfig, secret) {
   if (!isPlainObject(sourceConfig)) throw new Error("CloudBase configuration is invalid.");
-  if (typeof secret !== "string" || secret !== secret.trim() || secret.length < 16 || secret.length > 256) {
+  const normalizedSecret = typeof secret === "string" ? secret.trim() : "";
+  if (!/^[A-Za-z0-9]{16,64}$/.test(normalizedSecret)) {
     throw new Error("AMAP_WEB_SERVICE_KEY is missing or invalid.");
   }
 
@@ -17,7 +18,7 @@ function withMapGatewaySecret(sourceConfig, secret) {
   if (!mapGateway) throw new Error("mapGateway is missing from cloudbaserc.json.");
 
   const existing = isPlainObject(mapGateway.envVariables) ? mapGateway.envVariables : {};
-  mapGateway.envVariables = { ...existing, AMAP_WEB_SERVICE_KEY: secret };
+  mapGateway.envVariables = { ...existing, AMAP_WEB_SERVICE_KEY: normalizedSecret };
   return config;
 }
 
