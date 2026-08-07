@@ -135,9 +135,21 @@ function requireProviderSuccess(body) {
   if (!body || String(body.status) !== "1") {
     const error = new Error("provider rejected request");
     error.code = "UPSTREAM_UNAVAILABLE";
+    error.providerCode = text(body && body.infocode, 16);
     throw error;
   }
   return body;
+}
+
+function publicProviderError(error) {
+  if (error && error.code === "CONFIGURATION") return "CONFIGURATION";
+  const code = error && error.providerCode;
+  if (code === "10001") return "MAP_KEY_INVALID";
+  if (code === "10002") return "MAP_SERVICE_NOT_AVAILABLE";
+  if (code === "10005") return "MAP_IP_RESTRICTED";
+  if (code === "10009") return "MAP_KEY_PLATFORM_MISMATCH";
+  if (["10003", "10004", "10029", "10044", "10045"].includes(code)) return "RATE_LIMITED";
+  return "UPSTREAM_UNAVAILABLE";
 }
 
 async function main(event) {
@@ -165,10 +177,10 @@ async function main(event) {
     return success(normalizeNearby(body));
   } catch (error) {
     return failure(
-      error && error.code === "CONFIGURATION" ? "CONFIGURATION" : "UPSTREAM_UNAVAILABLE",
+      publicProviderError(error),
       "地图搜索暂时不可用，请使用微信地图选点"
     );
   }
 }
 
-module.exports = { main, _private: { validateEvent, normalizeTips, normalizeNearby, requireProviderSuccess, allowRequest, rateBuckets } };
+module.exports = { main, _private: { validateEvent, normalizeTips, normalizeNearby, requireProviderSuccess, publicProviderError, allowRequest, rateBuckets } };

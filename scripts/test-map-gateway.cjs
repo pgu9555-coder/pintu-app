@@ -79,7 +79,10 @@ async function run() {
   providerBody = { status: "0", info: "USERKEY_PLAT_NOMATCH", infocode: "10009" };
   const rejectedProviderRequest = await gateway.main({ action: "inputTips", keywords: "coffee" });
   assert.equal(rejectedProviderRequest.ok, false, "provider errors must not be misreported as an empty successful result");
-  assert.equal(rejectedProviderRequest.code, "UPSTREAM_UNAVAILABLE");
+  assert.equal(rejectedProviderRequest.code, "MAP_KEY_PLATFORM_MISMATCH", "a JavaScript API key used as a Web Service key must be diagnosable without exposing the key");
+  assert.equal(gateway._private.publicProviderError({ providerCode: "10001" }), "MAP_KEY_INVALID");
+  assert.equal(gateway._private.publicProviderError({ providerCode: "10003" }), "RATE_LIMITED");
+  assert.equal(gateway._private.publicProviderError({ providerCode: "29999" }), "UPSTREAM_UNAVAILABLE");
 
   delete process.env.AMAP_WEB_SERVICE_KEY;
   assert.equal((await gateway.main({ action: "inputTips", keywords: "tea" })).code, "CONFIGURATION");
