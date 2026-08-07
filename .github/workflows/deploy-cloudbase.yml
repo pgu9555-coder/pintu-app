@@ -20,6 +20,7 @@ on:
       - scripts/prepare-map-gateway-config.cjs
       - scripts/test-miniprogram-native.cjs
       - scripts/test-map-gateway.cjs
+      - scripts/deployment-trigger.txt
       - "miniprogram-shell/**"
       - .github/workflows/deploy-cloudbase.yml
   workflow_dispatch:
