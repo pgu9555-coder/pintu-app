@@ -23,6 +23,8 @@ on:
       - "miniprogram-shell/**"
       - .github/workflows/deploy-cloudbase.yml
   workflow_dispatch:
+    # Repository secret changes do not emit a push event; manually re-running
+    # this workflow applies refreshed values without changing application code.
     inputs:
       run_membership_migration:
         description: "Run the one-time room membership backfill before deployment"
