@@ -38,7 +38,7 @@ concurrency:
 
 jobs:
   deploy:
-    name: Deploy production website
+    name: Test and deploy PintU production
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
