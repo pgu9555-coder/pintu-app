@@ -48,7 +48,10 @@ async function run() {
   assert.equal((await gateway.main({ action: "inputTips", keywords: "coffee" })).code, "UNAUTHORIZED");
   context = { OPENID: "openid-a", APPID: "appid-a" };
   assert.equal((await gateway.main({ action: "delete", path: "/anything" })).code, "INVALID_ACTION");
-  assert.equal((await gateway.main({ action: "inputTips", keywords: "coffee", key: "attacker" })).code, "INVALID_INPUT");
+  const platformDecorated = await gateway.main({ action: "inputTips", keywords: "coffee", key: "attacker", userInfo: { openId: "forged" } });
+  assert.equal(platformDecorated.ok, true, "CloudBase-added event metadata must not invalidate an otherwise safe request");
+  assert.doesNotMatch(lastRequest.path, /attacker|forged/, "untrusted extra fields must never reach the provider request");
+  assert.match(lastRequest.path, /key=0123456789abcdef/, "the provider key must always come from the server environment");
   assert.equal((await gateway.main({ action: "nearby", latitude: 91, longitude: 0 })).code, "INVALID_INPUT");
   gateway._private.rateBuckets.clear();
   for (let index = 0; index < 30; index += 1) assert.equal(gateway._private.allowRequest("caller", "inputTips", 100), true);

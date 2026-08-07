@@ -43,16 +43,17 @@ function validCoordinate(value, min, max) {
 }
 
 function validateEvent(event) {
+  // CloudBase decorates function events with platform metadata. Read only the
+  // explicit action fields below; all other client or platform fields are ignored.
   if (!isPlainObject(event) || typeof event.action !== "string") return failure("INVALID_INPUT", "地图请求无效");
   if (event.action === "inputTips") {
-    if (Object.keys(event).some((key) => key !== "action" && key !== "keywords") || !validText(event.keywords, 2, 80)) {
+    if (!validText(event.keywords, 2, 80)) {
       return failure("INVALID_INPUT", "请输入 2 至 80 个字的地点关键词");
     }
     return { action: "inputTips", keywords: event.keywords };
   }
   if (event.action === "nearby") {
-    if (Object.keys(event).some((key) => key !== "action" && key !== "latitude" && key !== "longitude")
-      || !validCoordinate(event.latitude, -90, 90) || !validCoordinate(event.longitude, -180, 180)) {
+    if (!validCoordinate(event.latitude, -90, 90) || !validCoordinate(event.longitude, -180, 180)) {
       return failure("INVALID_INPUT", "地点坐标无效");
     }
     return { action: "nearby", latitude: event.latitude, longitude: event.longitude };
