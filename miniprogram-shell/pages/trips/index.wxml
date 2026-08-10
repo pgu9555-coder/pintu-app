@@ -3,6 +3,13 @@
     <view class="trips-mark"><image src="/assets/icons/brand-plane.svg" mode="aspectFit" /></view>
     <view class="page-title">行程</view>
   </view>
+  <view wx:if="{{loginRequired}}" class="state-card empty-state">
+    <view class="empty-icon">微</view>
+    <view class="empty-title">登录后查看你的行程</view>
+    <view class="muted">首次进入不会自动登录。登录后才能按微信身份安全找回云端房间和本地账号数据。</view>
+    <button class="btn primary" style="margin-top:20rpx;" bindtap="goLogin">返回首页登录</button>
+  </view>
+  <block wx:else>
   <view class="section-label trips-label">本地行程</view>
   <button class="btn secondary" style="margin:0 0 18rpx;" bindtap="newLocal">＋ 新建行程账本</button>
   <view wx:if="{{!localTrips.length}}" class="state-card empty-state">
@@ -51,4 +58,5 @@
   </view>
 
   <button wx:if="{{hasMore}}" class="btn secondary load-more" bindtap="loadMore" loading="{{loadingMore}}" disabled="{{loadingMore}}">{{loadingMore ? '加载中…' : '加载更多房间'}}</button>
+  </block>
 </view>

@@ -57,9 +57,11 @@ Page({
     avatarUploadPrefix: '',
     canChooseAvatar: false,
     profilePanelOpen: false,
-    wechatLoginVisible: true,
+    wechatLoginVisible: false,
     wechatLoginBusy: false,
-    wechatProfileConfirming: false,
+    privacyConsentChecked: false,
+    serviceAgreementOpened: false,
+    privacyContractOpened: false,
     headerTopPx: 52
   },
 
@@ -115,26 +117,31 @@ Page({
 
   async confirmWechatLogin() {
     if (this.data.wechatLoginBusy) return
+    if (!this.data.privacyConsentChecked) {
+      wx.showToast({ title: '请先阅读并勾选协议', icon: 'none' })
+      return
+    }
     this.setData({ wechatLoginBusy: true })
     try {
       await this.ensurePrivacyAuthorized()
       // This tap establishes the CloudBase account scope, but it never asks
       // WeChat to disclose an avatar or nickname automatically.
       const app = getApp()
+      if (!app || typeof app.grantAccountConsent !== 'function') throw new Error('登录服务暂时不可用')
+      app.grantAccountConsent()
       if (app && typeof app.ensureAccountScope === 'function') await app.ensureAccountScope()
-      const profile = await this.loadProfile()
-      if (this.data.profileError) return
-      if (profile && profile.exists) {
-        // Returning users have already confirmed and saved their profile. The
-        // identity explanation still appears at launch, but they are not
-        // forced to rewrite the same cloud profile on every visit.
-        this.setData({ wechatLoginVisible: false, wechatProfileConfirming: false })
-      } else {
-        // Keep the blocking overlay in place until a first-time user actively
-        // confirms the profile with the official WeChat controls.
-        this.setData({ wechatProfileConfirming: true })
+      await this.loadProfile()
+      if (this.data.profileError) {
+        if (typeof app.resetAccountScope === 'function') app.resetAccountScope()
+        return
       }
+      const afterLogin = this.afterWechatLogin
+      this.afterWechatLogin = null
+      this.setData({ wechatLoginVisible: false, privacyConsentChecked: false })
+      if (typeof afterLogin === 'function') afterLogin()
     } catch (error) {
+      const app = getApp()
+      if (app && typeof app.resetAccountScope === 'function') app.resetAccountScope()
       wx.showToast({
         title: error && error.message ? error.message : '微信登录暂时失败，请重试',
         icon: 'none'
@@ -144,7 +151,49 @@ Page({
     }
   },
 
+  requestWechatLogin(afterLogin) {
+    this.afterWechatLogin = typeof afterLogin === 'function' ? afterLogin : null
+    this.setData({
+      wechatLoginVisible: true,
+      privacyConsentChecked: false,
+      serviceAgreementOpened: false,
+      privacyContractOpened: false,
+      profileError: ''
+    })
+  },
+
+  cancelWechatLogin() {
+    if (this.data.wechatLoginBusy) return
+    this.afterWechatLogin = null
+    this.setData({
+      wechatLoginVisible: false,
+      privacyConsentChecked: false,
+      serviceAgreementOpened: false,
+      privacyContractOpened: false
+    })
+  },
+
+  togglePrivacyConsent() {
+    if (this.data.wechatLoginBusy) return
+    if (!this.data.serviceAgreementOpened || !this.data.privacyContractOpened) {
+      wx.showToast({ title: '请先分别打开并阅读两份文件', icon: 'none' })
+      return
+    }
+    this.setData({ privacyConsentChecked: !this.data.privacyConsentChecked })
+  },
+
+  openServiceAgreement() {
+    wx.navigateTo({
+      url: '/pages/agreement/index',
+      success: () => this.setData({ serviceAgreementOpened: true })
+    })
+  },
+
   openProfilePanel() {
+    if (!this.accountReady(false)) {
+      this.requestWechatLogin(() => this.openProfilePanel())
+      return
+    }
     if (wx.hideTabBar) wx.hideTabBar({ animation: false, fail() {} })
     this.setData({ profilePanelOpen: true })
   },
@@ -172,6 +221,9 @@ Page({
   async loadProfile() {
     try {
       const app = getApp()
+      if (!app || typeof app.hasAccountConsent !== 'function' || !app.hasAccountConsent()) {
+        throw new Error('请先阅读协议并主动登录')
+      }
       const profile = app && typeof app.ensureAccountScope === 'function'
         ? await app.ensureAccountScope()
         : await gateway.getProfile()
@@ -208,25 +260,29 @@ Page({
     }
   },
 
-  accountReady() {
+  accountReady(showMessage = true) {
+    const app = getApp()
+    if (!app || typeof app.hasAccountConsent !== 'function' || !app.hasAccountConsent()) {
+      if (showMessage) wx.showToast({ title: '请先登录微信账号', icon: 'none' })
+      return false
+    }
     if (!this.data.profileLoaded) {
-      wx.showToast({ title: '正在识别微信账号，请稍候', icon: 'none' })
+      if (showMessage) wx.showToast({ title: '请先登录微信账号', icon: 'none' })
       return false
     }
     if (!storage.isAccountScoped()) {
-      wx.showToast({ title: this.data.profileError || '微信账号暂时无法识别，请重试', icon: 'none' })
+      if (showMessage) wx.showToast({ title: this.data.profileError || '请先登录微信账号', icon: 'none' })
       return false
     }
     return true
   },
 
   async retryProfile() {
-    if (!this.data.profileLoaded) return
     const app = getApp()
     if (app && typeof app.resetAccountScope === 'function') app.resetAccountScope()
     else storage.clearAccountScope()
     this.setData({ profileLoaded: false, profileError: '' })
-    await this.loadProfile()
+    this.requestWechatLogin()
   },
 
   async saveProfile() {
@@ -293,7 +349,6 @@ Page({
       const app = getApp()
       if (app && typeof app.applyAccountProfile === 'function') app.applyAccountProfile(profile)
       storage.saveName(profile.nickname)
-      const completesWechatLogin = this.data.wechatProfileConfirming
       this.setData({
         profileExists: Boolean(profile.exists),
         profileNickname: profile.nickname,
@@ -301,11 +356,9 @@ Page({
         profileAvatarPreview: profile.avatarFileId || '',
         pendingAvatarUrl: '',
         profileAvatarCleanupPending: cleanupPendingCount(profile),
-        name: profile.nickname,
-        wechatLoginVisible: completesWechatLogin ? false : this.data.wechatLoginVisible,
-        wechatProfileConfirming: completesWechatLogin ? false : this.data.wechatProfileConfirming
+        name: profile.nickname
       })
-      if (!completesWechatLogin) this.closeProfilePanel()
+      this.closeProfilePanel()
       const pendingCount = cleanupPendingCount(profile)
       wx.showToast({
         title: cleanupNeedsManualAttention(profile) ? '资料已保存，旧头像未自动删除' : pendingCount ? '资料已保存，旧头像待清理' : '微信资料已保存',
@@ -422,13 +475,11 @@ Page({
   },
 
   openMidpoint() {
-    if (!this.accountReady()) return
     this.rememberName()
     wx.navigateTo({ url: '/pages/midpoint/index' })
   },
 
   openLedger() {
-    if (!this.accountReady()) return
     this.rememberName()
     wx.navigateTo({ url: '/pages/ledger/index' })
   },
@@ -438,7 +489,10 @@ Page({
   },
 
   openTrips() {
-    if (!this.accountReady()) return
+    if (!this.accountReady(false)) {
+      this.requestWechatLogin(() => this.openTrips())
+      return
+    }
     wx.switchTab({ url: '/pages/trips/index' })
   },
 
@@ -453,17 +507,21 @@ Page({
       return
     }
     wx.openPrivacyContract({
+      success: () => this.setData({ privacyContractOpened: true }),
       fail: () => wx.showToast({ title: '暂时无法打开隐私保护指引', icon: 'none' })
     })
   },
 
   async join() {
     if (this.data.busy) return
-    if (!this.accountReady()) return
     const name = this.data.name.trim()
     const code = cleanCode(this.data.code)
     if (!name || code.length !== 8) {
       wx.showToast({ title: '请填写名字和 8 位房间码', icon: 'none' })
+      return
+    }
+    if (!this.accountReady(false)) {
+      this.requestWechatLogin(() => this.join())
       return
     }
 

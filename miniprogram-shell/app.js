@@ -4,7 +4,8 @@ const storage = require('./utils/storage')
 App({
   globalData: {
     accountProfile: null,
-    accountPromise: null
+    accountPromise: null,
+    accountConsentGranted: false
   },
 
   onLaunch() {
@@ -16,6 +17,15 @@ App({
     storage.clearAccountScope()
     this.globalData.accountProfile = null
     this.globalData.accountPromise = null
+    this.globalData.accountConsentGranted = false
+  },
+
+  grantAccountConsent() {
+    this.globalData.accountConsentGranted = true
+  },
+
+  hasAccountConsent() {
+    return this.globalData.accountConsentGranted === true
   },
 
   // Keep the trusted profile returned by CloudBase in one place. Pages that
@@ -32,6 +42,9 @@ App({
   },
 
   ensureAccountScope() {
+    if (!this.hasAccountConsent()) {
+      return Promise.reject(new Error('请先阅读协议并主动登录'))
+    }
     if (storage.isAccountScoped() && this.globalData.accountProfile) {
       return Promise.resolve(this.globalData.accountProfile)
     }

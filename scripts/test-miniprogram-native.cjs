@@ -140,17 +140,29 @@ assert.match(homePageSource, /onLoad\(options\)[\s\S]*?storage\.saveName\(['"]['
 assert.ok(!/profile\.nickname\s*\|\|\s*storage\.getName\(\)/.test(homePageSource), "profile loading must not fall back to another account's cached nickname");
 assert.ok(!/wx\.getUserProfile/.test(homePageSource + homeMarkup), "the deprecated getUserProfile API must not be used");
 assert.ok(!/wx\.login\s*\(/.test(homePageSource), "trusted CloudBase OpenID must not be replaced by a client login identifier");
-assert.match(homeMarkup, /使用微信账号登录[\s\S]*?微信登录并继续/, "home must explain WeChat identity use before entering the app");
-assert.match(homeMarkup, /wechatProfileConfirming[\s\S]*?open-type="chooseAvatar"[\s\S]*?type="nickname"[\s\S]*?保存资料并进入/, "first login must require an explicit native avatar and nickname confirmation step");
-assert.match(homeMarkup, /无法也不会静默读取头像/, "first login must accurately explain WeChat avatar privacy behavior");
-assert.match(homePageSource, /confirmWechatLogin\(\)[\s\S]*?ensurePrivacyAuthorized\(\)[\s\S]*?ensureAccountScope\(\)[\s\S]*?loadProfile\(\)[\s\S]*?wechatProfileConfirming:\s*true/, "WeChat entry must bind the trusted account before showing profile confirmation");
-assert.match(homePageSource, /if \(profile && profile\.exists\)[\s\S]*?wechatLoginVisible:\s*false[\s\S]*?else[\s\S]*?wechatProfileConfirming:\s*true/, "returning users must not be forced to rewrite an already-saved profile");
-assert.match(homePageSource, /const completesWechatLogin = this\.data\.wechatProfileConfirming[\s\S]*?wechatLoginVisible:\s*completesWechatLogin \? false/, "the blocking login overlay must close only after profile persistence succeeds");
+assert.match(homePageSource, /wechatLoginVisible:\s*false/, "home must render before showing any WeChat login prompt");
+assert.match(homeMarkup, /登录后使用多人协作[\s\S]*?暂不登录/, "deferred WeChat login must be optional and cancellable");
+assert.match(homeMarkup, /privacyConsentChecked[\s\S]*?《用户服务协议》[\s\S]*?《隐私保护指引》/, "login must expose an unchecked agreement choice and readable policy links");
+assert.match(homePageSource, /confirmWechatLogin\(\)[\s\S]*?!this\.data\.privacyConsentChecked[\s\S]*?ensurePrivacyAuthorized\(\)[\s\S]*?grantAccountConsent\(\)[\s\S]*?ensureAccountScope\(\)[\s\S]*?loadProfile\(\)/, "WeChat login must require active consent before binding the trusted account");
+assert.match(homePageSource, /togglePrivacyConsent\(\)[\s\S]*?!this\.data\.serviceAgreementOpened\s*\|\|\s*!this\.data\.privacyContractOpened[\s\S]*?privacyConsentChecked/, "the agreement checkbox must remain unavailable until both documents are opened");
+assert.match(homePageSource, /openServiceAgreement\(\)[\s\S]*?serviceAgreementOpened:\s*true[\s\S]*?openPrivacy\(\)[\s\S]*?privacyContractOpened:\s*true/, "the login flow must record explicit opening of both documents");
+assert.ok(!/wechatProfileConfirming/.test(homePageSource + homeMarkup), "login must not force avatar or nickname confirmation");
+assert.match(homeMarkup, /不会获取手机号[\s\S]*?不会自动读取头像或昵称/, "login must accurately explain that phone and profile fields are not read automatically");
+assert.ok(!/getPhoneNumber|open-type="getPhoneNumber"/.test(homePageSource + homeMarkup), "home must never request a phone number");
+assert.match(homePageSource, /openProfilePanel\(\)[\s\S]*?requestWechatLogin\([\s\S]*?profilePanelOpen:\s*true/, "profile editing must only appear after the user explicitly opens the account entry");
 assert.match(appSource, /applyAccountProfile\(profile\)[\s\S]*?storage\.setAccountScope\(nextProfile\)[\s\S]*?globalData\.accountProfile = nextProfile/, "saved profile changes must refresh the global trusted-account cache");
+assert.match(appSource, /accountConsentGranted:\s*false[\s\S]*?ensureAccountScope\(\)[\s\S]*?!this\.hasAccountConsent\(\)[\s\S]*?Promise\.reject/, "CloudBase identity must not initialize before active login consent");
+assert.match(homePageSource, /loadProfile\(\)[\s\S]*?!app\.hasAccountConsent\(\)[\s\S]*?请先阅读协议并主动登录/, "profile loading must reject attempts that bypass the login consent flow");
+assert.match(homePageSource, /retryProfile\(\)[\s\S]*?resetAccountScope\(\)[\s\S]*?requestWechatLogin\(\)/, "a failed profile retry must return through the unchecked consent flow");
 assert.match(homePageSource, /gateway\.updateProfile\([\s\S]*?applyAccountProfile\(profile\)/, "saving a profile must refresh the account cache with the server result");
 assert.match(homePageSource, /isAmbiguousProfileUpdateError[\s\S]*?gateway\.getProfile\(\)[\s\S]*?latestProfile\.avatarFileId[\s\S]*?PROFILE_UPDATE_UNCONFIRMED/, "ambiguous avatar updates must reconcile before any cleanup");
 assert.match(homePageSource, /cleanupUploadedOnFailure\s*\?[\s\S]*?deleteUnsavedAvatarUpload\(uploadedFileId\)[\s\S]*?头像已保留，避免损坏云端资料/, "an unconfirmed avatar update must preserve the uploaded file");
 assert.match(homePageSource, /wx\.getPrivacySetting[\s\S]*?wx\.requirePrivacyAuthorize/, "WeChat entry must use the current privacy authorization flow when required");
+
+const appConfig = JSON.parse(fs.readFileSync(path.join(root, "app.json"), "utf8"));
+assert.ok(appConfig.pages.includes("pages/agreement/index"), "the readable user service agreement must be registered as a page");
+const agreementMarkup = fs.readFileSync(path.join(root, "pages", "agreement", "index.wxml"), "utf8");
+assert.match(agreementMarkup, /用户服务协议[\s\S]*?登录与资料[\s\S]*?房间与内容[\s\S]*?权限与隐私/, "the user service agreement must explain identity, room content and privacy behavior");
 
 const tripsPageSource = fs.readFileSync(path.join(root, "pages", "trips", "index.js"), "utf8");
 const tripsMarkup = fs.readFileSync(path.join(root, "pages", "trips", "index.wxml"), "utf8");
@@ -162,6 +174,8 @@ assert.ok(!/storage\.all\(/.test(tripsPageSource), "trips must not display share
 assert.match(tripsPageSource, /storage\.getScoped\(LOCAL_LEDGER_TRIPS_KEY/, "trips must read local ledgers only from account-scoped storage");
 assert.match(tripsPageSource, /storage\.setScoped\(LOCAL_LEDGER_TRIPS_KEY/, "deleting a local trip must remain account-scoped");
 assert.match(tripsPageSource, /ensureAccountScope/, "trips must wait for the authenticated account scope before reading local or cloud data");
+assert.match(tripsPageSource, /onShow\(\)[\s\S]*?hasAccountConsent\(\)[\s\S]*?!consentGranted\s*\|\|\s*!storage\.isAccountScoped\(\)[\s\S]*?loginRequired:\s*true[\s\S]*?return[\s\S]*?this\.refresh\(\)/, "opening the trips tab must not silently establish a cloud identity before consent");
+assert.match(tripsMarkup, /登录后查看你的行程[\s\S]*?首次进入不会自动登录[\s\S]*?返回首页登录/, "the signed-out trips state must explain and defer login");
 assert.match(tripsPageSource, /storage\.save\(\{ docId: entry\.docId, room: entry\.room \}\)/, "opening a trusted cloud room may refresh its local cache");
 assert.match(tripsPageSource, /cloudError/, "trips must retain a clear cloud-load error state");
 assert.match(tripsMarkup, /正在同步你的云端房间/, "trips must render a cloud loading state");
@@ -179,6 +193,8 @@ assert.ok(!/restoreRoomSnapshot\(docId, previousSnapshot\)/.test(tripsPageSource
 
 const midpointPageSource = fs.readFileSync(path.join(root, "pages", "midpoint", "index.js"), "utf8");
 const midpointMarkup = fs.readFileSync(path.join(root, "pages", "midpoint", "index.wxml"), "utf8");
+assert.match(midpointPageSource, /consentGranted[\s\S]*?游客模式：可以计算中点[\s\S]*?else\s*\{[\s\S]*?ensureAccountScope\(\)/, "midpoint must remain usable in guest mode without silently creating a cloud identity");
+assert.match(midpointPageSource, /create\(\)[\s\S]*?!this\.scopeReady[\s\S]*?创建房间前请返回首页登录/, "guest midpoint creation must explicitly defer login");
 assert.match(midpointPageSource, /function currentDecision\(/, "midpoint must normalize decision state before rendering");
 assert.match(midpointPageSource, /membershipEpoch:\s*viewer\.membershipEpoch/, "decision writes must carry membershipEpoch");
 assert.match(midpointPageSource, /recoverPendingPointDraft\(pending[\s\S]*?mineDraftDirty\s*=\s*true/, "invalidated meetup writes must remain as an editable local draft");
@@ -353,6 +369,9 @@ assert.equal(ledger.settlementPlan(largeLedgerFixture).exact, false, "large ledg
 
 const ledgerPageSource = fs.readFileSync(path.join(root, "pages", "ledger", "index.js"), "utf8");
 const ledgerMarkup = fs.readFileSync(path.join(root, "pages", "ledger", "index.wxml"), "utf8");
+assert.match(ledgerPageSource, /consentGranted[\s\S]*?this\.guestMode = true[\s\S]*?emptyLocalLedger\(\)[\s\S]*?syncText:\s*['"]游客体验['"]/, "ledger must initialize a real in-memory guest experience before login");
+assert.match(ledgerPageSource, /syncLedger\(next\)[\s\S]*?!this\.docId\s*&&\s*this\.guestMode[\s\S]*?applyStandaloneLedger\(next, true\)/, "guest ledger edits must work without cloud or persistent account storage");
+assert.match(ledgerMarkup, /游客模式：可以体验添加同行人、记支出和计算转账/, "ledger must clearly explain guest data is not saved");
 assert.match(ledgerPageSource, /LOCAL_LEDGER_TRIPS_KEY/, "ledger must support persistent standalone trips");
 assert.match(ledgerPageSource, /newTripId\(/, "new standalone ledgers must receive a distinct trip ID");
 assert.match(ledgerPageSource, /options && options\.tripId/, "a standalone trip must be reopenable by tripId");

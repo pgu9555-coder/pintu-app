@@ -302,24 +302,29 @@ Page({
     let accountProfile = null
     let localState = validLocalState(null, accountProfile)
     let localStorageMessage = ''
-    try {
-      const app = typeof getApp === 'function' ? getApp() : null
-      if (!app || typeof app.ensureAccountScope !== 'function') throw new Error('账户存储初始化不可用')
-      accountProfile = await app.ensureAccountScope()
-      this.accountProfile = accountProfile
-      if (typeof storage.isAccountScoped === 'function' && !storage.isAccountScoped()) throw new Error('当前账户存储不可用')
-      if (typeof storage.getScoped !== 'function' || typeof storage.setScoped !== 'function') throw new Error('账户存储版本不支持')
-      localState = validLocalState(storage.getScoped(LOCAL_MIDPOINT_KEY, null), accountProfile)
-      const pendingCreateRaw = storage.getScoped(PENDING_CREATE_KEY, null)
-      const pendingCreate = validPendingCreate(pendingCreateRaw)
-      if (pendingCreateRaw && !pendingCreate && typeof storage.removeScoped === 'function') storage.removeScoped(PENDING_CREATE_KEY)
-      this.pendingCreateId = pendingCreate && pendingCreate.requestId || ''
-      if (this.docId) this.loadPointOutbox(this.docId)
-      this.localStorageReady = true
-      this.scopeReady = true
-    } catch (error) {
-      localStorageMessage = '本机草稿未加载：账户存储尚未准备好。'
-      wx.showToast({ title: localStorageMessage, icon: 'none' })
+    const app = typeof getApp === 'function' ? getApp() : null
+    const consentGranted = Boolean(app && typeof app.hasAccountConsent === 'function' && app.hasAccountConsent())
+    if (!consentGranted) {
+      localStorageMessage = '游客模式：可以计算中点；本次草稿不会保存，创建或加入房间时再登录。'
+    } else {
+      try {
+        if (!app || typeof app.ensureAccountScope !== 'function') throw new Error('账户存储初始化不可用')
+        accountProfile = await app.ensureAccountScope()
+        this.accountProfile = accountProfile
+        if (typeof storage.isAccountScoped === 'function' && !storage.isAccountScoped()) throw new Error('当前账户存储不可用')
+        if (typeof storage.getScoped !== 'function' || typeof storage.setScoped !== 'function') throw new Error('账户存储版本不支持')
+        localState = validLocalState(storage.getScoped(LOCAL_MIDPOINT_KEY, null), accountProfile)
+        const pendingCreateRaw = storage.getScoped(PENDING_CREATE_KEY, null)
+        const pendingCreate = validPendingCreate(pendingCreateRaw)
+        if (pendingCreateRaw && !pendingCreate && typeof storage.removeScoped === 'function') storage.removeScoped(PENDING_CREATE_KEY)
+        this.pendingCreateId = pendingCreate && pendingCreate.requestId || ''
+        if (this.docId) this.loadPointOutbox(this.docId)
+        this.localStorageReady = true
+        this.scopeReady = true
+      } catch (error) {
+        localStorageMessage = '本机草稿未加载：账户存储尚未准备好。'
+        wx.showToast({ title: localStorageMessage, icon: 'none' })
+      }
     }
     this.setData({
       name: storage.getName(),
@@ -554,7 +559,7 @@ Page({
   async create() {
     if (this.data.busy) return
     if (!this.scopeReady) {
-      wx.showToast({ title: '账号身份未就绪，请返回首页重试', icon: 'none' })
+      wx.showToast({ title: '创建房间前请返回首页登录', icon: 'none' })
       return
     }
     const name = this.data.name.trim()
@@ -587,7 +592,7 @@ Page({
   async join() {
     if (this.data.busy) return
     if (!this.scopeReady) {
-      wx.showToast({ title: '账号身份未就绪，请返回首页重试', icon: 'none' })
+      wx.showToast({ title: '加入房间前请返回首页登录', icon: 'none' })
       return
     }
     const name = this.data.name.trim()

@@ -146,6 +146,7 @@ Page({
     roomActionBusyId: '',
     hasMore: false,
     nextCursor: null,
+    loginRequired: false,
     headerTopPx: 72
   },
 
@@ -154,7 +155,30 @@ Page({
   },
 
   onShow() {
+    const app = typeof getApp === 'function' ? getApp() : null
+    const consentGranted = Boolean(app && typeof app.hasAccountConsent === 'function' && app.hasAccountConsent())
+    if (!consentGranted || !storage.isAccountScoped()) {
+      this.scopeReady = false
+      this.setData({
+        loginRequired: true,
+        localTrips: [],
+        rooms: [],
+        loading: false,
+        loadingMore: false,
+        cloudError: '',
+        hasMore: false,
+        nextCursor: null
+      })
+      return
+    }
     this.refresh()
+  },
+
+  goLogin() {
+    wx.switchTab({
+      url: '/pages/home/index',
+      success: () => wx.showToast({ title: '请点击账号或协作功能登录', icon: 'none' })
+    })
   },
 
   async ensureAccountScope() {
@@ -250,7 +274,7 @@ Page({
   async refresh() {
     const requestId = (this.myRoomsRequestId || 0) + 1
     this.myRoomsRequestId = requestId
-    this.setData({ loading: true, cloudError: '' })
+    this.setData({ loading: true, cloudError: '', loginRequired: false })
     if (!await this.ensureAccountScope() || requestId !== this.myRoomsRequestId) return
     this.refreshLocalTrips()
     this.setData({

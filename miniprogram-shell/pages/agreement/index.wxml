@@ -1,0 +1,32 @@
+<view class="page">
+  <view class="header">
+    <view class="back" bindtap="goBack" role="button" aria-label="返回">‹</view>
+    <view class="title">用户服务协议</view>
+  </view>
+
+  <view class="card">
+    <view class="updated">更新日期：2026 年 8 月 10 日</view>
+    <view class="intro">欢迎使用“拼途”。请在勾选同意前完整阅读本协议。你可以不同意并返回首页继续浏览无需登录的功能。</view>
+
+    <view class="section-title">1. 服务内容</view>
+    <view class="paragraph">拼途提供多人碰面地点协作、共享账本、转盘和行程房间等工具。计算结果、地点建议和分账结果仅供参考，请根据实际情况自行核对。</view>
+
+    <view class="section-title">2. 登录与资料</view>
+    <view class="paragraph">多人协作功能使用微信提供的可信身份标识识别房主和成员。我们不要求手机号，也不会自动读取头像或昵称。头像和昵称仅在你主动选择、填写并保存时使用，你可以随时修改或删除。</view>
+
+    <view class="section-title">3. 房间与内容</view>
+    <view class="paragraph">你应妥善保管房间码，仅向可信成员分享。你提交的成员名称、地点、候选项、账本描述和金额会展示给同一房间成员。请勿上传违法、侵权、欺诈或骚扰内容。</view>
+
+    <view class="section-title">4. 权限与隐私</view>
+    <view class="paragraph">位置仅在你主动点击地图选点时请求；剪贴板仅在你主动点击复制时写入。具体处理规则以小程序《隐私保护指引》为准。你拒绝非必要权限后，其他不依赖该权限的功能仍可使用。</view>
+
+    <view class="section-title">5. 数据与安全</view>
+    <view class="paragraph">云端房间用于跨设备同步和多人协作。房主可解散房间，成员可退出房间。请确保录入金额和地点准确，并在结算或出行前与同行成员确认。</view>
+
+    <view class="section-title">6. 服务变更与责任</view>
+    <view class="paragraph">我们会尽力保障服务稳定，但网络、地图服务、微信平台或云服务异常可能导致暂时不可用。对于用户自行决定的消费、转账、出行和线下活动，拼途不作结果保证。</view>
+
+    <view class="section-title">7. 联系方式</view>
+    <view class="paragraph">如对本协议、账号资料或数据处理有疑问，可通过邮箱 pgu9555@gmail.com 联系开发者。</view>
+  </view>
+</view>

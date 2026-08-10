@@ -193,6 +193,7 @@ Page({
     totalYuan: '0.00',
     syncText: '已同步',
     syncPending: false,
+    guestMode: false,
     isOwner: false,
     busy: false,
     headerTopPx: 72
@@ -205,7 +206,23 @@ Page({
     this.viewer = null
     this.initialRoomApplied = false
     this.scopeReady = false
+    this.guestMode = false
     this.setData({ headerTopPx: layout.headerTopPx() })
+    const app = typeof getApp === 'function' ? getApp() : null
+    const consentGranted = Boolean(app && typeof app.hasAccountConsent === 'function' && app.hasAccountConsent())
+    if (!consentGranted) {
+      this.guestMode = true
+      const ledger = emptyLocalLedger()
+      this.applyStandaloneLedger(ledger, false)
+      this.resetExpenseForm(ledger)
+      this.setData({
+        name: '',
+        step: 1,
+        guestMode: true,
+        syncText: '游客体验'
+      })
+      return
+    }
     if (!await this.ensureAccountScope()) return
     this.pendingCreateId = savedPendingCreateId()
     this.setData({ name: storage.getName() })
@@ -380,6 +397,10 @@ Page({
 
   async create() {
     if (this.data.busy) return
+    if (this.guestMode) {
+      wx.showToast({ title: '创建房间前请返回首页登录', icon: 'none' })
+      return
+    }
     if (!await this.ensureAccountScope()) return
     const name = this.data.name.trim()
     if (!name) {
@@ -416,6 +437,10 @@ Page({
 
   async join() {
     if (this.data.busy) return
+    if (this.guestMode) {
+      wx.showToast({ title: '加入房间前请返回首页登录', icon: 'none' })
+      return
+    }
     if (!await this.ensureAccountScope()) return
     const name = this.data.name.trim()
     const code = cleanCode(this.data.code)
@@ -742,6 +767,11 @@ Page({
   },
 
   async syncLedger(next) {
+    if (!this.docId && this.guestMode) {
+      this.applyStandaloneLedger(next, true)
+      this.setData({ syncText: '游客体验' })
+      return next
+    }
     if (!await this.ensureAccountScope()) throw new Error('账号身份未就绪')
     if (!this.docId) {
       if (!saveLocalLedger(this.tripId, next)) {
