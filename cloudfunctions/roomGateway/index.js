@@ -1646,6 +1646,9 @@ async function joinRoom(event, uid, accessPlatform) {
   const expectedType = cleanText(event.type, 16);
   const isAutoJoin = expectedType === "auto";
   const name = cleanText(event.name, 24);
+  if (!isAutoJoin && expectedType !== "midpoint" && expectedType !== "ledger") {
+    return failure("INVALID_TYPE", "请选择碰面房间或账本房间");
+  }
   if (!/^(?:[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}|[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{8})$/.test(code)) {
     return failure("INVALID_CODE", "请输入完整的 8 位房间码（旧房间可输入 6 位）");
   }

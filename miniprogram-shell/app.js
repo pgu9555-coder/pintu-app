@@ -10,7 +10,11 @@ App({
 
   onLaunch() {
     if (!wx.cloud) { console.warn('当前基础库不支持云开发'); return }
-    wx.cloud.init({ env: 'pintu-d4g77ecn24b674fa0', traceUser: true })
+    // CloudBase is initialized at launch so guest pages can call cloud
+    // functions later, but launch itself must not enable user tracing. The
+    // trusted OpenID scope is established only after the user explicitly
+    // chooses a collaborative action and completes the consent flow.
+    wx.cloud.init({ env: 'pintu-d4g77ecn24b674fa0', traceUser: false })
   },
 
   resetAccountScope() {

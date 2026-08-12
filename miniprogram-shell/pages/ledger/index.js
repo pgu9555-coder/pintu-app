@@ -2,6 +2,7 @@ const gateway = require('../../services/roomGateway')
 const storage = require('../../utils/storage')
 const math = require('../../utils/ledger')
 const layout = require('../../utils/layout')
+const invite = require('../../utils/invite')
 const LOCAL_LEDGER_TRIPS_KEY = 'pintu-local-ledger-trips-v1'
 const LEDGER_OUTBOX_KEY = 'pintu-ledger-outbox-v1'
 const PENDING_CREATE_KEY = 'pintu-ledger-pending-create-v1'
@@ -273,8 +274,8 @@ Page({
     const room = this.data.room
     if (!room) return { title: '共享账本', path: '/pages/home/index' }
     return {
-      title: `邀请你加入${room.name}`,
-      path: `/pages/home/index?code=${room.code}`
+      title: invite.shareTitle('ledger'),
+      path: invite.sharePath(room.code, 'ledger')
     }
   },
 

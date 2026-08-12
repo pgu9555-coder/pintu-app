@@ -3,6 +3,7 @@ const storage = require('../../utils/storage')
 const midpoint = require('../../utils/midpoint')
 const layout = require('../../utils/layout')
 const amap = require('../../utils/amap')
+const invite = require('../../utils/invite')
 const LOCAL_MIDPOINT_KEY = 'pintu-local-midpoint-v2'
 const PENDING_CREATE_KEY = 'pintu-midpoint-pending-create-v1'
 const POINT_OUTBOX_PREFIX = 'pintu-midpoint-point-outbox-v1:'
@@ -364,8 +365,8 @@ Page({
     const room = this.data.room
     if (!room) return { title: '拼途 · 一起找公平碰面点', path: '/pages/home/index' }
     return {
-      title: `邀请你加入${room.name}`,
-      path: `/pages/home/index?code=${room.code}`
+      title: invite.shareTitle('midpoint'),
+      path: invite.sharePath(room.code, 'midpoint')
     }
   },
 

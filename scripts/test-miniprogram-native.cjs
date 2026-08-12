@@ -44,6 +44,7 @@ assert.match(
   /wx\.cloud\.init\s*\(\s*\{[\s\S]*?\benv\s*:\s*['"]pintu-d4g77ecn24b674fa0['"]/,
   "app.js must initialize CloudBase with the PintU environment"
 );
+assert.match(appSource, /wx\.cloud\.init\s*\(\s*\{[\s\S]*?traceUser\s*:\s*false/, "first launch must not enable CloudBase user tracing before explicit account consent");
 const project = readJson(path.join(root, "project.config.json"));
 assert.equal(project.appid, "wxe1fe19432c29e3cd", "project.config.json must use the PintU AppID");
 
@@ -125,6 +126,29 @@ assert.match(gatewaySource, /listMyRooms\(cursor, limit\)\s*\{\s*return call\(['
 
 const homePageSource = fs.readFileSync(path.join(root, "pages", "home", "index.js"), "utf8");
 const homeMarkup = fs.readFileSync(path.join(root, "pages", "home", "index.wxml"), "utf8");
+const inviteSource = fs.readFileSync(path.join(root, "utils", "invite.js"), "utf8");
+const invite = require(path.join(root, "utils", "invite.js"));
+assert.equal(invite.sharePath("ABCD2345", "midpoint"), "/pages/home/index?code=ABCD2345&type=midpoint", "midpoint shares must contain only the room code and explicit type");
+assert.equal(invite.sharePath("ABCD2345", "ledger"), "/pages/home/index?code=ABCD2345&type=ledger", "ledger shares must contain only the room code and explicit type");
+assert.equal(invite.sharePath("bad-code", "midpoint"), "/pages/home/index", "invalid share codes must not be emitted");
+assert.equal(invite.sharePath("ABCD2345", "docId"), "/pages/home/index", "unknown share types must not be emitted");
+assert.deepEqual(invite.fromOptions({ code: "ABCD2345", type: "midpoint", docId: "private-doc", uid: "private-user", name: "private-name", token: "private-token" }), { code: "ABCD2345", type: "midpoint", valid: true }, "invite parsing must ignore personal and internal parameters");
+assert.deepEqual(invite.fromOptions({ code: "ABCD2345", type: "tampered" }), { code: "ABCD2345", type: "", valid: false }, "tampered invite types must not be trusted");
+assert.match(inviteSource, /ROOM_CODE\s*=\s*\/\^\[A-HJ-NP-Z2-9\]\{8\}\$\//, "invite room codes must be strictly eight-character codes");
+const homeOnLoad = homePageSource.slice(homePageSource.indexOf("onLoad(options)"), homePageSource.indexOf("async confirmWechatLogin()"));
+assert.match(homeOnLoad, /invite\.fromOptions\(options\)/, "home must parse invitation parameters during onLoad");
+assert.match(homeOnLoad, /storage\.saveName\(['"]['"]\)/, "home onLoad must clear a previous account's cached room name before profile resolution");
+assert.ok(!/\bjoin\s*\(/.test(homeOnLoad), "home onLoad must never automatically join an invited room");
+assert.match(homePageSource, /requestedType\s*=\s*invite\.inviteType\(this\.data\.inviteType\) \|\| 'auto'[\s\S]*?gateway\.join\(code, requestedType, name\)/, "a valid invite must join with its explicit type and a tampered type must safely fall back to ordinary auto join");
+assert.match(homePageSource, /toolType\s*=\s*invite\.inviteType\(result[\s\S]*?encodeURIComponent\(docId\)/, "invite navigation must whitelist the server room type and encode the document ID");
+assert.match(homePageSource, /ROOM_HISTORY_FULL:[\s\S]*?LEDGER_HISTORY_FULL:/, "invite errors must map both room and ledger history limits to useful messages");
+assert.match(homeMarkup, /invite-notice[\s\S]*?\{\{inviteLabel\}\}[\s\S]*?\{\{code\}\}[\s\S]*?确认加入/, "home must show the invited tool and room code before an explicit join tap");
+const midpointShareSource = fs.readFileSync(path.join(root, "pages", "midpoint", "index.js"), "utf8");
+const ledgerShareSource = fs.readFileSync(path.join(root, "pages", "ledger", "index.js"), "utf8");
+assert.match(midpointShareSource, /onShareAppMessage\(\)[\s\S]*?invite\.shareTitle\('midpoint'\)[\s\S]*?invite\.sharePath\(room\.code, 'midpoint'\)/, "midpoint must share its explicit invite type");
+assert.match(ledgerShareSource, /onShareAppMessage\(\)[\s\S]*?invite\.shareTitle\('ledger'\)[\s\S]*?invite\.sharePath\(room\.code, 'ledger'\)/, "ledger must share its explicit invite type");
+assert.ok(!/onShareAppMessage\(\)[\s\S]*?room\.name[\s\S]*?invite\.sharePath/.test(midpointShareSource), "midpoint share titles must not expose a user-controlled room name");
+assert.ok(!/onShareAppMessage\(\)[\s\S]*?room\.name[\s\S]*?invite\.sharePath/.test(ledgerShareSource), "ledger share titles must not expose a user-controlled room name");
 assert.match(homeMarkup, /open-type="chooseAvatar"[\s\S]*?bindchooseavatar="chooseAvatar"/, "home must use the native chooseAvatar button");
 assert.match(homeMarkup, /<input[^>]*type="nickname"/, "home must use the native nickname input");
 assert.match(homePageSource, /gateway\.getProfile\(\)/, "home must load the authenticated WeChat profile");
@@ -143,7 +167,7 @@ assert.ok(!/wx\.login\s*\(/.test(homePageSource), "trusted CloudBase OpenID must
 assert.match(homePageSource, /wechatLoginVisible:\s*false/, "home must render before showing any WeChat login prompt");
 assert.match(homeMarkup, /登录后使用多人协作[\s\S]*?暂不登录/, "deferred WeChat login must be optional and cancellable");
 assert.match(homeMarkup, /privacyConsentChecked[\s\S]*?《用户服务协议》[\s\S]*?《隐私保护指引》/, "login must expose an unchecked agreement choice and readable policy links");
-assert.match(homePageSource, /confirmWechatLogin\(\)[\s\S]*?!this\.data\.privacyConsentChecked[\s\S]*?ensurePrivacyAuthorized\(\)[\s\S]*?grantAccountConsent\(\)[\s\S]*?ensureAccountScope\(\)[\s\S]*?loadProfile\(\)/, "WeChat login must require active consent before binding the trusted account");
+assert.match(homePageSource, /confirmWechatLogin\(\)[\s\S]*?!this\.data\.privacyConsentChecked[\s\S]*?ensurePrivacyAuthorized\(\)[\s\S]*?grantAccountConsent\(\)[\s\S]*?ensureAccountScope\(\)[\s\S]*?loadProfile\(\)/, "WeChat login must require active consent and native privacy authorization before binding the trusted account");
 assert.match(homePageSource, /togglePrivacyConsent\(\)[\s\S]*?!this\.data\.serviceAgreementOpened\s*\|\|\s*!this\.data\.privacyContractOpened[\s\S]*?privacyConsentChecked/, "the agreement checkbox must remain unavailable until both documents are opened");
 assert.match(homePageSource, /openServiceAgreement\(\)[\s\S]*?serviceAgreementOpened:\s*true[\s\S]*?openPrivacy\(\)[\s\S]*?privacyContractOpened:\s*true/, "the login flow must record explicit opening of both documents");
 assert.ok(!/wechatProfileConfirming/.test(homePageSource + homeMarkup), "login must not force avatar or nickname confirmation");
@@ -157,7 +181,7 @@ assert.match(homePageSource, /retryProfile\(\)[\s\S]*?resetAccountScope\(\)[\s\S
 assert.match(homePageSource, /gateway\.updateProfile\([\s\S]*?applyAccountProfile\(profile\)/, "saving a profile must refresh the account cache with the server result");
 assert.match(homePageSource, /isAmbiguousProfileUpdateError[\s\S]*?gateway\.getProfile\(\)[\s\S]*?latestProfile\.avatarFileId[\s\S]*?PROFILE_UPDATE_UNCONFIRMED/, "ambiguous avatar updates must reconcile before any cleanup");
 assert.match(homePageSource, /cleanupUploadedOnFailure\s*\?[\s\S]*?deleteUnsavedAvatarUpload\(uploadedFileId\)[\s\S]*?头像已保留，避免损坏云端资料/, "an unconfirmed avatar update must preserve the uploaded file");
-assert.match(homePageSource, /wx\.getPrivacySetting[\s\S]*?wx\.requirePrivacyAuthorize/, "WeChat entry must use the current privacy authorization flow when required");
+assert.match(homePageSource, /ensurePrivacyAuthorized\(\)[\s\S]*?wx\.getPrivacySetting[\s\S]*?wx\.requirePrivacyAuthorize/, "explicit account entry must use WeChat's current privacy authorization flow when required");
 
 const appConfig = JSON.parse(fs.readFileSync(path.join(root, "app.json"), "utf8"));
 assert.ok(appConfig.pages.includes("pages/agreement/index"), "the readable user service agreement must be registered as a page");

@@ -1,11 +1,30 @@
 const gateway = require('../../services/roomGateway')
 const storage = require('../../utils/storage')
+const invite = require('../../utils/invite')
 
 function cleanCode(value) {
   return String(value || '')
     .toUpperCase()
     .replace(/[^A-HJ-NP-Z2-9]/g, '')
     .slice(0, 8)
+}
+
+function joinMessage(error) {
+  const code = String(error && error.code || '')
+  const raw = String(error && error.message || '')
+  const byCode = {
+    ROOM_NOT_FOUND: '邀请已失效，或房间已被解散',
+    ROOM_LEGACY_UNSUPPORTED: '这个旧版房间暂不支持从邀请加入',
+    WRONG_ROOM_TYPE: '邀请类型与房间不一致，请让房主重新分享',
+    ROOM_TYPE_MISMATCH: '邀请类型与房间不一致，请让房主重新分享',
+    ROOM_FULL: '房间人数已满',
+    ROOM_HISTORY_FULL: '房间历史成员已达上限',
+    LEDGER_HISTORY_FULL: '账本历史成员已达上限',
+    DUPLICATE_NAME: '这个名字已被使用，请换一个名字',
+    NAME_REQUIRED: '请填写你的名字',
+    UNAUTHENTICATED: '请先完成登录后再加入'
+  }
+  return byCode[code] || raw || '加入失败，请稍后重试'
 }
 
 async function deleteUnsavedAvatarUpload(fileID) {
@@ -43,6 +62,8 @@ Page({
   data: {
     name: '',
     code: '',
+    inviteType: '',
+    inviteLabel: '',
     busy: false,
     joinError: '',
     profileLoaded: false,
@@ -67,7 +88,12 @@ Page({
 
   onLoad(options) {
     this.nameDirty = false
-    this.setData({ code: cleanCode(options && options.code) })
+    const incomingInvite = invite.fromOptions(options)
+    this.setData({
+      code: incomingInvite.code || cleanCode(options && options.code),
+      inviteType: incomingInvite.type,
+      inviteLabel: incomingInvite.valid ? invite.INVITE_TYPES[incomingInvite.type].label : ''
+    })
     // Mini-program storage is shared by every WeChat account that uses this
     // app on the same device. Clear the old room-name default before resolving
     // the current account's trusted cloud profile so another account's
@@ -123,9 +149,11 @@ Page({
     }
     this.setData({ wechatLoginBusy: true })
     try {
+      // This native privacy authorization happens only after the user opened
+      // both documents, checked the choice, and tapped Continue. It authorizes
+      // the declared account/room data processing; location remains separately
+      // requested only after the later "从地图选点" action.
       await this.ensurePrivacyAuthorized()
-      // This tap establishes the CloudBase account scope, but it never asks
-      // WeChat to disclose an avatar or nickname automatically.
       const app = getApp()
       if (!app || typeof app.grantAccountConsent !== 'function') throw new Error('登录服务暂时不可用')
       app.grantAccountConsent()
@@ -471,7 +499,7 @@ Page({
   },
 
   codeInput(event) {
-    this.setData({ code: cleanCode(event.detail.value), joinError: '' })
+    this.setData({ code: cleanCode(event.detail.value), inviteType: '', inviteLabel: '', joinError: '' })
   },
 
   openMidpoint() {
@@ -514,32 +542,41 @@ Page({
 
   async join() {
     if (this.data.busy) return
-    const name = this.data.name.trim()
     const code = cleanCode(this.data.code)
-    if (!name || code.length !== 8) {
-      wx.showToast({ title: '请填写名字和 8 位房间码', icon: 'none' })
+    if (code.length !== 8) {
+      wx.showToast({ title: '请填写 8 位房间码', icon: 'none' })
       return
     }
     if (!this.accountReady(false)) {
       this.requestWechatLogin(() => this.join())
       return
     }
+    const name = this.data.name.trim()
+    if (!name) {
+      this.setData({ joinError: '请填写你的名字后再加入' })
+      wx.showToast({ title: '请填写你的名字', icon: 'none' })
+      return
+    }
 
     this.setData({ busy: true, joinError: '' })
     wx.showLoading({ title: '加入中' })
     try {
-      const result = await gateway.join(code, 'auto', name)
+      const requestedType = invite.inviteType(this.data.inviteType) || 'auto'
+      const result = await gateway.join(code, requestedType, name)
+      const toolType = invite.inviteType(result && result.room && result.room.toolType)
+      const docId = String(result && result.docId || '')
+      if (!toolType || !docId) throw new Error('房间返回的数据不完整，请稍后重试')
       storage.saveName(name)
       storage.save({ docId: result.docId, room: result.room })
       await new Promise((resolve, reject) => {
         wx.navigateTo({
-          url: `/pages/${result.room.toolType}/index?docId=${result.docId}`,
+          url: `/pages/${toolType}/index?docId=${encodeURIComponent(docId)}`,
           success: resolve,
           fail: reject
         })
       })
     } catch (error) {
-      const message = error.message || '加入失败，请稍后重试'
+      const message = joinMessage(error)
       console.error('[home join]', error)
       this.setData({ joinError: message })
       wx.showToast({ title: message, icon: 'none' })

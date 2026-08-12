@@ -1276,6 +1276,21 @@ async function main() {
   });
   assert.equal(legacyCreated.ok, true);
   const legacyDocId = legacyCreated.data.docId;
+  const missingLegacyType = await call("missing-type-legacy", {
+    action: "join",
+    code: legacyCreated.data.room.code,
+    name: "缺少类型"
+  });
+  assert.equal(missingLegacyType.code, "INVALID_TYPE", "join must reject a missing room type instead of exposing legacy rooms");
+  assert.equal(rooms.get(legacyDocId).memberUids.includes("missing-type-legacy"), false);
+  const tamperedLegacyType = await call("tampered-type-legacy", {
+    action: "join",
+    type: "anything-else",
+    code: legacyCreated.data.room.code,
+    name: "篡改类型"
+  });
+  assert.equal(tamperedLegacyType.code, "INVALID_TYPE", "join must whitelist auto, midpoint and ledger types");
+  assert.equal(rooms.get(legacyDocId).memberUids.includes("tampered-type-legacy"), false);
   const autoLegacy = await call("auto-legacy", {
     action: "join",
     type: "auto",
