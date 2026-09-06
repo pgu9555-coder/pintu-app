@@ -1,53 +1,71 @@
-# 拼途 Pintu
+# Pintu
 
-拼途是一款面向朋友出行与聚会的协作工具，提供参考碰面中点、共同选去处、随机转盘和多人共享账本。
+**A cross-platform collaboration tool for planning meetups, choosing destinations, and settling shared expenses.**
 
-仓库同时包含：
+[Live Web Demo](https://pintu-app-nu.vercel.app/) · [WeChat Mini Program Guide](miniprogram-shell/README.md)
 
-- `index.html`：已上线的 Web 版，单文件原生前端。
-- `miniprogram-shell/`：原生微信小程序版，不使用 `web-view`。
-- `cloudfunctions/roomGateway/`：房间权限、内容安全和多人数据同步网关。
-- `cloudfunctions/mapGateway/`：小程序地址联想和附近地点搜索代理；高德 Web Service Key 只保存在云端。
+Pintu helps groups move from discussion to a shared decision. Friends can estimate a reference midpoint, propose and vote on destinations, make a random choice when preferences are unclear, and manage a shared ledger. The repository contains both a browser-based application and a native WeChat Mini Program backed by protected CloudBase services.
 
-## 当前功能
+## Product highlights
 
-| 功能 | Web | 微信小程序 | 多设备同步 |
-|---|---:|---:|---:|
-| 参考中点与共同选去处 | 是 | 是 | 房间内同步 |
-| 共同候选、投票、房主确认 | 是 | 是 | 房间内同步 |
-| 多地址本机计算与去处盲盒 | 是 | 是 | 本机功能 |
-| 随机转盘动画 | 是 | 是 | 本机功能 |
-| 多人共享账本 | 是 | 是 | 房间内同步 |
-| 支出新增、修改、删除与结算 | 是 | 是 | 房间内同步 |
-| 成员加入、退出、房主解散 | 是 | 是 | 房间内同步 |
-| 首页统一输入房间码并自动跳转 | 是 | 是 | — |
-| 微信邀请卡直达对应房间加入流程 | — | 是 | 仅携带房间码与类型，确认后加入 |
-| 微信头像昵称与“我的房间” | — | 是 | 同一微信账号同步 |
+- **Cross-platform rooms:** Join the same protected room from the web application or WeChat Mini Program with an eight-character invitation code.
+- **Collaborative meetup planning:** Share starting locations, calculate a reference midpoint, add candidate destinations, vote, and let the room owner confirm the final choice.
+- **Shared expense tracking:** Add, edit, and delete expenses; select payers and participants; review balances; and generate settlement recommendations using exact-cent arithmetic.
+- **User-controlled identity:** WeChat users may add, replace, or remove a profile image and nickname, while cloud identity is derived from a trusted OpenID rather than client-supplied identifiers.
+- **Resilient room history:** Authorized WeChat users can recover their rooms across devices through stable cursor-based pagination.
+- **Secondary decision tools:** Use a local random spinner or destination picker without uploading their contents to a shared room.
 
-参考中点按成员坐标进行估算，不代表真实交通时间完全公平。成员应在“共同找去处”里结合道路、地铁和可达性投票确认最终地点。
+## Platform capabilities
 
-## 数据与安全模型
+| Capability | Web | WeChat Mini Program | Cross-device synchronization |
+|---|:---:|:---:|:---:|
+| Reference midpoint and destination planning | Yes | Yes | Shared rooms |
+| Candidate proposals, voting, and owner confirmation | Yes | Yes | Shared rooms |
+| Multi-origin local planning and destination picker | Yes | Yes | Local only |
+| Animated random spinner | Yes | Yes | Local only |
+| Shared ledger and settlement recommendations | Yes | Yes | Shared rooms |
+| Expense creation, editing, and deletion | Yes | Yes | Shared rooms |
+| Membership, departure, and room dissolution | Yes | Yes | Shared rooms |
+| Unified room-code entry | Yes | Yes | — |
+| Native WeChat invitation cards | — | Yes | Invitation metadata only |
+| WeChat profile and room history | — | Yes | Same WeChat identity |
 
-- 客户端不能直接读写 `rooms` 集合，所有联网操作都经过 `roomGateway`。
-- 新的联网房间使用 `schemaVersion: 5` 和共享访问标记，只会由房主主动解散；没有自动过期时间。
-- Web 与微信小程序共用同一套受保护房间协议。同一个 8 位房间码可在两端加入，成员、碰面位置、候选投票和账本会双向同步。
-- 房间码是邀请凭证。知道有效房间码的人可以申请加入，因此只应把房间码发给同行成员。
-- 成员再次加入会获得新的 `membershipEpoch`；旧设备或已退出身份不能继续写入账本、位置或投票。
-- 小程序写入的成员名、账本文字、地点与候选地点会经过微信内容安全检查。Web 创建的房间在第一次向微信用户展示前，也会借助该房间中可信的小程序身份完成可见文本检查；检查未通过时不会向小程序暴露房间内容。
-- 浏览器会把最近访问的房间保存在本机；小程序“我的房间”只显示可信微信身份从云端读取的、仍有权限的房间。网络失败时不会显示设备上的房间缓存，以免不同微信账号共用设备时泄露资料；列表支持继续加载，因此所有仍有权限房间均可找回。
-- 微信资料使用由可信 OpenID 派生的不可读文档编号保存；客户端不能直接读写 `user_profiles`，也不能用昵称冒充其他身份。用户可移除头像或删除自己的云端资料；头像文件保持 CloudBase 默认私有存储，不会将整个存储桶设为公开读。
+The midpoint is a coordinate-based estimate, not a guarantee of equal travel time. Groups should evaluate roads, transit access, and accessibility before confirming a destination.
 
-旧的、缺少可信平台标记的房间继续按原平台访问，不会被客户端参数强行转成共享房间。已有的受保护类型房间会在合法成员再次加入时安全升级为共享协议。
+## Architecture
 
-### 微信头像与“我的房间”可靠性
+```text
+Web application ───────────────┐
+                              ├── roomGateway ── protected CloudBase data
+Native WeChat Mini Program ───┘        │
+                                      ├── authorization and membership epochs
+                                      ├── room, voting, and ledger operations
+                                      └── content-safety review
 
-- “我的房间”按房间**创建时间**和房间 ID 使用稳定游标继续加载；房间后来被编辑，不会让尚未加载的房间从下一页消失。
-- 微信头像上传路径由云函数按当前可信 OpenID 下发，形如 `avatars/profile-<hash>/`；云函数只会清理该账号专属目录里的旧头像，绝不会把整个存储桶公开。
-- 替换、移除或删除资料后，如头像文件暂时删不掉，系统会保留私有重试记录并在资料页提示“待清理”；用户可点“重试清理”。旧版本、非账号专属路径的头像不会被冒险删除，页面会明确说明未自动删除。
+WeChat Mini Program ── mapGateway ── AMap Web Service
+```
 
-## 本地测试
+- `index.html` contains the deployed, dependency-free web application.
+- `miniprogram-shell/` contains the native WeChat Mini Program; it does not rely on `web-view` or a third-party runtime.
+- `cloudfunctions/roomGateway/` centralizes authorization, membership, content-safety checks, and synchronized room operations.
+- `cloudfunctions/mapGateway/` proxies address suggestions and nearby-place searches so the AMap Web Service key remains server-side.
 
-在仓库根目录使用 Node.js 运行：
+## Security and privacy design
+
+- Clients cannot directly read or write the `rooms` collection; shared operations pass through `roomGateway`.
+- Current online rooms use `schemaVersion: 5` and remain available until the owner explicitly dissolves them.
+- Room codes function as invitation credentials and should be shared only with intended participants.
+- Every rejoin creates a new `membershipEpoch`, preventing departed members and stale devices from continuing to modify protected room data.
+- User-generated text displayed in the Mini Program passes through WeChat content-safety review. Web-created room content is reviewed before it is exposed to WeChat users.
+- WeChat identity is derived from a trusted OpenID. Profile documents use non-readable identifiers, and clients cannot impersonate another member by submitting a nickname.
+- Profile images remain in private CloudBase storage. Replacement and deletion use account-scoped paths plus retryable cleanup records; the storage bucket is never made publicly readable.
+- Browser room history is stored locally. Mini Program room history is retrieved only for the authenticated WeChat identity and is not replaced with device cache after a network failure.
+
+Legacy rooms retain their original platform rules and are upgraded only through a valid member flow; client parameters cannot force an untrusted room into the shared protocol.
+
+## Testing
+
+Run the repository checks with Node.js from the project root:
 
 ```bash
 node scripts/test-room-gateway.cjs
@@ -58,45 +76,46 @@ node scripts/test-miniprogram-native.cjs
 node scripts/test-map-gateway.cjs
 ```
 
-原生小程序请用微信开发者工具导入 `miniprogram-shell/`。项目 AppID 为 `wxe1fe19432c29e3cd`，CloudBase 环境为 `pintu-d4g77ecn24b674fa0`。
+The checks cover gateway authorization and validation, membership migration, security configuration, web-app invariants, native Mini Program structure, and map-gateway behavior.
 
-## 自动部署
+To inspect the Mini Program locally, import `miniprogram-shell/` into WeChat Developer Tools. Deployment configuration is documented in the [Mini Program guide](miniprogram-shell/README.md).
 
-推送到 `main` 后，GitHub Actions 会：
+## Deployment
 
-1. 安装并检查 CloudBase CLI。
-2. 运行全部静态与网关单元测试。
-3. 自动确保所需集合和“我的房间”查询索引已就绪，并应用数据库安全规则后再部署 `roomGateway` 云函数。
-4. 保持头像文件在 CloudBase 默认私有存储中；仅资料本人可通过自己的资料页使用。
-5. 将根目录的 Web 文件部署到 CloudBase 静态托管。
+Pushes to `main` trigger GitHub Actions to:
 
-若要启用小程序地址搜索，需要在 GitHub 仓库的 Actions secrets 中配置 `AMAP_WEB_SERVICE_KEY`。它必须是高德控制台创建的“Web 服务”Key，不能复用网页里的“Web 端（JS API）”Key。流水线只会在临时运行器中把它注入 `mapGateway` 的云函数部署配置，不会提交到 Git 或客户端源码；密钥尚未配置时只跳过地图网关，网站和房间同步仍会正常部署。
+1. Install and validate the CloudBase CLI.
+2. Run the static and gateway test suites.
+3. Prepare required collections and indexes, apply database security rules, and deploy `roomGateway`.
+4. Preserve private avatar storage and account-scoped profile access.
+5. Deploy the web application to CloudBase static hosting.
 
-微信小程序代码不会随网站自动发布到微信。它仍需在微信开发者工具或其 CLI 中上传版本，然后到微信公众平台提交审核并发布。
+Address search requires an `AMAP_WEB_SERVICE_KEY` repository secret created for AMap Web Services. The workflow injects the key only into the temporary cloud-function deployment configuration; it is not committed to Git or shipped to either client. Without the secret, the workflow skips `mapGateway` while continuing to test and deploy the remaining application.
 
-## 小程序发布前的后台事项
+Mini Program releases are uploaded separately through WeChat Developer Tools or the WeChat CLI and must complete the WeChat review and publication process.
 
-- 将小程序账号与 CloudBase 环境关联，并确认 `roomGateway` 已部署。
-- 在隐私保护指引中勾选：用户信息（微信昵称、头像）、发布内容、选择的位置信息、剪切板，以及自定义“用户标识符（OpenID）”；不要误选宽泛的“位置信息”。
-- 开通并声明 `wx.chooseLocation` 所需的位置接口。
-- 小程序地图联想统一调用 `mapGateway`，不需要把 `restapi.amap.com` 加入小程序 request 合法域名，也不要把高德 Web Service Key 写进小程序源码。
-- 完成小程序备案；需要搜索与分享能力时，再完成认证并处理当前搜索限制。
-- 使用至少两台真机验证：创建、加入、位置同步、候选投票、账本增删改、成员退出与房主解散。
-
-## 目录
+## Repository structure
 
 ```text
 .
 ├── index.html
 ├── miniprogram-shell/
-├── cloudfunctions/roomGateway/
-├── cloudfunctions/mapGateway/
+├── cloudfunctions/
+│   ├── roomGateway/
+│   └── mapGateway/
 ├── cloudbase-security-rules.json
 ├── cloudbase-function-security-rules.json
 ├── scripts/
 └── .github/workflows/deploy-cloudbase.yml
 ```
 
+## Known limitations
+
+- Midpoint calculations use coordinates rather than real-time travel duration.
+- A room code is a shared invitation credential; Pintu does not provide a public-room discovery system.
+- Mini Program publication, content-safety availability, map-provider quotas, and CloudBase deployment depend on their respective external platforms.
+- The live web demo and released Mini Program may not always represent the same deployment revision.
+
 ## License
 
-[MIT](./LICENSE)
+[MIT](LICENSE)

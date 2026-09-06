@@ -1,49 +1,60 @@
-# 拼途原生微信小程序
+# Pintu Native WeChat Mini Program
 
-这是拼途的原生微信小程序版本，不使用 `web-view`、DOM 或第三方运行时。
+This directory contains Pintu's native WeChat Mini Program. It does not use `web-view`, browser DOM APIs, or a third-party runtime.
 
-## 导入方式
+## Import and configuration
 
-1. 用微信开发者工具导入本目录 `miniprogram-shell/`。
-2. AppID：`wxe1fe19432c29e3cd`。
-3. CloudBase 环境：`pintu-d4g77ecn24b674fa0`。
-4. 确认项目关联到该 CloudBase 环境，且 `roomGateway` 云函数已部署。
+1. Import this `miniprogram-shell/` directory into WeChat Developer Tools.
+2. Use AppID `wxe1fe19432c29e3cd`.
+3. Connect the project to CloudBase environment `pintu-d4g77ecn24b674fa0`.
+4. Confirm that the environment is linked to the Mini Program and that `roomGateway` has been deployed.
 
-## 功能
+## Core workflows
 
-- 首页统一输入 8 位房间码，自动识别碰面或账本房间并跳转。
-- 碰面与账本房间都可使用微信原生邀请卡；卡片只携带 8 位房间码和房间类型，不携带地址、账目、昵称或内部文档编号。好友打开后会进入对应加入提示，明确确认名字并完成必要的同意流程后才成为成员。
-- 微信身份由可信 OpenID 自动识别；用户可主动选择、移除头像和昵称，或删除自己的云端资料，并在同一微信账号下跨设备找回所有仍有权限的房间。头像文件保持私有，不会把整个 CloudBase 存储桶公开。
-- 碰面：既支持本机填写多个出发地，也支持房间成员各自在自己的手机上选择／更新位置；可显示参考中点、添加候选地点、投票、由房主确认或重新选择，并用盲盒逐个挑选去处。
-- 共享账本：使用“同行的人 → 记支出 → 谁转给谁”三步流程，支持本机账本和云端房间，管理成员、新增／修改／删除支出、选择付款人与分摊人、查看余额和转账建议。非零余额人数不超过 10 人时会计算最少笔数；人数更多时提供可结清的推荐方案。
-- 房间创建者可解散，其他成员可退出；联网房间当前没有自动过期设置，并在房主解散后失效。
-- 转盘先完成可见动画再显示结果；它只在本机运行，名单和结果不参与房间同步。
-- 房间页面每 2 秒通过 `roomGateway` 拉取最新状态。
+- **Unified room entry:** Enter an eight-character code on the home screen. The client identifies the room type and opens the appropriate meetup or ledger join flow.
+- **Native invitations:** Meetup and ledger rooms support WeChat invitation cards. Cards contain only the room code and room type—not addresses, expenses, nicknames, or internal document identifiers. Recipients must confirm their name and required consent before joining.
+- **Trusted identity:** Cloud functions identify the WeChat account through a trusted OpenID. Users may choose, replace, or remove a profile image and nickname, and can recover authorized rooms across devices under the same WeChat identity.
+- **Meetup planning:** Participants may plan locally with multiple starting points or contribute their locations from separate devices. A shared room supports midpoint estimation, candidate destinations, voting, owner confirmation, and sequential destination selection.
+- **Shared ledger:** Local and cloud rooms support members, expense creation and editing, payer and participant selection, balances, and settlement recommendations. For up to ten people with non-zero balances, the solver minimizes the number of transfers; larger groups receive a valid settlement plan.
+- **Room lifecycle:** Owners may dissolve rooms and other members may leave. Online rooms currently remain active until they are dissolved.
+- **Local spinner:** The spinner completes its visible animation before revealing a result. Entries and outcomes remain on the device and are not synchronized.
+- **State refresh:** Room pages poll `roomGateway` every two seconds for authorized state updates.
 
-参考中点只是坐标估算；最终去处应结合真实交通在候选地点中共同确认。
+The displayed midpoint is a coordinate estimate. Participants should consider actual transit, road conditions, and accessibility before confirming a destination.
 
-## 隐私与权限
+## Consent, privacy, and permissions
 
-- 首次打开直接进入首页，不自动登录、不建立云端账号范围，也不请求手机号、头像、昵称或位置。
-- 公平中点、账本和转盘可先以游客模式体验；游客中点/账本草稿不会持久化或上传。
-- 只有用户主动创建/加入多人房间、查看云端行程或打开账号资料时才显示可取消的登录框。
-- 《用户服务协议》和《隐私保护指引》必须分别主动打开；复选框默认未勾选，未勾选时登录按钮不可用。
-- 登录不获取手机号，也不自动读取头像或昵称；头像和昵称只在用户登录后主动打开资料页、选择或填写并保存时上传。
+- The first launch opens directly to the home screen without automatic login or requests for a phone number, profile image, nickname, or location.
+- Users may try the local midpoint, ledger, and spinner flows as guests. Guest drafts are neither persisted nor uploaded.
+- A cancellable login prompt appears only when the user initiates a cloud-dependent action such as creating or joining a shared room, opening cloud history, or managing a profile.
+- The Terms of Service and Privacy Guide must be opened separately. Consent is unchecked by default, and login remains disabled until the user opts in.
+- Login does not request a phone number or automatically retrieve a profile image or nickname. Profile data is uploaded only after an authenticated user explicitly edits and saves it.
 
-发布前在微信公众平台隐私保护指引中勾选以下 5 类，不要勾选宽泛的“位置信息”：
+Before release, declare only the following data and capabilities in the WeChat privacy guide:
 
-- 用户信息（微信昵称、头像）：用户主动完善成员身份和默认昵称。
-- 发布内容：保存并向同一房间成员展示房间名、成员名、支出说明、候选地点和投票。
-- 选择的位置信息：`wx.chooseLocation` 只在用户主动选择出发地或候选地点时调用。
-- 剪切板：只在用户点击“复制房间码”时写入，不读取已有剪切板内容。
-- 自定义“用户标识符（OpenID）”：识别房主和成员、校验权限、同步账号资料与“我的房间”。
+- **User information (nickname and profile image):** display member identity and prefill the user's chosen nickname.
+- **Published content:** store and display room names, member names, expense descriptions, candidate destinations, and votes within the authorized room.
+- **User-selected location:** call `wx.chooseLocation` only after the user chooses a starting point or candidate destination.
+- **Clipboard:** write a room code only after the user presses the copy control; Pintu does not read existing clipboard contents.
+- **Custom user identifier (OpenID):** identify owners and members, enforce authorization, synchronize profiles, and retrieve the user's rooms.
 
-建议用途说明分别填写：“显示成员身份并预填昵称”“在同一房间内协作展示用户主动提交的内容”“计算参考碰面点并展示候选地点”“复制房间码邀请同行成员”“识别房主和成员、校验权限及跨设备同步”。
+Do not declare the broader generic location category when the product uses only user-selected location.
 
-### 头像文件清理
+## Profile-image lifecycle
 
-小程序只会把新头像上传到云函数为当前微信账号下发的 `avatars/profile-<hash>/` 私有路径。替换、移除头像或删除资料后，旧文件的删除由云函数执行；若失败，资料页会显示待清理数量，并可主动重试。不要把 CloudBase 整个存储桶改为公开读。
+New images are uploaded only to the private, account-specific path issued by a cloud function, using the form `avatars/profile-<hash>/`. When an image is replaced or a profile is removed, deletion is performed by the cloud function. Failed deletions create a private retry record that the user can retry from the profile screen. Do not make the CloudBase storage bucket publicly readable.
 
-## Web 与小程序互通
+## Web interoperability
 
-Web 与小程序共用受保护的 `schemaVersion: 5` 房间。同一个房间码可从任一端加入，成员、位置、候选投票和账目会双向同步。平台身份由云函数根据可信调用上下文识别，客户端不能伪造；Web 内容在向微信用户展示前会经过微信内容安全流程。
+The web application and Mini Program share protected `schemaVersion: 5` rooms. A valid room code can be used on either platform, and authorized changes to membership, starting locations, candidate votes, and ledger entries synchronize in both directions. Cloud functions derive platform identity from trusted invocation context rather than client parameters. Content created on the web passes through the WeChat content-safety flow before it is displayed to Mini Program users.
+
+## Release checklist
+
+- Link the Mini Program account to the configured CloudBase environment.
+- Deploy `roomGateway` and, when address search is enabled, `mapGateway`.
+- Complete the WeChat privacy declarations described above.
+- Request the required user-selected-location capability for `wx.chooseLocation`.
+- Complete Mini Program filing and any verification needed for search or sharing.
+- Test creation, joining, synchronization, voting, ledger editing, member departure, and owner dissolution on at least two physical devices.
+
+Return to the [main project documentation](../README.md) for architecture, testing, deployment, and security details.

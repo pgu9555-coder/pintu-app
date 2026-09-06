@@ -445,6 +445,10 @@ assert.match(midpointPageSource, /typeof wx\.chooseLocation !== ['"]function['"]
 assert.match(midpointPageSource, /translateX\(\$\{delta\}px\)/, "blind-box drag distance must use the same pixel unit as touch coordinates");
 
 const readmeSource = fs.readFileSync(path.join(root, "..", "README.md"), "utf8");
-assert.match(readmeSource, /同一个 8 位房间码可在两端加入/, "documentation must describe Web/mini-program room interoperability");
+assert.match(
+  readmeSource,
+  /Join the same protected room from the web application or WeChat Mini Program with an eight-character invitation code/,
+  "documentation must describe Web/mini-program room interoperability"
+);
 
 console.log(`Native miniprogram checks passed (${jsonFiles.length} JSON files, ${jsFiles.length} JavaScript files).`);
