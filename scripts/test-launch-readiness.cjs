@@ -146,7 +146,10 @@ async function main(){
   try{
     fs.mkdirSync(path.join(temp,'miniprogram-shell'));
     for(const name of ['cloudbaserc.json','index.html','launch-support.js','privacy.html','terms.html','legal.css'])fs.copyFileSync(path.join(root,name),path.join(temp,name));
+    fs.writeFileSync(path.join(temp,'midpoint.css'),'/* midpoint style fixture */');
+    fs.writeFileSync(path.join(temp,'midpoint-ui.js'),'// midpoint interaction fixture');
     require('./prepare-release.cjs').prepare({CLOUDBASE_ENV_ID:'pintu-test-env',PINTU_MAP_PROXY_ORIGIN:'https://proxy.example',AMAP_JS_API_KEY:'c'.repeat(32)},temp);
+    for(const name of ['midpoint.css','midpoint-ui.js'])assert.equal(fs.readFileSync(path.join(temp,'cloudbase-site',name),'utf8'),fs.readFileSync(path.join(temp,name),'utf8'));
     const generated=fs.readFileSync(path.join(temp,'app-config.js'),'utf8');
     assert.match(generated,/pintu-test-env/);assert.match(generated,/https:\/\/proxy.example\/_AMapService/);
     assert.doesNotMatch(generated,/securityJsCode|AMAP_SECURITY_JS_CODE/);
