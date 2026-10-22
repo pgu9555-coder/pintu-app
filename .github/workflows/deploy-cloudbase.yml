@@ -122,6 +122,7 @@ jobs:
           node scripts/test-miniprogram-native.cjs
           node scripts/test-map-gateway.cjs
           node scripts/test-launch-readiness.cjs
+          node scripts/test-midpoint-ui.cjs
 
       - name: Install deployment dependencies
         run: npm install --no-save @cloudbase/manager-node@5.6.6 @cloudbase/node-sdk@3.18.3

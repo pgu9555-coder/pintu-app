@@ -11,6 +11,7 @@
     return requestVersion;
   };
   window.pintuMidpointRequestIsCurrent = function (version) { return version === requestVersion; };
+  window.pintuMidpointCurrentVersion = function () { return requestVersion; };
 
   function category(poi) { return poi.isMall ? 'mall' : poi.isDrink ? 'drink' : 'food'; }
   function cover(type) {
@@ -39,7 +40,8 @@
       if (!card.hidden) visible++;
       var panel = card.nextElementSibling;
       if (panel && panel.classList.contains('poi-expand-panel')) {
-        panel.hidden = card.hidden;
+        panel.hidden = false;
+        panel.style.display = !card.hidden && card.classList.contains('expanded') ? 'block' : 'none';
       }
     });
     document.querySelectorAll('[data-poi-filter]').forEach(function (button) {
