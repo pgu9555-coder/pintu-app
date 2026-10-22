@@ -16,30 +16,13 @@
 <title>拼途 — 聚会与旅行协作工具</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%230F3D36'/%3E%3Cpath d='M12 32 52 14 39 52 30 35Z' fill='none' stroke='%23F6F3EA' stroke-width='5' stroke-linejoin='round'/%3E%3C/svg%3E">
 
-<!-- ==========================================================================
-     ★★★ 内测上线前，只需要改下面这 3 个值（都在本文件最顶部，已用 ★ 标出）★★★
-
-       ① 高德 securityJsCode —— 见下方 window._AMapSecurityConfig
-       ② 高德 key           —— 见下方 <script src="https://webapi.amap.com/...">
-       ③ CloudBase 环境 ID   —— 见下方 CLOUDBASE_ENV_ID
-
-     ①② 到高德开放平台控制台申请，并把你的上线域名加进 key 的「域名白名单」；
-     ③  到腾讯云开发控制台建环境后复制「环境 ID」，并开启匿名登录、配置安全域名。
-     具体每一步见随附的《内测上线清单》。改完这 3 个值 + 部署到 https 域名即可。
-     ========================================================================== -->
-
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans+SC:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-
-<script type="text/javascript">
-  /* ★① 高德 securityJsCode（换成你自己的） */
-  window._AMapSecurityConfig = {
-    securityJsCode: 'a1654f000cd6040fded825506d33193e',
-  }
+<!-- Public deployment configuration; secrets belong only on the map proxy server. -->
+<script src="/app-config.js"></script>
+<script src="/launch-support.js"></script>
+<script>
+  window._AMapSecurityConfig = { serviceHost: window.PINTU_CONFIG.amapServiceHost };
 </script>
-<!-- ★② 高德 key：把 key=... 换成你自己的，并到高德控制台给这个 key 绑定上线域名白名单 -->
-<script src="https://webapi.amap.com/maps?v=2.0&key=3dd7e697ce356938d03b8fc72c91bf61&plugin=AMap.PlaceSearch,AMap.AutoComplete,AMap.Geocoder,AMap.Geolocation,AMap.DistrictSearch"></script>
+<script src="https://webapi.amap.com/maps?v=2.0&key=fc1674fadccac8c3e1448704f5a1effa&plugin=AMap.PlaceSearch,AMap.AutoComplete,AMap.Geocoder,AMap.Geolocation,AMap.DistrictSearch"></script>
 
 <!-- ============================================================
      腾讯云开发 CloudBase（协同组局房间的真实后端，国内可用、免费额度够用）
@@ -51,7 +34,7 @@
 <!-- 使用腾讯云当前官方 Web SDK；旧 tcb-js-sdk 已停止更新。 -->
 <script src="https://static.cloudbase.net/cloudbase-js-sdk/2.17.3/cloudbase.full.js"></script>
 <script>
-  var CLOUDBASE_ENV_ID = "pintu-d4g77ecn24b674fa0";   /* ★③ 你的云开发环境 ID */
+  var CLOUDBASE_ENV_ID = window.PINTU_CONFIG.cloudbaseEnvId;   /* ★③ 你的云开发环境 ID */
   var rmDb = null;
   var rmTcbApp = null;
   var rmTcbError = null;
@@ -143,6 +126,7 @@
         if (!result || result.ok !== true){
           var err = new Error((result && result.message) || '房间服务暂时不可用');
           err.code = result && result.code;
+          err.publicMessage = true;
           throw err;
         }
         return result.data;
@@ -297,6 +281,12 @@
   })();
   var rmTcbReady = null;
   function rmEnsureTcbReady(){
+    if (window.pintuCheckCloudOrigin && !window.pintuCheckCloudOrigin()) return Promise.resolve(false);
+    if (!window.pintuCloudConsentGranted) {
+      return window.pintuRequestCloudConsent().then(function(accepted){
+        return accepted ? rmEnsureTcbReady() : false;
+      });
+    }
     if (CLOUDBASE_ENV_ID === "你的环境ID") {
       window.rmBackendStatus.state = 'unconfigured';
       return Promise.resolve(false);
@@ -321,6 +311,7 @@
           var cu = auth.currentUser;
           if (cu && cu.uid) window.rmMyUid = cu.uid;   /* 每台设备的身份，用于协作碰面认领"我的出发点" */
         } catch(e){}
+        setTimeout(rmFlushPendingMeetups, 0);
         return true;
       }).catch(function(e){
         rmTcbError = e;
@@ -337,8 +328,9 @@
       return rmTcbReady;
     }
   }
-  rmTcbReady = rmEnsureTcbReady();
-  rmTcbReady.then(function(ready){ if (ready) rmFlushPendingMeetups(); });
+  // Cloud identity is established only after the user chooses a shared action.
+  rmTcbReady = Promise.resolve(false);
+  window.rmBackendStatus = { state: 'idle', error: null };
   window.addEventListener('online', rmFlushPendingMeetups);
   window.addEventListener('focus', rmFlushPendingMeetups);
 </script>
@@ -1205,6 +1197,7 @@
   .runtime-note{background:var(--gold-soft);color:var(--green-deep);border:1px solid #D3C296;border-radius:12px;padding:10px 12px;font-size:12px;line-height:1.55;margin-bottom:14px;}
   @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important;}}
 </style>
+<style>.launch-links{display:flex;flex-wrap:wrap;gap:12px;margin:0 0 16px;font-size:12px}.launch-links a,.launch-links button{color:var(--green);background:none;border:0;padding:0;font:inherit;text-decoration:underline;cursor:pointer}.launch-dialog{border:1px solid #D8D5C8;border-radius:18px;padding:24px;width:calc(100% - 48px);max-width:440px;box-sizing:border-box;background:#FFFDF6;color:#0F3D36}.launch-dialog::backdrop{background:#0007}.launch-dialog h2{margin-top:0;font-size:20px}.launch-dialog p{font-size:14px;line-height:1.65}.launch-dialog button,.launch-dialog select{padding:10px;margin:6px 6px 0 0;font-size:15px;max-width:100%}.launch-dialog a{color:#174f47}</style>
 </head>
 <body>
 
@@ -1224,6 +1217,7 @@
       </div>
 
       <div class="home-content">
+        <nav class="launch-links" aria-label="服务与数据"><a href="/privacy.html">隐私说明</a><a href="/terms.html">用户协议</a><a href="mailto:pgu9555@gmail.com">联系开发者</a><button type="button" onclick="pintuOpenDataTools()">备份与迁移</button></nav>
         <section class="tool-room-card home-join-card" aria-labelledby="homeJoinTitle">
           <div class="tool-room-head">
             <div class="tool-room-icon" aria-hidden="true"><i class="ti-ticket"></i></div>
@@ -1362,6 +1356,7 @@
             <div class="tool-room-error" id="mpRoomError"></div>
           </div>
           <div class="tool-room-active" id="mpCollabActive">
+            <button class="tool-room-link" type="button" onclick="pintuTransferOwner()">房主管理</button>
             <div class="tool-room-active-main"><div class="tool-room-active-label">正在共享碰面位置 · 房间码</div><div class="tool-room-active-code" id="mpActiveCode">------</div></div>
             <button class="tool-room-link" id="mpCopyCodeBtn" type="button">复制</button>
             <button class="tool-room-link" id="mpLeaveRoomBtn" type="button">退出</button>
@@ -1497,6 +1492,7 @@
             <div class="tool-room-error" id="glRoomError"></div>
           </div>
           <div class="tool-room-active" id="glCollabActive">
+            <button class="tool-room-link" type="button" onclick="pintuTransferOwner()">房主管理</button>
             <div class="tool-room-active-main"><div class="tool-room-active-label">正在共享行程花费 · 房间码</div><div class="tool-room-active-code" id="glActiveCode">------</div></div>
             <button class="tool-room-link" id="glCopyCodeBtn" type="button">复制</button>
             <button class="tool-room-link" id="glLeaveRoomBtn" type="button">退出</button>
@@ -4770,14 +4766,14 @@ function glComputeSettlement(trip){
         tried[values[j]] = true;
         var next = values.slice();
         var transfer = firstValue < 0
-          ? { from: nodes[first].id, to: nodes[j].id, amountCents: -firstValue }
-          : { from: nodes[j].id, to: nodes[first].id, amountCents: firstValue };
-        next[j] += firstValue;
-        next[first] = 0;
+          ? { from: nodes[first].id, to: nodes[j].id, amountCents: Math.min(-firstValue, values[j]) }
+          : { from: nodes[j].id, to: nodes[first].id, amountCents: Math.min(firstValue, -values[j]) };
+        var moved = transfer.amountCents;
+        next[first] += firstValue < 0 ? moved : -moved;
+        next[j] += firstValue < 0 ? -moved : moved;
         var rest = solve(next);
         var candidate = [transfer].concat(rest);
         if (!best || candidate.length < best.length) best = candidate;
-        if (next[j] === 0) break; /* 完全抵消已经是当前层最优选择，无需尝试同额重复分支。 */
       }
       memo[key] = best || [];
       return glClone(memo[key]);
@@ -5146,6 +5142,7 @@ function rmRenderHomeRoomList(){
     rmUpdateTripsEmptyState();
   }
 
+  if (!window.pintuCloudConsentGranted || !rmGetMyRoomIds().length) { paint(); return; }
   rmEnsureTcbReady().then(function(ready){
     if (refreshToken !== rmHomeRefreshToken) return;
     if (!ready || !rmDb){ paint(); return; }
@@ -6031,8 +6028,7 @@ function spinnerSpin(){
     if (joinBtn){ joinBtn.disabled = busy; joinBtn.textContent = busy && action === 'join' ? '加入中…' : c.joinText; }
   }
   function backendErrorText(err){
-    var msg = err && (err.message || err.errorMessage || err.code || err);
-    return '连接房间失败：' + msg + '。请确认 CloudBase 匿名登录、数据库 rooms 权限和安全域名均已开启。';
+    return window.pintuRoomErrorText(err);
   }
 
   window.rmRefreshTypedRoomUI = function(type){

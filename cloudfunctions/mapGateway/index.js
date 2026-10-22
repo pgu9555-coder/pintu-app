@@ -2,6 +2,9 @@
 
 const https = require("node:https");
 const wxCloud = require("wx-server-sdk");
+const cloudbase = require('@cloudbase/node-sdk');
+const quota = require('./quota');
+const db = cloudbase.init({ env: cloudbase.SYMBOL_CURRENT_ENV }).database();
 
 const PROVIDER_HOST = "restapi.amap.com";
 const TIMEOUT_MS = 5000;
@@ -10,7 +13,6 @@ const MAX_TIPS = 10;
 const MAX_NEARBY = 12;
 const RATE_WINDOW_MS = 60 * 1000;
 const RATE_LIMITS = { inputTips: 30, nearby: 20 };
-const rateBuckets = new Map();
 
 wxCloud.init({ env: wxCloud.DYNAMIC_CURRENT_ENV });
 
@@ -59,18 +61,6 @@ function validateEvent(event) {
     return { action: "nearby", latitude: event.latitude, longitude: event.longitude };
   }
   return failure("INVALID_ACTION", "不支持的地图操作");
-}
-
-function allowRequest(identity, action, now = Date.now()) {
-  const key = `${identity}:${action}`;
-  const bucket = rateBuckets.get(key);
-  if (!bucket || now - bucket.startedAt >= RATE_WINDOW_MS) {
-    rateBuckets.set(key, { startedAt: now, count: 1 });
-    return true;
-  }
-  if (bucket.count >= RATE_LIMITS[action]) return false;
-  bucket.count += 1;
-  return true;
 }
 
 function providerRequest(pathname, parameters) {
@@ -157,8 +147,11 @@ async function main(event) {
   if (!identity) return failure("UNAUTHORIZED", "请先登录后再使用地图搜索");
   const input = validateEvent(event);
   if (input && input.ok === false) return input;
-  if (!allowRequest(identity, input.action)) return failure("RATE_LIMITED", "地图搜索过于频繁，请稍后再试");
   try {
+    if (!await db.runTransaction(transaction => quota.consume(transaction, [
+      { key: `map-user:${identity}:${input.action}`, windowMs: RATE_WINDOW_MS, limit: RATE_LIMITS[input.action] },
+      { key: 'map-global-day', windowMs: 86400000, limit: quota.positiveLimit('MAP_REQUESTS_PER_DAY', 10000) }
+    ]), 5)) return failure('RATE_LIMITED', '地图搜索已达到上限，请稍后再试');
     if (input.action === "inputTips") {
       const body = requireProviderSuccess(await providerRequest("/v3/assistant/inputtips", {
         keywords: input.keywords,
@@ -183,4 +176,4 @@ async function main(event) {
   }
 }
 
-module.exports = { main, _private: { validateEvent, normalizeTips, normalizeNearby, requireProviderSuccess, publicProviderError, allowRequest, rateBuckets } };
+module.exports = { main, _private: { validateEvent, normalizeTips, normalizeNearby, requireProviderSuccess, publicProviderError } };

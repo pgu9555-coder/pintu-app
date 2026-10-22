@@ -3,7 +3,7 @@ const path = require("node:path");
 const CloudBaseModule = require("@cloudbase/manager-node");
 
 const CloudBase = CloudBaseModule.default || CloudBaseModule;
-const envId = process.env.CLOUDBASE_ENV_ID || "pintu-d4g77ecn24b674fa0";
+const envId = process.env.CLOUDBASE_ENV_ID || "pintu-prod-d1grnmzg0f6778ea6";
 const secretId = process.env.TCB_SECRET_ID;
 const secretKey = process.env.TCB_SECRET_KEY;
 
@@ -116,6 +116,17 @@ async function main() {
     await applyCollectionRule(collectionName, securityRule);
   }
   await ensureMyRoomsIndex();
+  const expiryIndex = "quota_expiry";
+  const existing = await cloudbase.database.checkIndexExists("request_limits", expiryIndex);
+  if (!existing || !existing.Exists) {
+    await cloudbase.database.updateCollection("request_limits", {
+      CreateIndexes: [{ IndexName: expiryIndex, MgoKeySchema: {
+        MgoIsUnique: false, MgoIndexKeys: [{ Name: "expiresAt", Direction: "1" }]
+      } }]
+    });
+  }
+  const verified = await cloudbase.database.checkIndexExists("request_limits", expiryIndex);
+  if (!verified || !verified.Exists) throw new Error("Quota expiry index verification failed.");
 }
 
 main().catch((error) => {

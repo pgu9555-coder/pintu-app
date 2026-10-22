@@ -6,6 +6,12 @@ on:
       - main
     paths:
       - index.html
+      - app-config.js
+      - launch-support.js
+      - privacy.html
+      - terms.html
+      - legal.css
+      - "scripts/**"
       - cloudbaserc.json
       - "cloudfunctions/**"
       - cloudbase-security-rules.json
@@ -45,6 +51,9 @@ jobs:
     name: Test and deploy PintU production
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      CLOUDBASE_ENV_ID: ${{ vars.CLOUDBASE_ENV_ID || 'pintu-prod-d1grnmzg0f6778ea6' }}
+      TCB_REGION: ${{ vars.TCB_REGION || 'ap-shanghai' }}
 
     steps:
       - name: Checkout main
@@ -81,10 +90,11 @@ jobs:
           package-manager-cache: false
 
       - name: Prepare static site
-        shell: bash
-        run: |
-          mkdir -p cloudbase-site
-          cp index.html cloudbase-site/index.html
+        env:
+          PINTU_MAP_PROXY_ORIGIN: ${{ vars.PINTU_MAP_PROXY_ORIGIN || 'https://pintu-app-nu.vercel.app' }}
+          PINTU_COLLAB_ORIGIN: ${{ vars.PINTU_COLLAB_ORIGIN || 'https://pintu-prod-d1grnmzg0f6778ea6-1303073868.tcloudbaseapp.com' }}
+          AMAP_JS_API_KEY: ${{ vars.AMAP_JS_API_KEY }}
+        run: node scripts/prepare-release.cjs
 
       - name: Install CloudBase CLI
         run: npm install --global @cloudbase/cli@3.7.0
@@ -109,6 +119,7 @@ jobs:
           node scripts/test-security-config.cjs
           node scripts/test-miniprogram-native.cjs
           node scripts/test-map-gateway.cjs
+          node scripts/test-launch-readiness.cjs
 
       - name: Install deployment dependencies
         run: npm install --no-save @cloudbase/manager-node@5.6.6 @cloudbase/node-sdk@3.18.3
@@ -117,12 +128,13 @@ jobs:
         env:
           TCB_SECRET_ID: ${{ secrets.TCB_SECRET_ID }}
           TCB_SECRET_KEY: ${{ secrets.TCB_SECRET_KEY }}
-          CLOUDBASE_ENV_ID: pintu-d4g77ecn24b674fa0
-          TCB_REGION: ap-shanghai
         run: node scripts/apply-cloudbase-security.cjs
 
       - name: Deploy room access gateway
         run: tcb fn deploy roomGateway --force --yes
+
+      - name: Deploy expired quota cleanup
+        run: tcb fn deploy quotaCleanup --force --yes
 
       - name: Prepare map search deployment configuration
         if: ${{ steps.map-secret.outputs.available == 'true' }}
@@ -138,8 +150,6 @@ jobs:
         env:
           TCB_SECRET_ID: ${{ secrets.TCB_SECRET_ID }}
           TCB_SECRET_KEY: ${{ secrets.TCB_SECRET_KEY }}
-          CLOUDBASE_ENV_ID: pintu-d4g77ecn24b674fa0
-          TCB_REGION: ap-shanghai
         run: node scripts/apply-cloudbase-function-security.cjs
 
       - name: Backfill room member access lists
@@ -147,9 +157,8 @@ jobs:
         env:
           TCB_SECRET_ID: ${{ secrets.TCB_SECRET_ID }}
           TCB_SECRET_KEY: ${{ secrets.TCB_SECRET_KEY }}
-          CLOUDBASE_ENV_ID: pintu-d4g77ecn24b674fa0
           RUN_ROOM_MEMBERSHIP_MIGRATION: "1"
         run: node scripts/migrate-room-members.cjs
 
-      - name: Deploy index.html to production
-        run: tcb hosting deploy ./cloudbase-site / -e pintu-d4g77ecn24b674fa0
+      - name: Deploy static site to production
+        run: tcb hosting deploy ./cloudbase-site / -e "$CLOUDBASE_ENV_ID"

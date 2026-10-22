@@ -41,9 +41,10 @@ const appStyles = fs.readFileSync(path.join(root, "app.wxss"), "utf8");
 const amapSource = fs.readFileSync(path.join(root, "utils", "amap.js"), "utf8");
 assert.match(
   appSource,
-  /wx\.cloud\.init\s*\(\s*\{[\s\S]*?\benv\s*:\s*['"]pintu-d4g77ecn24b674fa0['"]/,
+  /wx\.cloud\.init\s*\(\s*\{[\s\S]*?\benv\s*:\s*environment\.cloudbaseEnvId/,
   "app.js must initialize CloudBase with the PintU environment"
 );
+assert.equal(require(path.join(root, 'environment.js')).cloudbaseEnvId, readJson(path.join(root, '..', 'cloudbaserc.json')).envId, 'web deployment and native app must use the same configured environment');
 assert.match(appSource, /wx\.cloud\.init\s*\(\s*\{[\s\S]*?traceUser\s*:\s*false/, "first launch must not enable CloudBase user tracing before explicit account consent");
 const project = readJson(path.join(root, "project.config.json"));
 assert.equal(project.appid, "wxe1fe19432c29e3cd", "project.config.json must use the PintU AppID");

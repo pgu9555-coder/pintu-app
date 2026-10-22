@@ -1,7 +1,17 @@
 {
-  "envId": "pintu-d4g77ecn24b674fa0",
+  "envId": "pintu-prod-d1grnmzg0f6778ea6",
   "functionRoot": "./cloudfunctions",
   "functions": [
+    {
+      "name": "quotaCleanup",
+      "type": "Event",
+      "handler": "index.main",
+      "runtime": "Nodejs20.19",
+      "timeout": 60,
+      "memorySize": 128,
+      "installDependency": true,
+      "triggers": [{ "name": "hourly-quota-cleanup", "type": "timer", "config": "0 17 * * * * *" }]
+    },
     {
       "name": "roomGateway",
       "type": "Event",

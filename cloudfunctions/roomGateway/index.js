@@ -3,6 +3,7 @@
 const crypto = require("node:crypto");
 const cloudbase = require("@cloudbase/node-sdk");
 const wxCloud = require("wx-server-sdk");
+const quota = require("./quota");
 
 const ROOM_COLLECTION = "rooms";
 const PROFILE_COLLECTION = "user_profiles";
@@ -22,7 +23,6 @@ const MAX_DECISION_CANDIDATES = 12;
 const MAX_DECISION_VOTES_PER_CANDIDATE = MAX_LEDGER_MEMBERS;
 const JOIN_WINDOW_MS = 5 * 60 * 1000;
 const MAX_JOIN_ATTEMPTS_PER_WINDOW = 20;
-const joinAttemptBuckets = new Map();
 const app = cloudbase.init({ env: cloudbase.SYMBOL_CURRENT_ENV });
 const db = app.database();
 wxCloud.init({ env: wxCloud.DYNAMIC_CURRENT_ENV });
@@ -1078,23 +1078,6 @@ function decisionRoundMatches(event, decision) {
   return expectedRoundId === decision.roundId;
 }
 
-/* 轻量的单实例节流用于挡住误操作和普通脚本；8 位随机码提供主要的抗猜测空间。 */
-function consumeJoinAttempt(uid) {
-  const now = Date.now();
-  if (joinAttemptBuckets.size > 5000) {
-    for (const [key, bucket] of joinAttemptBuckets) {
-      if (!bucket || now - bucket.startedAt > JOIN_WINDOW_MS) joinAttemptBuckets.delete(key);
-    }
-  }
-  const key = membershipVersionKey(uid);
-  let bucket = joinAttemptBuckets.get(key);
-  if (!bucket || now - bucket.startedAt > JOIN_WINDOW_MS) bucket = { startedAt: now, count: 0 };
-  if (bucket.count >= MAX_JOIN_ATTEMPTS_PER_WINDOW) return false;
-  bucket.count += 1;
-  joinAttemptBuckets.set(key, bucket);
-  return true;
-}
-
 function sharedMemberId() {
   return `member-${Date.now().toString(36)}-${crypto.randomBytes(5).toString("hex")}`;
 }
@@ -1253,6 +1236,11 @@ async function createRoom(event, uid, accessPlatform) {
         }
         return { kind: "collision" };
       }
+      const budget = await quota.consume(transaction, [
+        { key: `create-user:${uid}`, windowMs: 86400000, limit: quota.positiveLimit('ROOM_CREATES_PER_USER_DAY', 20) },
+        { key: 'create-global', windowMs: 86400000, limit: quota.positiveLimit('ROOM_CREATES_PER_DAY', 1000) }
+      ]);
+      if (!budget) publicInputError('RATE_LIMITED', '已达到今日房间创建上限，请明天再试。');
       requireDbSuccess(await ref.set(candidate), "创建房间");
       return { kind: "created", room: candidate };
     }, 5);
@@ -1652,7 +1640,10 @@ async function joinRoom(event, uid, accessPlatform) {
   if (!/^(?:[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}|[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{8})$/.test(code)) {
     return failure("INVALID_CODE", "请输入完整的 8 位房间码（旧房间可输入 6 位）");
   }
-  if (!consumeJoinAttempt(uid)) return failure("RATE_LIMITED", "尝试次数过多，请 5 分钟后再试");
+  if (!await db.runTransaction(transaction => quota.consume(transaction, [
+    { key: `join-user:${uid}`, windowMs: JOIN_WINDOW_MS, limit: MAX_JOIN_ATTEMPTS_PER_WINDOW },
+    { key: 'join-global', windowMs: 86400000, limit: quota.positiveLimit('ROOM_JOIN_ATTEMPTS_PER_DAY', 10000) }
+  ]), 5)) return failure("RATE_LIMITED", "尝试次数过多，请 5 分钟后再试");
   let room = await roomByCode(code);
   if (room && !hasRoomAccessPlatform(room, accessPlatform)) return failure("ROOM_NOT_FOUND", "没有找到这个房间码");
   if (!room) return failure("ROOM_NOT_FOUND", `没有找到房间码“${code}”`);
@@ -2275,6 +2266,27 @@ async function updateLegacyMembers(event, uid, accessPlatform) {
   }, 5);
 }
 
+async function transferOwnership(event, uid, accessPlatform) {
+  const docId = cleanText(event.docId, 80);
+  const targetUid = cleanText(event.targetUid, 128);
+  if (!docId || !targetUid || targetUid === uid) return failure('INVALID_INPUT', '请选择其他已加入的成员');
+  return db.runTransaction(async transaction => {
+    const ref = transaction.collection(ROOM_COLLECTION).doc(docId);
+    const response = requireDbSuccess(await ref.get(), '读取房间');
+    const room = response && response.data;
+    if (!hasRoomAccessPlatform(room, accessPlatform) || !isActiveRoomMember(room, uid)) return failure('ROOM_NOT_FOUND', '房间已结束或你已退出');
+    if (room.ownerUid !== uid) return failure('NOT_OWNER', '只有当前房主可以转交权限');
+    if (!requireCurrentMembership(room, uid, event.membershipEpoch)) return failure('STALE_MEMBERSHIP', '成员身份已更新，请刷新后重试');
+    const target = (room.members || []).find(member => member.uid === targetUid);
+    if (!target || !activeTopLevelMemberUids(room).includes(targetUid)) return failure('INVALID_MEMBER', '接收人已不在房间中，请刷新');
+    const patch = { ownerUid: targetUid, updatedAt: new Date() };
+    const result = requireDbSuccess(await ref.update(patch), '转交房主');
+    if (!result || result.updated !== 1) throw new Error('转交房主失败');
+    const updated = { ...room, ...patch, _id: docId };
+    return success({ room: updated, viewer: roomViewer(updated, uid) });
+  }, 5);
+}
+
 async function disbandRoom(event, uid, accessPlatform) {
   const docId = cleanText(event.docId, 80);
   if (!docId) return failure("ROOM_REQUIRED", "缺少房间编号");
@@ -2365,6 +2377,7 @@ exports.main = async (event, context) => {
     if (action === "reopenDecision") return await reopenDecision(event, uid, accessPlatform);
     if (action === "updateLegacyMembers") return await updateLegacyMembers(event, uid, accessPlatform);
     if (action === "disband") return await disbandRoom(event, uid, accessPlatform);
+    if (action === "transferOwnership") return await transferOwnership(event, uid, accessPlatform);
     if (action === "leave") return await leaveRoom(event, uid, accessPlatform);
     return failure("UNKNOWN_ACTION", "不支持的房间操作");
   } catch (error) {
