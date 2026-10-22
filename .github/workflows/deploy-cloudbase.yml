@@ -11,6 +11,8 @@ on:
       - privacy.html
       - terms.html
       - legal.css
+      - midpoint.css
+      - midpoint-ui.js
       - "scripts/**"
       - cloudbaserc.json
       - "cloudfunctions/**"

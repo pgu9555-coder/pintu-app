@@ -9,7 +9,7 @@
 <meta name="color-scheme" content="light">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <meta name="format-detection" content="telephone=no">
-<meta name="pintu-build" content="2026-08-04-launch-audit-v2">
+<meta name="pintu-build" content="2026-10-22-midpoint-sage">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
@@ -716,7 +716,7 @@
   .add-loc-btn:hover{border-color:var(--blue);color:var(--blue);}
 
   #realMap { height: 360px; width: 100%; border-radius: 16px; border: 1px solid var(--line); margin-bottom: 16px; z-index: 1;}
-  .amap-logo, .amap-copyright { display: none !important; }
+  /* Map attribution stays visible. */
 
   .poi-list{display:flex;flex-direction:column;gap:10px;}
   .poi-card{background:var(--paper-raised);border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:12px;}
@@ -1198,6 +1198,7 @@
   @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important;}}
 </style>
 <style>.launch-links{display:flex;flex-wrap:wrap;gap:12px;margin:0 0 16px;font-size:12px}.launch-links a,.launch-links button{color:var(--green);background:none;border:0;padding:0;font:inherit;text-decoration:underline;cursor:pointer}.launch-dialog{border:1px solid #D8D5C8;border-radius:18px;padding:24px;width:calc(100% - 48px);max-width:440px;box-sizing:border-box;background:#FFFDF6;color:#0F3D36}.launch-dialog::backdrop{background:#0007}.launch-dialog h2{margin-top:0;font-size:20px}.launch-dialog p{font-size:14px;line-height:1.65}.launch-dialog button,.launch-dialog select{padding:10px;margin:6px 6px 0 0;font-size:15px;max-width:100%}.launch-dialog a{color:#174f47}</style>
+<link rel="stylesheet" href="/midpoint.css">
 </head>
 <body>
 
@@ -1244,7 +1245,7 @@
             <div class="tool-icon midpoint" aria-hidden="true"><i class="ti-map-pin-share"></i></div>
             <div class="tool-copy">
               <div class="tool-title">公平碰面 · 盲盒吃喝</div>
-              <div class="tool-desc">测出最公平碰面点<br>顺手滑一滑选好去处</div>
+              <div class="tool-desc">寻找合适的碰面点<br>顺手滑一滑选好去处</div>
             </div>
             <div class="tool-arrow" aria-hidden="true"><i class="ti-arrow-right"></i></div>
           </div>
@@ -1336,24 +1337,26 @@
 
     <div class="view" id="viewMidpoint">
       <div class="page-header">
-        <div class="back-btn" onclick="goHome()"><i class="ti-chevron-left"></i></div>
-        <div class="page-title">寻公平中点</div>
+        <button class="back-btn" type="button" onclick="goHome()" aria-label="返回首页"><i class="ti-chevron-left"></i></button>
+        <div class="page-title">寻找中点</div>
+        <button class="mp-adjust" id="mpAdjustPlaces" type="button" onclick="resetMidpoint()" hidden>调整地点</button>
       </div>
 
       <div class="content" style="padding-bottom:80px;">
         <div class="tool-room-card" data-room-type="midpoint">
           <div class="tool-room-head">
             <div class="tool-room-icon"><i class="ti-users"></i></div>
-            <div><div class="tool-room-title">多人实时碰面</div><div class="tool-room-sub">创建独立碰面码，朋友输入同一个码后各自填写名字和出发点。</div></div>
+            <div><div class="tool-room-title">多人实时碰面</div><div class="tool-room-sub">朋友输入同一个码，各自填写名字和出发点。</div></div>
           </div>
           <div class="tool-room-entry" id="mpCollabEntry">
-            <input class="tool-room-input" id="mpEntryName" maxlength="20" autocomplete="nickname" placeholder="先填写你自己的名字">
+            <label class="mp-entry-name"><i class="ti-user"></i><input class="tool-room-input" id="mpEntryName" maxlength="20" autocomplete="nickname" aria-label="你的名字" placeholder="先填写你的名字"></label>
             <div class="tool-room-row">
               <button class="tool-room-btn" id="mpCreateRoomBtn" type="button">创建碰面码</button>
-              <input class="tool-room-input tool-room-code-input" id="mpJoinCode" maxlength="8" placeholder="输入 8 位碰面码">
+              <input class="tool-room-input tool-room-code-input" id="mpJoinCode" maxlength="8" autocapitalize="characters" spellcheck="false" aria-label="8 位碰面码" placeholder="8 位碰面码">
               <button class="tool-room-btn secondary" id="mpJoinRoomBtn" type="button">加入</button>
             </div>
-            <div class="tool-room-error" id="mpRoomError"></div>
+            <div class="mp-entry-hint">名字用于在房间中识别你</div>
+            <div class="tool-room-error" id="mpRoomError" role="status"></div>
           </div>
           <div class="tool-room-active" id="mpCollabActive">
             <button class="tool-room-link" type="button" onclick="pintuTransferOwner()">房主管理</button>
@@ -1363,11 +1366,12 @@
           </div>
         </div>
         <div class="mp-card" id="mpInputArea">
+          <div class="mp-intro"><h1>从哪里出发？</h1><p>找到大家都方便的碰面位置</p></div>
           
           <div class="city-scope-bar">
             <i class="ti-map-pin"></i>
-            <select id="selProvince" class="city-select"><option value="">所在省份</option></select>
-            <select id="selCity" class="city-select"><option value="">所在城市</option></select>
+            <select aria-label="所在省份" id="selProvince" class="city-select"><option value="">所在省份</option></select>
+            <select aria-label="所在城市" id="selCity" class="city-select"><option value="">所在城市</option></select>
           </div>
 
           <div id="mpStandaloneInputs">
@@ -1410,32 +1414,38 @@
         <section class="mp-decision" id="mpDecisionPanel" style="display:none;" aria-live="polite"></section>
 
         <button class="btn-main" id="btnCalc" onclick="mpCalcDispatch()" style="background:var(--blue); margin-bottom: 24px;">
-          计算中心点 & 搜索周边设施
+          寻找碰面点
         </button>
 
         <div id="mpResultArea" style="display: none;">
-          <button class="btn-sub" style="border-color:var(--blue); color:var(--blue); margin-bottom:14px;" onclick="resetMidpoint()">重新计算</button>
-          <div id="realMap"></div>
-
-          <!-- 美食盲盒入口卡：向右滑或点击进入 Tinder 式滑一滑 -->
-          <div class="fb-entry" id="foodSwipeEntry" style="display:none;">
-            <div class="fb-entry-card" id="foodSwipeEntryCard">
-              <div class="fb-entry-icon">🍜</div>
-              <div class="fb-entry-text">
-                <div class="fb-entry-title">附近 <span id="fbCount">0</span> 个选择，盲盒帮你选</div>
-                <div class="fb-entry-sub">向右滑这张卡，或直接点它</div>
-              </div>
-              <div class="fb-entry-arrow">→</div>
+          <div class="mp-map-frame">
+            <div id="realMap" aria-label="出发点与参考中点地图"></div>
+            <div class="mp-map-controls" aria-label="地图操作">
+              <button class="mp-map-control" type="button" data-map-action="fit" aria-label="显示全部出发点"><i class="ti-current-location"></i></button>
+              <button class="mp-map-control" type="button" data-map-action="in" aria-label="放大地图">＋</button>
+              <button class="mp-map-control" type="button" data-map-action="out" aria-label="缩小地图">−</button>
             </div>
+            <p class="mp-map-note">几何参考点，实际路程可能不同</p>
           </div>
-
           <div class="mp-card" id="poiCard">
-            <div class="mp-title"><i class="ti-building-store" style="color:var(--coral)"></i>为您推荐中心点附近的商圈/餐饮</div>
-            <div id="poiLoading" class="loading-box">
-              <div class="spinner"></div>
-              <div class="loading-msg">正在大范围扫描周边商圈与美食...</div>
+            <div class="mp-sheet-handle" aria-hidden="true"></div>
+            <div class="mp-results-heading"><h2>附近见，刚刚好</h2><p id="mpPoiSummary" aria-live="polite">正在寻找附近的好去处</p></div>
+            <div class="mp-filters" role="group" aria-label="地点分类">
+              <button type="button" data-poi-filter="all" aria-pressed="true">全部</button>
+              <button type="button" data-poi-filter="drink" aria-pressed="false">咖啡</button>
+              <button type="button" data-poi-filter="food" aria-pressed="false">餐厅</button>
+              <button type="button" data-poi-filter="mall" aria-pressed="false">商圈</button>
             </div>
+            <div id="poiLoading" class="loading-box"><div class="spinner"></div><div class="loading-msg">正在寻找附近的商圈与美食…</div></div>
             <div class="poi-list" id="poiList"></div>
+            <p id="mpFilterEmpty" class="mp-filter-empty" hidden>附近暂时没有这一类地点，试试其他分类吧。</p>
+            <div class="fb-entry" id="foodSwipeEntry" style="display:none;">
+              <div class="fb-entry-card" id="foodSwipeEntryCard" role="button" tabindex="0" aria-label="让盲盒帮你选">
+                <div class="fb-entry-icon"><i class="ti-dice"></i></div>
+                <div class="fb-entry-text"><div class="fb-entry-title">让盲盒帮你选</div><div class="fb-entry-sub">从附近 <span id="fbCount">0</span> 个地点中挑选</div></div>
+                <div class="fb-entry-arrow" aria-hidden="true">›</div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -1733,6 +1743,7 @@ function openMidpoint(roomMode){
 
   /* 复位结果区，回到输入态 */
   var resArea = document.getElementById('mpResultArea'); if (resArea) resArea.style.display = 'none';
+  if(window.pintuSetMidpointState) pintuSetMidpointState(false);
   var ia = document.getElementById('mpInputArea'); if (ia) ia.style.display = 'block';
   var btn = document.getElementById('btnCalc'); if (btn){ btn.style.display = 'flex'; btn.disabled = false; }
 
@@ -1741,14 +1752,14 @@ function openMidpoint(roomMode){
   if (mpRoomMode){
     if (stand) stand.style.display = 'none';
     if (panel) panel.style.display = 'block';
-    if (btn) btn.textContent = '算公平中点 & 找去处';
+    if (btn) btn.textContent = '寻找碰面点';
     mpRenderRoomPanel(mpRoomRef);
     mpRenderDecisionPanel(mpRoomRef);
     mpLoadMineEditor(mpRoomRef);
   } else {
     if (stand) stand.style.display = 'block';
     if (panel) panel.style.display = 'none';
-    if (btn) btn.textContent = '计算中心点 & 搜索周边设施';
+    if (btn) btn.textContent = '寻找碰面点';
   }
   if (typeof rmRefreshTypedRoomUI === 'function') rmRefreshTypedRoomUI('midpoint');
 }
@@ -2158,7 +2169,7 @@ function mpRecordSwipeDecision(poi, dir){
 /* ============================================================
    模块二：寻公平中点
    ============================================================ */
-const LOC_COLORS = ['#0F3D36','#B8842A','#3E6E8E','#A8506E','#C05B3C','#4C5C5B'];
+const LOC_COLORS = ['#ee9476','#638b68','#799ba4','#bd9b68','#9a83a5','#70867e'];
 
 // 初始化省市两级联动插件
 let districtSearch;
@@ -2533,7 +2544,7 @@ async function calculateRealMidpoint() {
       }
       if (!c) {
         alert(`地址「${r.text}」太模糊无法定位。请先在上方的选择器指定省/市，或者从下拉提示列表中选取精确地址。`);
-        btn.disabled = false; btn.textContent = "计算中心点 & 搜索周边设施";
+        btn.disabled = false; btn.textContent = "寻找碰面点";
         return;
       }
       coordsList.push(c);
@@ -2542,7 +2553,7 @@ async function calculateRealMidpoint() {
   } catch (err) {
     console.error(err);
     alert("网络或地图服务出现异常，请稍后再试！");
-    btn.disabled = false; btn.textContent = "计算中心点 & 搜索周边设施";
+    btn.disabled = false; btn.textContent = "寻找碰面点";
   }
 }
 
@@ -2556,6 +2567,11 @@ async function renderMidpointResult(coordsList) {
     var ia = document.getElementById('mpInputArea'); if (ia) ia.style.display = 'none';
     if (btn) btn.style.display = 'none';
     document.getElementById('mpResultArea').style.display = 'block';
+    const requestVersion = pintuSetMidpointState(true);
+    document.getElementById('mpPoiSummary').textContent = '正在寻找附近的好去处';
+    document.getElementById('mpFilterEmpty').hidden = true;
+    document.getElementById('foodSwipeEntry').style.display = 'none';
+    window.foodSwipeDeck = [];
 
     drawBaseMap(coordsList, {lat: cLat, lng: cLng});
 
@@ -2564,8 +2580,10 @@ async function renderMidpointResult(coordsList) {
 
     // 双重搜索：强力保底找出周边 8 公里内的商场
     const rawMalls = await fetchPOIs(cLat, cLng, '购物中心|综合商场', 8000, 20);
+    if (!pintuMidpointRequestIsCurrent(requestVersion)) return;
     // 普通半径搜索附近美食
     const rawFoods = await fetchPOIs(cLat, cLng, '餐饮服务|咖啡厅|茶艺馆|冷饮店', 3000, 40);
+    if (!pintuMidpointRequestIsCurrent(requestVersion)) return;
 
     document.getElementById('poiLoading').style.display = 'none';
 
@@ -2581,7 +2599,7 @@ async function renderMidpointResult(coordsList) {
       if (!isSmallShop) {
         malls.push({
           isMall: true, isDrink: false,
-          name: name, lat: poi.location.lat, lng: poi.location.lng, dist,
+          name: name, lat: poi.location.lat, lng: poi.location.lng, dist, photos: poi.photos || [],
           iconName: 'shopping-cart', typeStr: '大型综合商圈', markerClass: 'marker-mall'
         });
       }
@@ -2598,7 +2616,7 @@ async function renderMidpointResult(coordsList) {
         const isDrink = typeStr.includes('冷饮') || typeStr.includes('咖啡') || typeStr.includes('茶') || name.includes('奶茶') || name.includes('咖啡');
         foods.push({
           isMall: false, isDrink,
-          name: name, lat: poi.location.lat, lng: poi.location.lng, dist,
+          name: name, lat: poi.location.lat, lng: poi.location.lng, dist, photos: poi.photos || [],
           iconName: isDrink ? 'coffee' : 'tools-kitchen-2',
           typeStr: isDrink ? '热门奶茶/咖啡' : '热门餐厅', markerClass: isDrink ? 'marker-drink' : 'marker-food'
         });
@@ -2629,68 +2647,20 @@ async function renderMidpointResult(coordsList) {
       fbEntry.style.display = 'none';
     }
 
-    if(finalPois.length === 0) {
-      document.getElementById('poiList').innerHTML = '<div style="text-align:center;font-size:13px;color:#888;">附近空旷，没有找到推荐地点。</div>';
-    } else {
-      const listEl = document.getElementById('poiList');
-      finalPois.forEach(p => {
-        if(p.isDivider) {
-          const div = document.createElement('div'); div.className = 'list-divider'; div.textContent = p.text;
-          listEl.appendChild(div); return;
-        }
-
-        const card = document.createElement('div'); card.className = 'poi-card';
-        const iconStyle = p.isMall ? 'background:var(--blue-soft);color:var(--blue);' : (p.isDrink ? 'background:var(--coral-soft);color:var(--pink);' : 'background:#FDECE8;color:#C05B3C;');
-        
-        card.innerHTML = `
-          <div class="poi-icon" style="${iconStyle}">${getIconHtml(p.iconName)}</div>
-          <div class="poi-info">
-            <div class="poi-name" style="${p.isMall ? 'color:var(--blue);' : ''}">${appEscapeHtml(p.name)}</div>
-            <div class="poi-sub">${appEscapeHtml(p.typeStr)} · 距中点约 ${p.dist} 米</div>
-          </div>
-        `;
-        listEl.appendChild(card);
-
-        const poiMarker = new AMap.Marker({
-          position: [p.lng, p.lat],
-          map: amapInstance,
-          content: `<div class="custom-marker ${p.markerClass}">${getIconHtml(p.iconName)}<span>${appEscapeHtml(p.name)}</span></div>`,
-          offset: new AMap.Pixel(-10, -30),
-          zIndex: p.isMall ? 100 : 50
-        });
-        allMapMarkers.push(poiMarker);
-      });
-      amapInstance.setFitView(allMapMarkers);
-    }
+    pintuRenderMidpointPois(window.foodSwipeDeck);
   } catch (err) {
     console.error(err);
     alert("网络或地图服务出现异常，请稍后再试！");
-    if (btn) { btn.disabled = false; btn.textContent = "计算中心点 & 搜索周边设施"; }
+    if (btn) { btn.disabled = false; btn.textContent = "寻找碰面点"; }
   }
 }
 
 function drawBaseMap(points, center) {
-  if (!amapInstance) {
-    amapInstance = new AMap.Map('realMap', { zoom: 14, center: [center.lng, center.lat], mapStyle: "amap://styles/normal" });
-  } else amapInstance.clearMap();
-  
-  allMapMarkers = [];
-
-  points.forEach((pt, idx) => {
-    const m = new AMap.Marker({
-      position: [pt.lng, pt.lat], map: amapInstance, label: { content: `出发点 ${String.fromCharCode(65 + idx)}`, direction: 'top' }
-    });
-    allMapMarkers.push(m);
-  });
-
-  const cm = new AMap.Marker({
-    position: [center.lng, center.lat], map: amapInstance,
-    label: { content: '📍绝对公平中点', direction: 'bottom' }, zIndex: 999
-  });
-  allMapMarkers.push(cm);
+  pintuDrawMidpointMap(points, center);
 }
 
 function resetMidpoint() {
+  pintuSetMidpointState(false);
   document.getElementById('mpResultArea').style.display = 'none';
   document.getElementById('mpInputArea').style.display = 'block';
   const fbEntry = document.getElementById('foodSwipeEntry');
@@ -2704,12 +2674,12 @@ function resetMidpoint() {
   if (mpRoomMode){
     if (stand) stand.style.display = 'none';
     if (panel) panel.style.display = 'block';
-    btn.textContent = '算公平中点 & 找去处';
+    btn.textContent = '寻找碰面点';
     if (mpRoomRef) mpRenderRoomPanel(mpRoomRef);
   } else {
     if (stand) stand.style.display = 'block';
     if (panel) panel.style.display = 'none';
-    btn.textContent = "计算中心点 & 搜索周边设施";
+    btn.textContent = "寻找碰面点";
   }
 }
 
@@ -6368,5 +6338,6 @@ function spinnerSpin(){
 })();
 </script>
 
+<script src="/midpoint-ui.js"></script>
 </body>
 </html>
