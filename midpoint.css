@@ -52,7 +52,9 @@
 #viewMidpoint .loc-input-wrap{min-height:46px;padding:0 0 0 12px;border:1px solid var(--line);border-radius:11px;background:#f8f7f1;}
 #viewMidpoint .loc-input{width:0;min-width:0;font-size:16px;line-height:1.5;padding:11px 0;}
 #viewMidpoint .loc-input::placeholder{font-size:13px;color:#8b918b;}
-#viewMidpoint .loc-action-btn{min-width:44px;min-height:44px;padding:10px;margin:0;color:var(--blue);}
+#viewMidpoint .loc-action-btn{min-width:44px;min-height:44px;padding:10px;margin:0;gap:4px;flex-shrink:0;color:var(--blue);font-size:12px;font-weight:600;white-space:nowrap;}
+#viewMidpoint .loc-action-btn:disabled{opacity:.65;cursor:wait;}
+#viewMidpoint .loc-action-btn .sys-icon{font-size:16px;}
 #viewMidpoint .loc-del{width:44px;height:44px;border:0;background:transparent;font-size:19px;font-weight:400;}
 #viewMidpoint .add-loc-btn{min-height:44px;border:1px dashed #d2dbcd;border-radius:11px;margin-top:13px;background:#f8faf4;color:var(--blue);font-size:12px;font-weight:500;padding:10px;}
 #viewMidpoint .loc-suggest{border:1px solid var(--line);box-shadow:0 9px 25px rgba(35,57,43,.12);border-radius:11px;}
@@ -69,7 +71,7 @@
 #viewMidpoint #realMap{height:clamp(355px,83vw,470px);border:0;border-radius:0;margin:0;background:#e9eee5;z-index:0;}
 #viewMidpoint .mp-map-controls{position:absolute;right:16px;bottom:49px;z-index:3;display:flex;flex-direction:column;gap:2px;padding:3px;border-radius:23px;background:#fffef9;box-shadow:0 4px 16px rgba(39,61,47,.15);}
 #viewMidpoint .mp-map-control{width:44px;height:44px;display:flex;align-items:center;justify-content:center;border:0;background:transparent;color:#34554b;border-radius:50%;font-size:24px;line-height:1;cursor:pointer;}
-#viewMidpoint .mp-map-control:first-child{margin-bottom:4px;border-bottom:1px solid #edf0e7;}
+#viewMidpoint .mp-map-control[data-map-action="fit"]{width:44px;height:58px;flex-direction:column;gap:4px;margin-bottom:4px;border-bottom:1px solid #edf0e7;border-radius:18px 18px 8px 8px;font-size:11px;font-weight:600;line-height:1.2;}
 #viewMidpoint .mp-map-control:hover{background:#eef3e9;}
 #viewMidpoint .mp-map-control .sys-icon{font-size:20px;}
 #viewMidpoint .mp-map-note{position:absolute;left:12px;bottom:28px;z-index:2;max-width:calc(100% - 82px);padding:4px 8px;border-radius:7px;background:rgba(255,254,249,.88);color:#596f61;font-size:10px;line-height:1.5;pointer-events:none;}

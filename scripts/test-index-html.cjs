@@ -133,7 +133,7 @@ assert.match(source, /\['INVALID_LEDGER', 'INVALID_REQUEST', 'INVALID_DECISION',
 assert.match(source, /function\s+glPersistTrips\(\)[\s\S]*?本机保存失败，本次未同步/, "web local-storage failures must be visible and must not claim a sync");
 
 assert.match(source, /inputEl\.dataset\.locationGeneration\s*=\s*String\(Number\(inputEl\.dataset\.locationGeneration\s*\|\|\s*0\)\s*\+\s*1\)/, "typing or selecting an address must advance the location generation");
-assert.match(source, /function\s+geolocateMe\s*\(inputEl\)\s*\{[\s\S]*?var\s+locationGeneration\s*=[\s\S]*?getCurrentPosition\(function\(status, result\)\{[\s\S]*?locationGeneration\)\s*return;[\s\S]*?reverseGeocodePosition[\s\S]*?locationGeneration\)\s*return;/, "stale geolocation and reverse-geocode callbacks must not overwrite a newer address");
+assert.match(source, /function\s+geolocateMe\s*\(inputEl\)\s*\{[\s\S]*?var\s+locationGeneration\s*=[\s\S]*?getCurrentPosition\(function\(status, result\)\{[\s\S]*?locationGeneration\)\s*\{\s*release\(\);\s*return;\s*\}[\s\S]*?reverseGeocodePosition[\s\S]*?locationGeneration\)\s*\{\s*release\(\);\s*return;\s*\}/, "stale geolocation and reverse-geocode callbacks must not overwrite a newer address");
 assert.match(source, /const\s+selectTip\s*=\s*\(e\)\s*=>\s*\{[\s\S]*?clearTimeout\(timer\);[\s\S]*?requestId\s*\+=\s*1;[\s\S]*?boxEl\.style\.display\s*=\s*['"]none['"]/, "selecting an address must cancel pending autocomplete responses");
 assert.match(source, /inputEl\.addEventListener\(['"]input['"][\s\S]*?boxEl\.style\.display\s*=\s*['"]none['"][\s\S]*?searchAddress\(inputEl\.value\.trim\(\),\s*350\)/, "typing a new query must hide cached suggestions until matching results arrive");
 
