@@ -76,5 +76,8 @@ module.exports = {
   },
   disband(docId) {
     return call('disband', { docId })
+  },
+  transferOwnership(docId, targetUid, membershipEpoch) {
+    return call('transferOwnership', { docId, targetUid, membershipEpoch })
   }
 }

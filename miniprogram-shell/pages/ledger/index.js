@@ -1,3 +1,4 @@
+const transferOwnership = require('../../utils/ownership')
 const gateway = require('../../services/roomGateway')
 const storage = require('../../utils/storage')
 const math = require('../../utils/ledger')
@@ -1039,6 +1040,8 @@ Page({
       fail: () => wx.showToast({ title: '复制失败，请手动记下房间码', icon: 'none' })
     })
   },
+
+  transferOwner() { return transferOwnership(this) },
 
   exitRoom() {
     const room = this.data.room

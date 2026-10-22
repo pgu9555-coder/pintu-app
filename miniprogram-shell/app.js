@@ -1,5 +1,6 @@
 const gateway = require('./services/roomGateway')
 const storage = require('./utils/storage')
+const environment = require('./environment')
 
 App({
   globalData: {
@@ -14,7 +15,7 @@ App({
     // functions later, but launch itself must not enable user tracing. The
     // trusted OpenID scope is established only after the user explicitly
     // chooses a collaborative action and completes the consent flow.
-    wx.cloud.init({ env: 'pintu-d4g77ecn24b674fa0', traceUser: false })
+    wx.cloud.init({ env: environment.cloudbaseEnvId, traceUser: false })
   },
 
   resetAccountScope() {

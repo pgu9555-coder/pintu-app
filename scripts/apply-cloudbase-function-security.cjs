@@ -3,7 +3,7 @@ const path = require("node:path");
 const CloudBaseModule = require("@cloudbase/manager-node");
 
 const CloudBase = CloudBaseModule.default || CloudBaseModule;
-const envId = process.env.CLOUDBASE_ENV_ID || "pintu-d4g77ecn24b674fa0";
+const envId = process.env.CLOUDBASE_ENV_ID || "pintu-prod-d1grnmzg0f6778ea6";
 const secretId = process.env.TCB_SECRET_ID;
 const secretKey = process.env.TCB_SECRET_KEY;
 

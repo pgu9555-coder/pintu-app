@@ -69,7 +69,7 @@ async function main() {
   }
 
   const cloudbase = require("@cloudbase/node-sdk");
-  const envId = process.env.CLOUDBASE_ENV_ID || "pintu-d4g77ecn24b674fa0";
+  const envId = process.env.CLOUDBASE_ENV_ID || "pintu-prod-d1grnmzg0f6778ea6";
   const secretId = process.env.TCB_SECRET_ID;
   const secretKey = process.env.TCB_SECRET_KEY;
 

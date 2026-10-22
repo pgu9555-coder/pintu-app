@@ -8,6 +8,7 @@ let nextModerationSuggestion = "pass";
 const moderationCalls = [];
 let nextId = 1;
 const rooms = new Map();
+const quotaRecords = new Map();
 const profiles = new Map();
 const profileCleanupTasks = new Map();
 let nextDeleteFileResponse = null;
@@ -18,7 +19,7 @@ function clone(value) {
 }
 
 function collectionFor(name, inTransaction) {
-  const records = name === "user_profiles"
+  const records = name === "request_limits" ? quotaRecords : name === "user_profiles"
     ? profiles
     : name === "profile_avatar_cleanup"
       ? profileCleanupTasks
@@ -1561,6 +1562,28 @@ async function main() {
   });
   assert.equal(rateLimited.code, "RATE_LIMITED", "rapid room-code guessing must be throttled");
 
+
+  {
+  const transferable = await call('transfer-owner', { action: 'create', room: { toolType:'ledger', members:[{name:'Owner'}] } });
+  const transferId=transferable.data.docId, ownerEpoch=transferable.data.viewer.membershipEpoch;
+  await call('transfer-member',{action:'join',code:transferable.data.room.code,type:'ledger',name:'Member'});
+  assert.equal((await call('transfer-member',{action:'transferOwnership',docId:transferId,targetUid:'transfer-owner',membershipEpoch:ownerEpoch})).code,'NOT_OWNER');
+  assert.equal((await call('transfer-owner',{action:'transferOwnership',docId:transferId,targetUid:'outsider',membershipEpoch:ownerEpoch})).code,'INVALID_MEMBER');
+  assert.equal((await call('transfer-owner',{action:'transferOwnership',docId:transferId,targetUid:'transfer-member',membershipEpoch:'stale'})).code,'STALE_MEMBERSHIP');
+  const moved=await call('transfer-owner',{action:'transferOwnership',docId:transferId,targetUid:'transfer-member',membershipEpoch:ownerEpoch});
+  assert.equal(moved.ok,true);assert.equal(moved.data.room.ownerUid,'transfer-member');assert.equal(moved.data.viewer.isOwner,false);
+  assert.equal((await call('transfer-owner',{action:'disband',docId:transferId})).code,'NOT_OWNER');
+  assert.equal((await call('transfer-member',{action:'disband',docId:transferId})).ok,true);
+  const previousLimit=process.env.ROOM_CREATES_PER_USER_DAY;process.env.ROOM_CREATES_PER_USER_DAY='2';
+  const request={action:'create',clientRequestId:'quota-request-1',room:{toolType:'ledger',members:[{name:'Quota'}]}};
+  const firstQuota=await call('quota-user',request);assert.equal(firstQuota.ok,true);
+  assert.equal((await call('quota-user',request)).data.docId,firstQuota.data.docId,'idempotent retry does not use a quota token');
+  assert.equal((await call('quota-user',{...request,clientRequestId:'quota-request-2'})).ok,true);
+  assert.equal((await call('quota-user',{...request,clientRequestId:'quota-request-3'})).code,'RATE_LIMITED');
+  assert.equal((await call('quota-user',request)).ok,true,'existing result remains recoverable at the limit');
+  if(previousLimit===undefined)delete process.env.ROOM_CREATES_PER_USER_DAY;else process.env.ROOM_CREATES_PER_USER_DAY=previousLimit;
+
+  }
   console.log("roomGateway unit checks passed.");
 }
 

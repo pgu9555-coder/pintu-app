@@ -25,11 +25,14 @@ const fakeHttps = {
     return request;
   }
 };
+const quotaRecords = new Map();
+const fakeCloudbase={SYMBOL_CURRENT_ENV:Symbol('env'),init(){return{database(){return{async runTransaction(fn){return fn({collection(){return{doc(id){return{async get(){return{data:quotaRecords.get(id)||null}},async set(value){quotaRecords.set(id,value);return{set:1}}}}}}})}}}}}};
 const fakeWx = { DYNAMIC_CURRENT_ENV: Symbol("env"), init() {}, getWXContext() { return context; } };
 const originalLoad = Module._load;
 Module._load = function patchedLoad(request, parent, isMain) {
   if (request === "node:https") return fakeHttps;
   if (request === "wx-server-sdk") return fakeWx;
+  if (request === "@cloudbase/node-sdk") return fakeCloudbase;
   return originalLoad.call(this, request, parent, isMain);
 };
 const gatewayPath = path.join(__dirname, "..", "cloudfunctions", "mapGateway", "index.js");
@@ -53,9 +56,13 @@ async function run() {
   assert.doesNotMatch(lastRequest.path, /attacker|forged/, "untrusted extra fields must never reach the provider request");
   assert.match(lastRequest.path, /key=0123456789abcdef/, "the provider key must always come from the server environment");
   assert.equal((await gateway.main({ action: "nearby", latitude: 91, longitude: 0 })).code, "INVALID_INPUT");
-  gateway._private.rateBuckets.clear();
-  for (let index = 0; index < 30; index += 1) assert.equal(gateway._private.allowRequest("caller", "inputTips", 100), true);
-  assert.equal(gateway._private.allowRequest("caller", "inputTips", 100), false, "per-identity request limits must reject bursts");
+  context={OPENID:'quota-check',APPID:'appid-a'};
+  for(let i=0;i<30;i++)assert.equal((await gateway.main({action:'inputTips',keywords:'coffee'})).ok,true);
+  delete require.cache[require.resolve(gatewayPath)];
+  Module._load=function(request,parent,isMain){if(request==='node:https')return fakeHttps;if(request==='wx-server-sdk')return fakeWx;if(request==='@cloudbase/node-sdk')return fakeCloudbase;return originalLoad.call(this,request,parent,isMain)};
+  const coldGateway=require(gatewayPath);Module._load=originalLoad;
+  assert.equal((await coldGateway.main({action:'inputTips',keywords:'coffee'})).code,'RATE_LIMITED','a new instance must share the persisted quota');
+  context={OPENID:'openid-a',APPID:'appid-a'};
 
   providerBody = { status: "1", tips: [
     { id: "tip-1", name: "Coffee", district: "District", address: "Road", location: "114.1,22.5" },
