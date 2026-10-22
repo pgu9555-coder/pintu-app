@@ -40,7 +40,9 @@ assert.ok(
   "roomGateway must declare the WeChat text-security cloud-call permission"
 );
 assert.deepEqual(mapGatewayConfig.permissions, { openapi: [] }, "mapGateway must remain an auth-only proxy with no broad OpenAPI permissions");
-assert.equal(mapGatewayPackage.dependencies["wx-server-sdk"], "3.0.1", "mapGateway dependencies must be pinned");
+assert.equal(mapGatewayPackage.dependencies["wx-server-sdk"], "4.0.2", "mapGateway dependencies must be pinned");
+assert.equal(mapGatewayPackage.overrides["@cloudbase/database"], "2.0.0", "database runtime must exclude vulnerable lodash helpers");
+assert.equal(mapGatewayPackage.overrides.axios, "0.34.0", "HTTP client security updates must remain pinned");
 assert.equal(functionRules["*"].invoke, false, "unknown cloud functions must remain closed by default");
 assert.equal(functionRules.roomGateway.invoke, "auth != null", "roomGateway must require authentication");
 assert.equal(functionRules.mapGateway.invoke, "auth != null", "mapGateway must require authentication");
