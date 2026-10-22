@@ -337,6 +337,7 @@
 
 <style>
   :root{
+    --app-width:640px;
     --ink:#1B2A2E;
     --ink-soft:#4C5C5B;
     --paper:#F6F3EA;
@@ -364,7 +365,7 @@
   .sys-icon { display: inline-flex; align-items: center; justify-content: center; line-height: 1; }
   .sys-icon svg { width: 1.25em; height: 1.25em; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; fill: none; vertical-align: middle; }
 
-  .screen{width:100%;max-width:480px;margin:0 auto;min-height:100vh;position:relative;display:flex;flex-direction:column;}
+  .screen{width:100%;max-width:var(--app-width);margin:0 auto;min-height:100vh;position:relative;display:flex;flex-direction:column;}
   .screen input, .screen textarea{user-select:text;-webkit-user-select:text;}
 
   .view{display:none;}
@@ -805,7 +806,7 @@
     display:flex;align-items:flex-end;justify-content:center;
   }
   .gl-editor-card{
-    width:min(100%,480px);max-height:88vh;overflow-y:auto;background:var(--paper-raised);
+    width:min(100%,var(--app-width));max-height:88vh;overflow-y:auto;background:var(--paper-raised);
     border-radius:20px 20px 0 0;padding:18px 20px max(20px,env(safe-area-inset-bottom));
     box-shadow:0 -10px 35px rgba(15,61,54,.18);animation:fbModalUp .22s ease;
   }
