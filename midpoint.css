@@ -1,5 +1,4 @@
 /* Midpoint: warm paper, sage controls, and an uncluttered map. */
-.screen:has(#viewMidpoint.show){max-width:640px;}
 #viewMidpoint{
   --paper:#f7f6f0;--paper-raised:#fffefa;--ink:#163f3b;--ink-soft:#737f7b;
   --green:#20584d;--green-deep:#17473f;--green-soft:#e5eee7;
