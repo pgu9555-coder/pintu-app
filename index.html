@@ -1402,7 +1402,7 @@
               <div class="loc-field">
                 <div class="loc-input-wrap">
                   <input type="text" class="loc-input" id="mpMineInput" placeholder="输入地址，或点右侧定位" autocomplete="off">
-                  <button class="loc-action-btn" id="mpMineGeo" title="获取当前位置"></button>
+                  <button class="loc-action-btn" id="mpMineGeo" type="button" aria-label="获取当前位置" title="获取我的当前位置"></button>
                 </div>
                 <div class="loc-suggest" id="mpMineSuggest"></div>
               </div>
@@ -1424,7 +1424,7 @@
           <div class="mp-map-frame">
             <div id="realMap" aria-label="出发点与参考中点地图"></div>
             <div class="mp-map-controls" aria-label="地图操作">
-              <button class="mp-map-control" type="button" data-map-action="fit" aria-label="显示全部出发点"><i class="ti-current-location"></i></button>
+              <button class="mp-map-control" type="button" data-map-action="fit" aria-label="显示全部出发点" title="显示全部出发点和参考中点"><i class="ti-map-overview"></i><span>总览</span></button>
               <button class="mp-map-control" type="button" data-map-action="in" aria-label="放大地图">＋</button>
               <button class="mp-map-control" type="button" data-map-action="out" aria-label="缩小地图">−</button>
             </div>
@@ -1706,7 +1706,8 @@ const SVG_PATHS = {
   'building-store': 'M3 21l18 0 M3 7v1a3 3 0 0 0 6 0v-1m0 1a3 3 0 0 0 6 0v-1m0 1a3 3 0 0 0 6 0v-1h-18l2 -4h14l2 4 M5 21v-10.15 M19 21v-10.15 M9 21v-4a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2v4',
   'shopping-cart': 'M6 19m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0 M17 19m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0 M17 17h-11v-14h-2 M6 5l14 1l-1 7h-13',
   'coffee': 'M3 14c.83 .642 2.077 1.017 3.5 1c1.423 .017 2.67 -.358 3.5 -1c.83 -.642 2.077 -1.017 3.5 -1c1.423 -.017 2.67 .358 3.5 1 M8 3a2.4 2.4 0 0 0 -1 2a2.4 2.4 0 0 0 1 2 M12 3a2.4 2.4 0 0 0 -1 2a2.4 2.4 0 0 0 1 2 M3 10h14v3c0 3.314 -2.239 6 -5 6s-5 -2.686 -5 -6v-3z',
-  'current-location': 'M12 12m-3 0a3 3 0 1 0 6 0a3 3 0 1 0 -6 0 M12 3l0 2 M12 19l0 2 M3 12l2 0 M19 12l2 0 M5.6 5.6l1.4 1.4 M17.0 17.0l1.4 1.4 M5.6 18.4l1.4 -1.4 M17.0 7.0l1.4 -1.4'
+  'map-overview': 'M8 3H3v5 M16 3h5v5 M21 16v5h-5 M8 21H3v-5 M8 8h8v8H8z',
+  'current-location': 'M12 5a7 7 0 1 0 0 14a7 7 0 1 0 0 -14 M12 2v4 M12 18v4 M2 12h4 M18 12h4 M12 10a2 2 0 1 0 0 4a2 2 0 1 0 0 -4'
 };
 
 function getIconHtml(name) {
@@ -2163,7 +2164,7 @@ function mpRecordSwipeDecision(poi, dir){
   if (nameInput){
     try { nameInput.value = localStorage.getItem('pintu_nickname') || ''; } catch(e){}
   }
-  if (geo && typeof getIconHtml === 'function') geo.innerHTML = getIconHtml('current-location');
+  if (geo && typeof getIconHtml === 'function') geo.innerHTML = getIconHtml('current-location') + '<span class="loc-action-label">定位</span>';
   if (input && box) bindAddressAutocompleteUI(input, box);
   if (geo && input) geo.addEventListener('click', function(){ geolocateMe(input); });
   if (setBtn) setBtn.addEventListener('click', mpSetMyPoint);
@@ -2251,7 +2252,7 @@ function addLocRow(preset){
     <div class="loc-field">
       <div class="loc-input-wrap">
         <input type="text" class="loc-input" placeholder="输入地址，或点右侧定位" autocomplete="off">
-        <button class="loc-action-btn" title="获取当前位置">${getIconHtml('current-location')}</button>
+        <button class="loc-action-btn" type="button" aria-label="获取当前位置" title="获取我的当前位置">${getIconHtml('current-location')}<span class="loc-action-label">定位</span></button>
       </div>
       <div class="loc-suggest"></div>
     </div>
@@ -2442,47 +2443,104 @@ function bindAddressAutocompleteUI(inputEl, boxEl) {
 function reverseGeocodePosition(lng, lat, fallbackAddress) {
   return new Promise((resolve) => {
     const coordinateFallback = '坐标：' + Number(lat).toFixed(6) + ', ' + Number(lng).toFixed(6);
-    if (typeof window.AMap === 'undefined') {
-      resolve(fallbackAddress || coordinateFallback);
-      return;
+    const fallback = fallbackAddress || coordinateFallback;
+    let settled = false;
+    const timer = setTimeout(() => finish(fallback), 5000);
+    function finish(address) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(address || fallback);
     }
-    AMap.plugin('AMap.Geocoder', function() {
-      const geocoder = new AMap.Geocoder({ radius: 1000, extensions: 'all' });
-      geocoder.getAddress([lng, lat], function(status, result) {
-        if (status === 'complete' && result && result.regeocode) {
-          const preciseAddress = result.regeocode.formattedAddress || '';
-          resolve(preciseAddress || fallbackAddress || coordinateFallback);
-        } else {
-          resolve(fallbackAddress || coordinateFallback);
-        }
+    if (typeof window.AMap === 'undefined') { finish(fallback); return; }
+    try {
+      AMap.plugin('AMap.Geocoder', function() {
+        if (settled) return;
+        try {
+          const geocoder = new AMap.Geocoder({ radius: 1000, extensions: 'all' });
+          geocoder.getAddress([lng, lat], function(status, result) {
+            finish(status === 'complete' && result && result.regeocode && result.regeocode.formattedAddress);
+          });
+        } catch (_) { finish(fallback); }
       });
-    });
+    } catch (_) { finish(fallback); }
   });
 }
 
+function locationFailureMessage(result) {
+  var message = String(result && (result.message || result.info) || result || '').toLowerCase();
+  if (/denied|permission|forbidden|拒绝|权限/.test(message)) return '未获得位置权限，请在浏览器或系统设置中允许定位，也可以手动输入地址';
+  if (/timeout|time.out|超时/.test(message)) return '定位超时，请检查手机定位和网络后重试，也可以手动输入地址';
+  if (/not.support|unavailable|不支持|无法获取/.test(message)) return '当前设备暂时无法获取位置，请开启系统定位或手动输入地址';
+  return '定位服务暂时不可用，请稍后重试或手动输入地址';
+}
+
 function geolocateMe(inputEl) {
-  if (typeof window.AMap === 'undefined') { showAppToast('地图服务暂时不可用，请稍后刷新重试'); return; }
+  if (typeof window.AMap === 'undefined' || typeof AMap.Geolocation !== 'function') { showAppToast('地图服务暂时不可用，请稍后刷新重试'); return; }
+  if (inputEl.dataset.locating === 'true') return;
   var locationGeneration = Number(inputEl.dataset.locationGeneration || 0) + 1;
   inputEl.dataset.locationGeneration = String(locationGeneration);
-  inputEl.value = "正在定位...";
-  const geolocation = new AMap.Geolocation({ enableHighAccuracy: true, timeout: 10000 });
-  geolocation.getCurrentPosition(function(status, result){
-    if (Number(inputEl.dataset.locationGeneration || 0) !== locationGeneration) return;
-    if(status === 'complete'){
-      const lat = typeof result.position.getLat === 'function' ? result.position.getLat() : result.position.lat;
-      const lng = typeof result.position.getLng === 'function' ? result.position.getLng() : result.position.lng;
-      inputEl.dataset.lat = lat;
-      inputEl.dataset.lng = lng;
-      delete inputEl.dataset.selectedSearchName;
-      inputEl.value = '正在获取具体地址...';
-      reverseGeocodePosition(lng, lat, result.formattedAddress || '').then(function(address) {
-        if (Number(inputEl.dataset.locationGeneration || 0) !== locationGeneration) return;
-        inputEl.value = address;
-      });
-    } else {
-      inputEl.value = ""; alert("定位失败，请允许浏览器定位权限。");
-    }
-  });
+  var previous = {value:inputEl.value,lat:inputEl.dataset.lat,lng:inputEl.dataset.lng,selectedSearchName:inputEl.dataset.selectedSearchName};
+  var wrap = inputEl.closest('.loc-input-wrap');
+  var button = wrap && wrap.querySelector('.loc-action-btn');
+  var label = button && button.querySelector('.loc-action-label');
+  var pending = true;
+  var timer = setTimeout(function(){ fail({message:'timeout'}); }, 12000);
+  inputEl.dataset.locating = 'true';
+  if (button) { button.disabled = true; button.setAttribute('aria-busy','true'); }
+  if (label) label.textContent = '定位中';
+  inputEl.addEventListener('input', release);
+
+  function release() {
+    if (!pending) return;
+    pending = false;
+    clearTimeout(timer);
+    delete inputEl.dataset.locating;
+    inputEl.removeEventListener('input', release);
+    if (button) { button.disabled = false; button.removeAttribute('aria-busy'); }
+    if (label) label.textContent = '定位';
+  }
+  function fail(result) {
+    if (!pending) return;
+    if (Number(inputEl.dataset.locationGeneration || 0) !== locationGeneration) { release(); return; }
+    inputEl.value = previous.value;
+    ['lat','lng','selectedSearchName'].forEach(function(key) {
+      if (previous[key] === undefined) delete inputEl.dataset[key];
+      else inputEl.dataset[key] = previous[key];
+    });
+    release();
+    showAppToast(locationFailureMessage(result));
+  }
+
+  try {
+    const geolocation = new AMap.Geolocation({ enableHighAccuracy: true, timeout: 10000, convert: true });
+    geolocation.getCurrentPosition(function(status, result){
+      if (!pending) return;
+      if (Number(inputEl.dataset.locationGeneration || 0) !== locationGeneration) { release(); return; }
+      if (status !== 'complete' || !result || !result.position) { fail(result); return; }
+      try {
+        var position = result.position;
+        var rawLat = typeof position.getLat === 'function' ? position.getLat() : position.lat;
+        var rawLng = typeof position.getLng === 'function' ? position.getLng() : position.lng;
+        if ([rawLat,rawLng].some(function(value){ return (typeof value !== 'number' && typeof value !== 'string') || String(value).trim() === ''; })) { fail(); return; }
+        var lat = Number(rawLat);
+        var lng = Number(rawLng);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) { fail(); return; }
+        clearTimeout(timer);
+        if (label) label.textContent = '获取地址';
+        reverseGeocodePosition(lng, lat, result.formattedAddress || '').then(function(address) {
+          if (!pending) return;
+          if (Number(inputEl.dataset.locationGeneration || 0) !== locationGeneration) { release(); return; }
+          inputEl.dataset.lat = String(lat);
+          inputEl.dataset.lng = String(lng);
+          delete inputEl.dataset.selectedSearchName;
+          inputEl.value = address;
+          release();
+          showAppToast(/^ip/i.test(result.location_type || '') ? '已获取大致位置，请核对地址' : '已获取当前位置，请确认地址');
+        }).catch(function(){ fail(); });
+      } catch (_) { fail(); }
+    });
+  } catch (_) { fail(); }
 }
 
 function getCoordinates(address) {
