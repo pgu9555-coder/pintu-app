@@ -3,5 +3,12 @@
   "version": "1.0.0",
   "main": "index.js",
   "private": true,
-  "dependencies": { "@cloudbase/node-sdk": "3.18.3" }
+  "dependencies": {
+    "@cloudbase/node-sdk": "3.18.7"
+  },
+  "overrides": {
+    "@cloudbase/node-sdk": "3.18.7",
+    "axios": "0.34.0",
+    "@cloudbase/database": "2.0.0"
+  }
 }

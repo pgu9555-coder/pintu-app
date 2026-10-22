@@ -124,6 +124,15 @@ jobs:
       - name: Install deployment dependencies
         run: npm install --no-save @cloudbase/manager-node@5.6.6 @cloudbase/node-sdk@3.18.3
 
+      - name: Install and audit locked function dependencies
+        shell: bash
+        run: |
+          for fn in roomGateway mapGateway quotaCleanup; do
+            npm ci --prefix "cloudfunctions/$fn" --ignore-scripts --no-fund
+            npm audit --prefix "cloudfunctions/$fn" --omit=dev --audit-level=high
+          done
+          node scripts/test-runtime-dependencies.cjs
+
       - name: Ensure database collections, indexes, and security rules
         env:
           TCB_SECRET_ID: ${{ secrets.TCB_SECRET_ID }}
