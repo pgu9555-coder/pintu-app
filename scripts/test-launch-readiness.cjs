@@ -122,6 +122,15 @@ async function main(){
     assert.equal(new URL(upstream.url).searchParams.get('key'),'a'.repeat(32));
     await request({url:'/api/amap?keywords=coffee',query:{path:'v3/place/text'}});
     assert.equal(new URL(upstream.url).pathname,'/v3/place/text');
+    global.fetch=async()=>new Response('jsonp_test_({"status":"1","tips":[],"sec_code":"diagnostic","sec_code_debug":"debug"})',{headers:{'content-type':'application/json;charset=UTF-8'}});
+    const jsonp=await request({url:'/_AMapService/v3/assistant/inputtips?callback=jsonp_test_'});
+    assert.equal(jsonp.statusCode,200);assert.match(jsonp.headers['Content-Type'],/^application\/javascript/);
+    assert.equal(jsonp.headers['X-Content-Type-Options'],'nosniff');
+    assert.equal(jsonp.body.toString(),'jsonp_test_({"status":"1","tips":[]});');
+    assert.equal((await request({url:'/_AMapService/v3/assistant/inputtips?callback=alert(1)'})).statusCode,400);
+    assert.equal((await request({url:'/_AMapService/v3/assistant/inputtips?callback=another'})).statusCode,502);
+    global.fetch=async()=>new Response('jsonp_test_({});alert(1);jsonp_test_({})',{headers:{'content-type':'application/json'}});
+    assert.equal((await request({url:'/_AMapService/v3/assistant/inputtips?callback=jsonp_test_'})).statusCode,502);
     global.fetch=async()=>new Response('b'.repeat(32),{headers:{'content-type':'application/json'}});
     assert.equal((await request()).statusCode,502,'upstream must not echo the security secret');
     global.fetch=async()=>new Response('<html>error</html>',{headers:{'content-type':'text/html'}});
