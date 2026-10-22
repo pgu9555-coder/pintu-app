@@ -1723,6 +1723,7 @@ function hideAllViews(){
   document.getElementById('viewMidpoint').classList.remove('show');
 }
 function goHome(){
+  if(window.pintuSetMidpointState) pintuSetMidpointState(false);
   hideAllViews();
   document.getElementById('viewHome').classList.add('show');
   window.scrollTo(0, 0);
@@ -2521,6 +2522,7 @@ function fetchPOIs(cLat, cLng, types, radius, pageSize) {
 
 /* —— 核心计算主流程 —— */
 async function calculateRealMidpoint() {
+  const version = pintuMidpointCurrentVersion();
   const btn = document.getElementById('btnCalc');
   try {
     if (typeof window.AMap === 'undefined') { showAppToast('地图服务暂时不可用，请检查网络或域名白名单'); return; }
@@ -2541,6 +2543,7 @@ async function calculateRealMidpoint() {
         c = { lat: parseFloat(r.input.dataset.lat), lng: parseFloat(r.input.dataset.lng) };
       } else {
         c = await getCoordinates(r.text);
+        if (!pintuMidpointRequestIsCurrent(version)) return;
       }
       if (!c) {
         alert(`地址「${r.text}」太模糊无法定位。请先在上方的选择器指定省/市，或者从下拉提示列表中选取精确地址。`);
@@ -2551,6 +2554,7 @@ async function calculateRealMidpoint() {
     }
     await renderMidpointResult(coordsList);
   } catch (err) {
+    if (!pintuMidpointRequestIsCurrent(version)) return;
     console.error(err);
     alert("网络或地图服务出现异常，请稍后再试！");
     btn.disabled = false; btn.textContent = "寻找碰面点";
