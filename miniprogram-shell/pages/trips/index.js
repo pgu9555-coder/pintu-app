@@ -384,7 +384,7 @@ Page({
       snapshotId = saveRoomSnapshot(docId, room.name, ledger, Boolean(pending))
       if (snapshotId === null) throw new Error('无法保存账本快照，请清理本机空间后重试')
       if (stalePending) clearLedgerOutboxEntry(docId, stalePending.mutationId)
-      await gateway[action](docId)
+      await gateway[action](docId, viewer.membershipEpoch)
       clearLedgerOutboxEntry(docId, pending && pending.mutationId)
       storage.remove(docId)
       wx.showToast({ title: isOwner ? '房间已解散' : '已退出房间', icon: 'success' })

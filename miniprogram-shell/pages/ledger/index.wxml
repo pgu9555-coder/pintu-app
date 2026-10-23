@@ -133,6 +133,7 @@
     </view>
 
     <view class="card">
+      <view style="margin-bottom:20rpx;color:#4C5C5B;font-size:22rpx;line-height:1.6;">每笔支出分别均摊到分，余下的分按参与人顺序分配，因此可能与总额直接均摊相差几分。</view>
       <view class="section-title">每个人的结果</view>
       <view wx:for="{{balanceRows}}" wx:key="id" class="balance-row">
         <view class="avatar">{{item.initial}}</view>
