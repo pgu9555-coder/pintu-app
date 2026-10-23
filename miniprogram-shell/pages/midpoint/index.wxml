@@ -108,14 +108,14 @@
             <view class="point-copy"><view class="point-name"><text class="point-nickname">{{item.name}}</text><text wx:if="{{item.isSelf}}" class="identity-me">我</text></view></view>
             <button wx:if="{{item.isSelf}}" class="point-edit-link" bindtap="toggleMineEditor" disabled="{{busy}}">{{mineEditorOpen ? '收起' : (mineHasSavedLocation ? '修改' : '填写')}}</button>
           </view>
-          <view class="point-saved-address">{{item.address || '等待填写出发点'}}</view>
+          <view wx:if="{{item.address}}" class="point-location-card">
+            <view class="point-location-label">当前地点</view>
+            <view class="point-saved-address">{{item.address}}</view>
+          </view>
+          <view wx:else class="point-saved-address point-address-waiting">等待填写出发点</view>
         </view>
         <view wx:if="{{mineEditorOpen}}" class="mine-editor">
           <view class="editor-label">搜索或修改地点</view>
-          <view wx:if="{{mineAddress.length > 20}}" class="mine-address-preview">
-            <view class="mine-address-preview-label">{{mineLocation ? '当前地点' : '当前输入'}}</view>
-            <view class="mine-address-preview-text">{{mineLocation && mineLocation.address ? mineLocation.address : mineAddress}}</view>
-          </view>
           <input class="input" placeholder="搜索地点名称或地址" placeholder-class="native-input-placeholder" value="{{mineAddress}}" maxlength="120" bindinput="mineAddressInput" bindfocus="mineAddressFocus" />
           <view wx:if="{{addressSearchLoading}}" class="suggestion-status">正在搜索地点…</view>
           <scroll-view wx:if="{{addressSuggestionsVisible && addressSuggestions.length}}" class="address-suggestions" scroll-y="true">

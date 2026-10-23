@@ -70,10 +70,11 @@ page { background:#f7f6f0; color:#163f3b; }
 .midpoint-page .point-member{display:block;padding:9px 0}
 .midpoint-page .point-member-head{display:flex;align-items:center;gap:8px;min-height:44px}
 .midpoint-page .point-member-head .point-copy{min-width:0;flex:1}
-.midpoint-page .point-saved-address{margin-top:5px;color:#163f3b;font-size:16px;line-height:1.5;white-space:normal;overflow-wrap:anywhere;word-break:break-word}
-.midpoint-page .mine-address-preview{margin:4px 0 10px;padding:9px 10px;border-radius:9px;background:#edf2e9}
-.midpoint-page .mine-address-preview-label{color:#617368;font-size:12px;line-height:1.4}
-.midpoint-page .mine-address-preview-text{margin-top:3px;color:#163f3b;font-size:16px;line-height:1.5;white-space:normal;overflow-wrap:anywhere;word-break:break-word}
+.midpoint-page .point-location-card{margin-top:7px;padding:10px 11px;border-radius:10px;background:#edf2e9}
+.midpoint-page .point-location-label{color:#617368;font-size:13px;line-height:1.4}
+.midpoint-page .point-saved-address{margin-top:3px;color:#163f3b;font-size:16px;line-height:1.5;white-space:normal;overflow-wrap:anywhere;word-break:break-word}
+.midpoint-page .point-address-waiting{margin-top:5px;color:#737f7b;font-size:14px;line-height:1.5}
+.midpoint-page .mine-editor{margin-top:12px;padding:12px 0 0;border-top:1px solid var(--line)}
 @media(max-width:350px){.midpoint-page .point-heading-line{gap:5px}.midpoint-page .point-edit-link{padding:0 4px}}
 
 /* Native inputs use their own text layout; keep vertical padding at zero and

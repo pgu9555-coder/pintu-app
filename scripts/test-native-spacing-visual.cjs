@@ -13,6 +13,7 @@ const fixtures = [
  ['midpoint-expanded','midpoint',{...room,mineEditorOpen:true,mineAddress:'上海人民广场',amapConfigured:true}],
  ['midpoint-long-address','midpoint',{...room,people:[{...room.people[0],address:longAddress}],mineEditorOpen:true,mineAddress:longAddress,mineLocation:null,amapConfigured:true}],
  ['home-guest','home',{...base,accountSignedIn:false,code:'',profilePanelOpen:false,wechatLoginVisible:false}],
+ ['midpoint-empty-address','midpoint',{...room,people:[{...room.people[0],address:''}],mineHasSavedLocation:false}],
  ['midpoint-entry','midpoint',{...base,room:null,code:''}],
  ['home','home',{...base,accountSignedIn:true,code:'',profilePanelOpen:false,wechatLoginVisible:false}],
  ['profile','profile',{canChooseAvatar:true,nickname:'小林',avatar:'',busy:false,onboarding:false,moreOpen:false}],
@@ -46,6 +47,10 @@ async function main(){
   }
   if(id==='home-guest') assert.equal(await page.locator('.join-identity-status').innerText(),'未登录 · 点击此登录')
   if(id==='midpoint-long-address') await checkAddress(page, longAddress)
+  if(id==='midpoint-empty-address') {
+   assert.equal(await page.locator('.point-member').getByText('等待填写出发点',{exact:true}).count(),1)
+   assert.equal(await page.locator('.point-member').getByText('当前地点',{exact:true}).count(),0,'empty address must not claim a current location')
+  }
   if(id==='ledger') {
    const code=await page.locator('.room-entry-row input').boundingBox()
    assert.ok(code.width>=150,'ledger code must remain usable: '+code.width)
@@ -75,9 +80,13 @@ async function main(){
 }
 async function checkAddress(page, address) {
  assert.equal(await page.locator('.point-saved-address').innerText(),address)
- assert.equal(await page.locator('.mine-address-preview-text').innerText(),address,'typed text stays visible even without selected coordinates')
- const m=await page.locator('.point-saved-address').evaluate(e=>{const b=e.getBoundingClientRect(),p=e.parentElement.getBoundingClientRect(),h=e.parentElement.querySelector('.point-member-head').getBoundingClientRect(),s=getComputedStyle(e);return {width:b.width,parent:p.width,x:b.x,px:p.x,y:b.y,headBottom:h.bottom,font:parseFloat(s.fontSize),overflow:s.overflow,whiteSpace:s.whiteSpace,scroll:e.scrollHeight,height:e.clientHeight,color:s.color}})
- assert.ok(m.width>=m.parent-2&&Math.abs(m.x-m.px)<2,'saved address uses full member width')
+ assert.equal(await page.locator('.point-location-card').count(),1,'one address card per member')
+ assert.equal(await page.locator('.mine-editor .mine-address-preview, .mine-editor .point-location-card').count(),0,'editor must not duplicate the address card')
+ assert.equal(await page.locator('.point-location-label').innerText(),'当前地点')
+ const m=await page.locator('.point-saved-address').evaluate(e=>{const b=e.getBoundingClientRect(),card=e.closest('.point-location-card'),c=card.getBoundingClientRect(),member=e.closest('.point-member'),p=member.getBoundingClientRect(),h=member.querySelector('.point-member-head').getBoundingClientRect(),s=getComputedStyle(e),cs=getComputedStyle(card);return {width:b.width,cardWidth:c.width,parent:p.width,x:c.x,px:p.x,y:c.y,headBottom:h.bottom,font:parseFloat(s.fontSize),overflow:s.overflow,whiteSpace:s.whiteSpace,scroll:e.scrollHeight,height:e.clientHeight,color:s.color,background:cs.backgroundColor,radius:parseFloat(cs.borderRadius)}})
+ assert.ok(m.cardWidth>=m.parent-2&&Math.abs(m.x-m.px)<2,'location card uses full member width')
+ assert.ok(m.width>=m.cardWidth-32,'address uses card width with only compact inner padding')
+ assert.ok(m.radius>=8&&m.background!=='rgba(0, 0, 0, 0)','location card has rounded colored background')
  assert.ok(m.y>=m.headBottom,'saved address starts below identity row')
  assert.ok(m.font>=16&&m.whiteSpace==='normal'&&m.overflow==='visible'&&m.scroll<=m.height+1,'saved address wraps fully at readable size: '+JSON.stringify(m))
  const rgb=m.color.match(/\d+/g).slice(0,3).map(Number);assert.ok(Math.max(...rgb)<100,'saved address uses dark foreground')
