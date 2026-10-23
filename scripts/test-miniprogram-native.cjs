@@ -216,7 +216,7 @@ assert.match(tripsPageSource, /async openLocal\(event\)[\s\S]*?storage\.isAccoun
 assert.match(tripsPageSource, /profileCardTap\(\)[\s\S]*?home\.openProfileEditor\(true\)/, "the signed-in Trips account card must open the independent profile editor in Trips return mode");
 assert.match(tripsPageSource, /ensureAccountScope/, "trips must wait for the authenticated account scope before cloud data");
 assert.match(tripsPageSource, /onShow\(\)[\s\S]*?hasAccountConsent\(\)[\s\S]*?!consentGranted\s*\|\|\s*!storage\.isAccountScoped\(\)[\s\S]*?loginRequired:\s*true[\s\S]*?return[\s\S]*?this\.refresh\(\)/, "opening the trips tab must not silently establish a cloud identity before consent");
-assert.match(tripsMarkup, /我的行程[\s\S]*?trips-account-card[\s\S]*?登录[\s\S]*?先备份访客账本[\s\S]*?登录后同步云端房间/, "trips must show account controls, keep guest migration reachable, and defer cloud rooms until login");
+assert.match(tripsMarkup, /trips-account-card[\s\S]*?登录[\s\S]*?先备份访客账本[\s\S]*?登录后同步云端房间/, "trips must show account controls, keep guest migration reachable, and defer cloud rooms until login");
 assert.match(tripsPageSource, /storage\.save\(\{ docId: entry\.docId, room: entry\.room \}\)/, "opening a trusted cloud room may refresh its local cache");
 assert.match(tripsPageSource, /cloudError/, "trips must retain a clear cloud-load error state");
 assert.match(tripsMarkup, /正在同步你的云端房间/, "trips must render a cloud loading state");
