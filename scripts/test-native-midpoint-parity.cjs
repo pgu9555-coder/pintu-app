@@ -16,7 +16,7 @@ function fixture(overrides={}){
   const wx={showToast:data=>calls.toast.push(data),showModal:data=>calls.modal.push(data),createMapContext:()=>({includePoints:values=>calls.map.push(values)}),pageScrollTo(){},onNetworkStatusChange(){},offNetworkStatusChange(){},navigateBack(){},switchTab(){}}
   Object.assign(wx,overrides.wx||{})
   const modules={'../../utils/ownership':async()=>{},'../../services/roomGateway':{},'../../utils/storage':storage,'../../utils/midpoint':math,'../../utils/layout':{headerTopPx:()=>72},'../../utils/amap':amap,'../../utils/invite':{}}
-  const context={Page:value=>definition=value,require:key=>modules[key],getApp:()=>({hasAccountConsent:()=>true,ensureAccountScope:async()=>({})}),wx,console,setTimeout,clearTimeout,setInterval,clearInterval,Set,Map,Date}
+  const context={Page:value=>definition=value,require:key=>modules[key],getApp:()=>overrides.app || ({hasAccountConsent:()=>true,ensureAccountScope:async()=>({})}),wx,console,setTimeout,clearTimeout,setInterval,clearInterval,Set,Map,Date}
   vm.runInNewContext(fs.readFileSync(file,'utf8'),context,{filename:file})
   const page=Object.assign({},definition,{data:JSON.parse(JSON.stringify(definition.data)),setData(patch,callback){Object.assign(this.data,patch);if(callback)callback()}})
   return {page,calls,storage,amap,wx,gateway:modules['../../services/roomGateway']}
@@ -287,6 +287,34 @@ async function run(){
     assert.equal(stack.length,0)
     const {page}=fixture();for(const match of wxml.matchAll(/(?:bind|catch)(?:tap|touchstart|touchmove|touchend|error|input|focus|confirm)="([A-Za-z]\w*)"/g))assert.equal(typeof page[match[1]],'function',`bound handler ${match[1]} exists`)
     for(const letter of 'ABCDEF')assert.ok(fs.existsSync(path.join(root,`miniprogram-shell/assets/map/departure-${letter}.png`)))
+  }
+  {
+    let consent=true
+    const app={globalData:{accountProfile:{nickname:'Lin',avatarFileId:'self-avatar'}},hasAccountConsent:()=>consent,ensureAccountScope:async()=>app.globalData.accountProfile}
+    const navigations=[],{page,storage,gateway}=fixture({app,wx:{switchTab:value=>navigations.push(value)}})
+    storage.localScopeToken=()=>consent?'account-a':'guest'
+    storage.isAccountScoped=()=>consent
+    await page.onLoad({})
+    page.onShow()
+    assert.equal(page.data.name,'Lin')
+    assert.equal(page.data.accountAvatar,'self-avatar')
+    assert.equal(page.data.localPoints[0].label,'Lin')
+    let joinedName=''
+    gateway.join=async(_code,_type,name)=>{joinedName=name;throw Error('intentional join failure')}
+    page.data.code='ABCDEFGH';page.data.name='stale'
+    await page.join()
+    assert.equal(joinedName,'Lin','joining uses saved profile without repeated name entry')
+    page.viewer={uid:'self',membershipEpoch:'epoch'}
+    page.renderRoom({members:[{uid:'self'},{uid:'other'}],meetup:{people:[{uid:'self',name:'old',lat:22,lng:114},{uid:'other',name:'Other',lat:23,lng:115}]}},page.viewer)
+    assert.equal(page.data.people[0].name,'Lin');assert.equal(page.data.people[0].ownAvatar,'self-avatar')
+    assert.equal(page.data.people[1].name,'Other');assert.equal(page.data.people[1].ownAvatar,'')
+    app.globalData.accountProfile={nickname:'New',avatarFileId:'new-avatar'}
+    page.onShow();page.stopPolling()
+    assert.equal(page.data.name,'New');assert.equal(page.data.people[0].ownAvatar,'new-avatar')
+    consent=false;page.onShow()
+    assert.equal(page.entryBlocked,true);assert.equal(page.localStorageReady,false)
+    assert.equal(page.data.people.length,0);assert.equal(page.data.accountAvatar,'')
+    assert.equal(navigations.at(-1).url,'/pages/home/index')
   }
   console.log('Native midpoint parity checks passed: guest drafts, manual address search/selection/retry, privacy refusal, stale query/editor/scope/room/lifecycle isolation, native picker continuity, map state/controls, food filters, details and shared room continuity.')
 }

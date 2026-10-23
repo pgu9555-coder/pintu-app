@@ -227,7 +227,7 @@ Page({
         const home = pages.find((page) => page && typeof page.openProfilePanel === 'function')
         if (!home) return
         if (signedIn) {
-          home.openProfilePanel(() => wx.switchTab({ url: '/pages/trips/index' }))
+          home.openProfileEditor(true)
           return
         }
         home.requestWechatLogin(
@@ -235,6 +235,39 @@ Page({
           '账号资料',
           () => wx.switchTab({ url: '/pages/trips/index' })
         )
+      }
+    })
+  },
+
+  logoutAccount() {
+    if (!this.data.accountSignedIn) return
+    const appAtPrompt = typeof getApp === 'function' ? getApp() : null
+    const generationAtPrompt = appAtPrompt && appAtPrompt.accountGenerationToken()
+    const scopeAtPrompt = storage.localScopeToken()
+    wx.showModal({
+      title: '退出微信账号？',
+      content: '退出后会清除本机登录状态和账号资料缓存。各微信账号的本机行程仍保留，重新登录后可继续查看。',
+      confirmText: '退出账号', cancelText: '取消',
+      success: (choice) => {
+        if (!choice.confirm) return
+        const app = typeof getApp === 'function' ? getApp() : null
+        if (app !== appAtPrompt || !app || app.accountGenerationToken() !== generationAtPrompt || storage.localScopeToken() !== scopeAtPrompt) return
+        this.myRoomsRequestId = (this.myRoomsRequestId || 0) + 1
+        if (app && typeof app.resetAccountScope === 'function') app.resetAccountScope()
+        else storage.clearAccountScope()
+        this.scopeReady = false
+        this.localScope = storage.localScopeToken()
+        this.closed = false
+        const pages = typeof getCurrentPages === 'function' ? getCurrentPages() : []
+        const home = pages.find((page) => page && typeof page.confirmWechatLogin === 'function' && typeof page.setData === 'function')
+        if (home) {
+          home.nameDirty = false
+          home.afterWechatLogin = null
+          home.pendingProfileContinuation = null
+          home.setData({ name: '', profileNickname: '', profileAvatarFileId: '', profileAvatarPreview: '', profileLoaded: false, profileExists: false, profileError: '', profilePanelOpen: false })
+        }
+        this.setData({ accountSignedIn: false, accountNickname: '', accountAvatar: '', loginRequired: true, rooms: [], loading: false, loadingMore: false, cloudError: '', hasMore: false, nextCursor: null, localTrips: localTripEntries().map(displayLocalTrip) })
+        wx.showToast({ title: '已退出微信账号', icon: 'success' })
       }
     })
   },

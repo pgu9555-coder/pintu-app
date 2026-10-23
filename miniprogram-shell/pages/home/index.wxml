@@ -18,16 +18,17 @@
         <view class="join-subtitle">输入任意碰面码或账本码，自动进入对应功能。</view>
       </view>
     </view>
-    <input class="join-input" placeholder="你的名字" placeholder-class="input-placeholder" value="{{name}}" maxlength="24" bindinput="nameInput" />
+    <view class="join-input join-profile-name">{{name || '微信用户'}} <text>将以此名称加入</text></view>
     <view wx:if="{{inviteType}}" class="invite-notice">
       <view class="invite-notice-title">{{inviteLabel}}房间邀请</view>
-      <view class="invite-notice-copy">房间码 {{code}}。填写名字后，点击加入以确认。</view>
+      <view class="invite-notice-copy">房间码 {{code}}。将使用你的资料名称，点击加入以确认。</view>
     </view>
     <view class="join-code-row">
       <input class="join-input code-input" placeholder="8 位房间码" placeholder-class="input-placeholder code-placeholder" value="{{code}}" maxlength="8" bindinput="codeInput" bindconfirm="join" confirm-type="go" />
       <view class="join-button {{busy ? 'join-button-disabled' : ''}}" bindtap="join" role="button">{{busy ? '加入中' : (inviteType ? '确认加入' : '加入')}}</view>
     </view>
     <view wx:if="{{profileError}}" class="join-error">{{profileError}}。<button class="text-action" bindtap="retryProfile">重新识别</button></view>
+    <view wx:if="{{profileRouteError}}" class="join-error">{{profileRouteError}} <button class="text-action" bindtap="retryPendingProfile">重试</button></view>
     <view wx:if="{{joinError}}" class="join-error">{{joinError}}</view>
   </view>
 

@@ -62,3 +62,4 @@
 .tool-card { min-height:90px;border-radius:16px;padding:14px;gap:14px; }
 .profile-overlay { justify-content:center; }
 .profile-sheet { max-width:480px; }
+.join-profile-name{display:flex;align-items:center;justify-content:space-between;color:#1B2A2E}.join-profile-name text{color:#74807F;font-size:10px}

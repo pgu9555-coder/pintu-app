@@ -1,0 +1,31 @@
+.profile-page{min-height:100vh;box-sizing:border-box;padding:22px 24px 32px;padding-bottom:calc(32px + env(safe-area-inset-bottom));background:#F6F3EA;color:#0F3D36}
+.profile-intro{text-align:center;color:#4C5C5B;font-size:14px;line-height:1.6}
+.profile-card{width:100%;max-width:420px;margin:34px auto 0}
+.profile-avatar-wrap{position:relative;width:144px;height:144px;margin:0 auto}
+.profile-avatar{display:block;width:144px;height:144px;box-sizing:border-box;border:3px solid #FFFDF6;border-radius:50%;background:#E4ECE1}
+.profile-placeholder{display:flex;align-items:center;justify-content:center}
+.profile-placeholder image{width:66px;height:66px;opacity:.7}
+.avatar-badge{position:absolute;right:0;bottom:2px;display:flex;align-items:center;justify-content:center;box-sizing:border-box;width:38px;height:38px;margin:0;padding:0;border:3px solid #F6F3EA;border-radius:12px;background:#0F3D36}
+.avatar-badge image{width:19px;height:19px}
+.avatar-select{width:max-content;margin:9px auto 0;padding:0 8px;background:transparent;color:#0F3D36;font-size:14px;font-weight:600;line-height:30px;text-decoration:underline;text-underline-offset:3px}
+.avatar-unavailable{margin-top:12px;text-align:center;color:#75807C;font-size:12px}
+.name-field{margin-top:30px}
+.field-label{margin-bottom:9px;color:#4C5C5B;font-size:14px}
+.nickname-input{height:48px;box-sizing:border-box;padding:0 14px;border:1px solid #DCD5C1;border-radius:10px;background:#FFFDF6;color:#0F3D36;font-size:16px}
+.field-hint{margin-top:8px;color:#75807C;font-size:12px;line-height:1.5}
+.profile-error{margin-top:12px;color:#A04435;font-size:13px;line-height:1.5}
+.primary{height:49px;margin-top:34px;padding:0 12px;border-radius:10px;background:#0F3D36;color:#FFFDF6;font-size:16px;font-weight:600;line-height:49px}
+.privacy-note{margin-top:10px;text-align:center;color:#75807C;font-size:12px;line-height:1.6}
+.later-section{margin-top:28px}
+.later{width:max-content;max-width:100%;margin:0 auto;padding:0 14px;background:transparent;color:#0F3D36;font-size:14px;font-weight:600;line-height:38px}
+.later-note{max-width:290px;margin:3px auto 0;text-align:center;color:#75807C;font-size:11px;line-height:1.6}
+.edit-options{margin-top:20px;text-align:center}
+.more-link{width:max-content;margin:7px auto 0;padding:0 10px;background:transparent;color:#75807C;font-size:12px;line-height:30px}
+.more-actions{display:flex;justify-content:center;gap:22px;margin-top:8px}
+.more-actions button{margin:0;padding:0 4px;background:transparent;color:#4C5C5B;font-size:12px;line-height:30px}
+.more-actions .danger{color:#A04435}
+.cleanup-note{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:12px;padding:9px 10px;border:1px solid #E5D8B8;border-radius:8px;background:#FFF8E9;color:#855B17;font-size:11px;line-height:1.5}
+.cleanup-note button{flex-shrink:0;margin:0;padding:0 4px;background:transparent;color:#855B17;font-size:11px;line-height:24px}
+button::after{border:0}
+button[disabled]{opacity:.5}
+@media(max-width:340px){.profile-page{padding-left:20px;padding-right:20px}.profile-card{margin-top:26px}.profile-avatar-wrap,.profile-avatar{width:128px;height:128px}.name-field{margin-top:23px}.primary{margin-top:26px}}

@@ -213,7 +213,7 @@ assert.match(tripsPageSource, /storage\.getLocal\(LOCAL_LEDGER_TRIPS_KEY/, "trip
 assert.match(tripsPageSource, /storage\.setLocal\(LOCAL_LEDGER_TRIPS_KEY/, "deleting a local trip must use the current guest/account local namespace");
 assert.match(tripsPageSource, /async newLocal\(\)[\s\S]*?!app\.hasAccountConsent\(\)[\s\S]*?home\.requestWechatLogin/, "creating a new ledger from Trips must use the same explicit login gate");
 assert.match(tripsPageSource, /async openLocal\(event\)[\s\S]*?storage\.isAccountScoped\(\)[\s\S]*?先备份访客账本[\s\S]*?this\.backupGuestTrips\(\)/, "opening a guest ledger must gate login and never reuse its id in an account scope");
-assert.match(tripsPageSource, /profileCardTap\(\)[\s\S]*?home\.openProfilePanel\(\(\) => wx\.switchTab/, "the signed-in Trips account card must open existing profile editing controls and return to Trips");
+assert.match(tripsPageSource, /profileCardTap\(\)[\s\S]*?home\.openProfileEditor\(true\)/, "the signed-in Trips account card must open the independent profile editor in Trips return mode");
 assert.match(tripsPageSource, /ensureAccountScope/, "trips must wait for the authenticated account scope before cloud data");
 assert.match(tripsPageSource, /onShow\(\)[\s\S]*?hasAccountConsent\(\)[\s\S]*?!consentGranted\s*\|\|\s*!storage\.isAccountScoped\(\)[\s\S]*?loginRequired:\s*true[\s\S]*?return[\s\S]*?this\.refresh\(\)/, "opening the trips tab must not silently establish a cloud identity before consent");
 assert.match(tripsMarkup, /我的行程[\s\S]*?trips-account-card[\s\S]*?登录[\s\S]*?先备份访客账本[\s\S]*?登录后同步云端房间/, "trips must show account controls, keep guest migration reachable, and defer cloud rooms until login");
@@ -412,9 +412,9 @@ assert.equal(ledger.settlementPlan(largeLedgerFixture).exact, false, "large ledg
 
 const ledgerPageSource = fs.readFileSync(path.join(root, "pages", "ledger", "index.js"), "utf8");
 const ledgerMarkup = fs.readFileSync(path.join(root, "pages", "ledger", "index.wxml"), "utf8");
-assert.match(ledgerPageSource, /consentGranted[\s\S]*?if \(!this\.docId\)[\s\S]*?this\.guestMode = !consentGranted[\s\S]*?emptyLocalLedger\(\)/, "ledger must initialize a guest/account device book before cloud login");
+assert.match(ledgerPageSource, /consentGranted[\s\S]*?if \(!this\.docId\)[\s\S]*?this\.guestMode = !consentGranted[\s\S]*?initialLocalLedger\(/, "ledger must initialize an account-aware device book with an explicit profile member when signed in");
 assert.match(ledgerPageSource, /syncLedger\(next\)[\s\S]*?!this\.docId[\s\S]*?saveLocalLedger\(this\.tripId, next\)/, "guest and account local edits must save without creating a cloud identity");
-assert.match(ledgerMarkup, /保存在这台设备/, "ledger must explain device-local persistence");
+assert.match(ledgerMarkup, /本机行程保存在此设备/, "ledger must explain device-local persistence without implying guest collaboration access");
 assert.match(ledgerPageSource, /LOCAL_LEDGER_TRIPS_KEY/, "ledger must support persistent standalone trips");
 assert.match(ledgerPageSource, /newTripId\(/, "new standalone ledgers must receive a distinct trip ID");
 assert.match(ledgerPageSource, /options && options\.tripId/, "a standalone trip must be reopenable by tripId");

@@ -4,7 +4,7 @@
     <view class="page-title">行程账本</view>
     <view class="page-status">● {{syncText}}</view>
   </view>
-  <view wx:if="{{guestMode}}" style="margin-bottom:9px;padding:8px 9px;border-radius:7px;background:#FFF4D9;color:#8B641F;font-size:11px;line-height:1.5;">本机账本可直接使用并保存在这台设备；创建或加入共享账本时再登录。可从首页备份与迁移导出。</view>
+  <view wx:if="{{guestMode}}" style="margin-bottom:9px;padding:8px 9px;border-radius:7px;background:#FFF4D9;color:#8B641F;font-size:11px;line-height:1.5;">共享账本需登录微信账号；本机行程保存在此设备，可从首页备份与迁移导出。</view>
   <view wx:if="{{syncPending}}" style="margin-bottom:9px;padding:8px 9px;border-radius:7px;background:#FFF4D9;color:#8B641F;font-size:11px;line-height:1.5;">修改已保存在本机，恢复网络后会自动同步。</view>
 
   <view class="card collaboration-card">
@@ -12,7 +12,7 @@
       <view class="room-card-icon ledger-room-icon">账</view>
       <view>
         <view class="room-card-title">多人共享账本</view>
-        <view class="room-card-sub">账本码与碰面码互不通用；每个人加入时只填写自己的名字。</view>
+        <view class="room-card-sub">账本码与碰面码互不通用；加入时自动使用你的资料名称。</view>
       </view>
     </view>
 
@@ -33,7 +33,12 @@
 
     <block wx:else>
       <view class="local-note">当前是本机账本；创建或加入房间后会切换为云端共享账本。</view>
-      <input class="input" placeholder="先填写你自己的名字" value="{{name}}" maxlength="24" bindinput="nameInput" />
+      <view class="profile-name-row">
+        <image wx:if="{{accountAvatar}}" class="profile-self-avatar" src="{{accountAvatar}}" mode="aspectFill" />
+        <view wx:else class="profile-self-avatar profile-self-placeholder"><image src="/assets/icons/person.svg" mode="aspectFit" /></view>
+        <view class="profile-self-copy"><text class="profile-self-label">我的名字</text><text class="profile-self-name">{{name || '微信用户'}}</text></view>
+        <view class="profile-self-badge">我</view>
+      </view>
       <view class="room-entry-row">
         <button class="room-small-button create-ledger-code" bindtap="create" loading="{{busy}}" disabled="{{busy}}">创建账本码</button>
         <input class="input code-input" placeholder="输入 8 位账本码" value="{{code}}" maxlength="8" bindinput="codeInput" />
@@ -41,6 +46,8 @@
       </view>
     </block>
   </view>
+
+  <view wx:if="{{accessBlocked}}" class="scope-blocker" catchtouchmove="preventClose"><view class="scope-blocker-card"><view class="section-title">账号空间已切换</view><view class="muted">请返回首页重新登录后继续使用账本。</view><button class="btn primary" bindtap="returnHome">返回首页</button></view></view>
 
   <view class="stepper">
     <view class="step-node {{step === 1 ? 'active' : step > 1 ? 'done' : ''}}" bindtap="goStep" data-step="1">
@@ -63,9 +70,9 @@
       <view class="section-label">同行的人</view>
       <view wx:if="{{!ledger.members.length}}" class="empty-copy">先把同行的人加进来，至少需要 2 人。</view>
       <view wx:for="{{ledger.members}}" wx:key="id" class="member-row">
-        <view class="avatar" style="background:{{item.color}};">{{item.initial}}</view>
+        <image wx:if="{{item.ownAvatar}}" class="avatar" src="{{item.ownAvatar}}" mode="aspectFill" /><view wx:else class="avatar" style="background:{{item.color}};">{{item.initial}}</view>
         <view class="member-copy">
-          <view class="member-name">{{item.name}}</view>
+          <view class="member-name">{{item.displayName || item.name}}</view>
           <view class="member-kind">{{item.uid ? '房间成员' : '账本成员'}}</view>
         </view>
         <view wx:if="{{!item.uid}}" class="member-actions">
@@ -95,14 +102,14 @@
       <view class="section-label">谁付的钱</view>
       <view class="choice-list">
         <view wx:for="{{ledger.members}}" wx:key="id" class="person-chip {{item.payerSelected ? 'selected' : ''}}" bindtap="selectPayer" data-index="{{index}}">
-          <view class="chip-avatar" style="background:{{item.color}};">{{item.initial}}</view><text>{{item.name}}</text>
+          <image wx:if="{{item.ownAvatar}}" class="chip-avatar" src="{{item.ownAvatar}}" mode="aspectFill" /><view wx:else class="chip-avatar" style="background:{{item.color}};">{{item.initial}}</view><text>{{item.displayName || item.name}}</text>
         </view>
       </view>
 
       <view class="section-label">谁要平摊这笔（默认全选）</view>
       <view class="choice-list">
         <view wx:for="{{ledger.members}}" wx:key="id" class="person-chip {{item.checked ? 'selected' : ''}}" bindtap="toggleSplit" data-id="{{item.id}}">
-          <view class="chip-avatar" style="background:{{item.color}};">{{item.initial}}</view><text>{{item.name}}</text>
+          <image wx:if="{{item.ownAvatar}}" class="chip-avatar" src="{{item.ownAvatar}}" mode="aspectFill" /><view wx:else class="chip-avatar" style="background:{{item.color}};">{{item.initial}}</view><text>{{item.displayName || item.name}}</text>
         </view>
       </view>
 

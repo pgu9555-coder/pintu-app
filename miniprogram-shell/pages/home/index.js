@@ -195,6 +195,15 @@ Page({
       const afterLogin = this.afterWechatLogin
       this.afterWechatLogin = null
       this.setData({ wechatLoginVisible: false, privacyConsentChecked: false })
+      if (!loaded.exists || !String(loaded.nickname || '').trim() || !String(loaded.avatarFileId || '').trim()) {
+        this.pendingProfileContinuation = afterLogin
+        wx.navigateTo({ url: '/pages/profile/index?onboarding=1', fail: () => {
+          this.pendingProfileContinuation = afterLogin
+          this.setData({ profileRouteError: '资料页未能打开。请重试后再继续。' })
+          wx.showToast({ title: '资料页暂时无法打开，请从我的行程编辑资料', icon: 'none' })
+        }, success: () => this.setData({ profileRouteError: '' }) })
+        return
+      }
       if (typeof afterLogin === 'function') afterLogin()
     } catch (error) {
       if (request !== this.loginRequest || !accountOperationCurrent(this, operation)) return
@@ -276,6 +285,15 @@ Page({
     this.profilePanelAfterClose = typeof afterClose === 'function' ? afterClose : null
     if (wx.hideTabBar) wx.hideTabBar({ animation: false, fail() {} })
     this.setData({ profilePanelOpen: true })
+  },
+
+  openProfileEditor(fromTrips) {
+    wx.navigateTo({ url: `/pages/profile/index${fromTrips ? '?fromTrips=1' : ''}`, fail: () => wx.showToast({ title: '资料页暂时无法打开', icon: 'none' }) })
+  },
+
+  retryPendingProfile() {
+    if (typeof this.pendingProfileContinuation !== 'function') return
+    wx.navigateTo({ url: '/pages/profile/index?onboarding=1', success: () => this.setData({ profileRouteError: '' }), fail: () => this.setData({ profileRouteError: '资料页未能打开。请重试后再继续。' }) })
   },
 
   closeProfilePanel() {
@@ -623,7 +641,9 @@ Page({
   },
 
   rememberName() {
-    const name = this.data.name.trim()
+    const app = getApp()
+    const savedProfileName = String(app && app.globalData && app.globalData.accountProfile && app.globalData.accountProfile.nickname || '').trim()
+    const name = (savedProfileName || this.data.name).trim()
     if (name) storage.saveName(name)
   },
 
@@ -649,7 +669,8 @@ Page({
       this.requestWechatLogin(() => this.join())
       return
     }
-    const name = this.data.name.trim()
+    const app = getApp()
+    const name = String(app && app.globalData && app.globalData.accountProfile && app.globalData.accountProfile.nickname || storage.getName() || this.data.name || '微信用户').trim()
     if (!name) {
       this.setData({ joinError: '请填写你的名字后再加入' })
       wx.showToast({ title: '请填写你的名字', icon: 'none' })

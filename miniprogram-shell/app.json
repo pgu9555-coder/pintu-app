@@ -1,5 +1,5 @@
 {
-  "pages": ["pages/home/index", "pages/midpoint/index", "pages/ledger/index", "pages/spinner/index", "pages/trips/index", "pages/agreement/index", "pages/data-tools/index"],
+  "pages": ["pages/home/index", "pages/midpoint/index", "pages/ledger/index", "pages/spinner/index", "pages/trips/index", "pages/profile/index", "pages/agreement/index", "pages/data-tools/index"],
   "window": {"navigationBarTitleText":"\u62fc\u9014", "navigationBarBackgroundColor":"#F6F3EA", "navigationBarTextStyle":"black", "backgroundColor":"#F6F3EA"},
   "permission": {"scope.userLocation": {"desc":"用于主动选择出发地或候选碰面地点，并计算参考中点和推荐去处"}},
   "requiredPrivateInfos": ["chooseLocation"],

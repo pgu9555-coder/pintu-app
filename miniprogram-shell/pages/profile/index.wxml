@@ -1,0 +1,33 @@
+<view class="profile-page">
+  <view class="profile-intro">设置一次，碰面和账本自动使用。</view>
+  <view class="profile-card">
+    <view class="profile-avatar-wrap">
+      <image wx:if="{{avatar}}" class="profile-avatar" src="{{avatar}}" mode="aspectFill" />
+      <view wx:else class="profile-avatar profile-placeholder"><image src="/assets/icons/person.svg" mode="aspectFit" /></view>
+      <button wx:if="{{canChooseAvatar}}" class="avatar-badge" open-type="chooseAvatar" bindchooseavatar="chooseAvatar" disabled="{{busy}}" aria-label="选择头像"><image src="/assets/icons/camera.svg" mode="aspectFit" /></button>
+    </view>
+    <button wx:if="{{canChooseAvatar}}" class="avatar-select" open-type="chooseAvatar" bindchooseavatar="chooseAvatar" disabled="{{busy}}">选择头像</button>
+    <view wx:else class="avatar-unavailable">当前微信版本暂不支持选择头像</view>
+    <view class="name-field">
+      <view class="field-label">名称</view>
+      <input class="nickname-input" type="nickname" placeholder="输入你希望大家看到的名字" value="{{nickname}}" maxlength="24" bindinput="nicknameInput" disabled="{{busy}}" />
+      <view class="field-hint">点击输入框，可选择微信昵称。</view>
+    </view>
+    <view wx:if="{{error}}" class="profile-error">{{error}}</view>
+    <view wx:if="{{cleanupPending}}" class="cleanup-note">有 {{cleanupPending}} 个旧头像文件待清理<button bindtap="retryAvatarCleanup" disabled="{{busy}}">重试清理</button></view>
+    <button class="primary" bindtap="saveAndContinue" loading="{{busy}}" disabled="{{busy}}">{{onboarding ? '保存并继续' : '保存资料'}}</button>
+    <view class="privacy-note">头像和昵称由你主动选择。</view>
+    <view wx:if="{{onboarding}}" class="later-section">
+      <button class="later" bindtap="continueLater" disabled="{{busy}}">稍后完善</button>
+      <view class="later-note">未设置名称时将暂用“微信用户”，之后可随时修改。</view>
+    </view>
+    <view wx:else class="edit-options">
+      <button class="later" bindtap="cancel" disabled="{{busy}}">返回我的行程</button>
+      <button class="more-link" bindtap="toggleMore" disabled="{{busy}}">{{moreOpen ? '收起资料选项' : '更多资料选项'}}</button>
+      <view wx:if="{{moreOpen}}" class="more-actions">
+        <button bindtap="removeAvatar" disabled="{{busy || !avatar}}">移除头像</button>
+        <button class="danger" bindtap="deleteProfile" disabled="{{busy}}">删除云端资料</button>
+      </view>
+    </view>
+  </view>
+</view>

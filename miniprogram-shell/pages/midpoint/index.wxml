@@ -75,7 +75,7 @@
         <view class="room-card-icon meetup-room-icon"><image src="/assets/icons/midpoint.svg" /></view>
         <view>
           <view class="room-card-title">多人实时碰面</view>
-          <view class="room-card-sub">朋友输入同一个码，各自填写名字和出发点。</view>
+          <view class="room-card-sub">朋友输入同一个码，各自选择出发点。</view>
         </view>
       </view>
       <block wx:if="{{room}}">
@@ -92,7 +92,7 @@
       <block wx:else>
         <view class="local-note">不建房间也能在本机填写多个地址；建房后每个人可在自己的手机上更新位置。</view>
         <view wx:if="{{localStorageMessage}}" class="map-config-note">{{localStorageMessage}}</view>
-        <input class="input" placeholder="你的名字" value="{{name}}" maxlength="24" bindinput="nameInput" />
+        <view class="account-identity"><image wx:if="{{accountAvatar}}" class="identity-avatar" src="{{accountAvatar}}" mode="aspectFill" /><view wx:else class="identity-avatar identity-placeholder"><image src="/assets/icons/person.svg" mode="aspectFit" /></view><text class="identity-name">{{name}}</text><text class="identity-me">我</text></view>
         <view class="room-entry-row">
           <button class="room-small-button" bindtap="create" loading="{{busy}}" disabled="{{busy}}">创建碰面码</button>
           <input class="input code-input" placeholder="输入 8 位碰面码" value="{{code}}" maxlength="8" bindinput="codeInput" />
@@ -108,12 +108,12 @@
 
       <block wx:if="{{room}}">
         <view wx:for="{{people}}" wx:key="uid" class="point-row">
-          <view class="point-avatar">{{item.name[0]}}</view>
-          <view class="point-copy"><view class="point-name">{{item.name}}</view><view class="point-address">{{item.address || '尚未选择地点'}}</view></view>
+          <image wx:if="{{item.ownAvatar}}" class="point-avatar" src="{{item.ownAvatar}}" mode="aspectFill" /><view wx:else class="point-avatar">{{item.name[0]}}</view>
+          <view class="point-copy"><view class="point-name">{{item.name}}<text wx:if="{{item.isSelf}}" class="identity-me">我</text></view><view class="point-address">{{item.address || '尚未选择地点'}}</view></view>
         </view>
         <view class="mine-editor">
-          <view class="editor-label">我的名字和出发点</view>
-          <input class="input" placeholder="我的名字" value="{{mineName}}" maxlength="24" bindinput="mineNameInput" />
+          <view class="editor-label">我的出发点</view>
+          <view class="account-identity"><image wx:if="{{accountAvatar}}" class="identity-avatar" src="{{accountAvatar}}" mode="aspectFill" /><view wx:else class="identity-avatar identity-placeholder"><image src="/assets/icons/person.svg" mode="aspectFit" /></view><text class="identity-name">{{name}}</text><text class="identity-me">我</text></view>
           <input class="input" placeholder="输入地点后，从下方列表选择" value="{{mineAddress}}" maxlength="120" bindinput="mineAddressInput" bindfocus="mineAddressFocus" />
           <view wx:if="{{addressSearchLoading}}" class="suggestion-status">正在搜索地点…</view>
           <scroll-view wx:if="{{addressSuggestionsVisible && addressSuggestions.length}}" class="address-suggestions" scroll-y="true">

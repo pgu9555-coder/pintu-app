@@ -260,6 +260,7 @@ function normalizeSearchPlaces(places, center) {
 Page({
   data: {
     name: '',
+    accountAvatar: '',
     code: '',
     room: null,
     people: [],
@@ -542,7 +543,8 @@ Page({
       this.localStorageReady = true
     } catch(error) { localStorageMessage = '本机草稿无法读取，请勿在未备份时关闭页面'; wx.showToast({title:localStorageMessage,icon:'none'}) }
     this.present({
-      name: storage.getName(),
+      name: String(accountProfile && accountProfile.nickname || storage.getName() || '微信用户'),
+      accountAvatar: String(accountProfile && accountProfile.avatarFileId || ''),
       headerTopPx: layout.headerTopPx(),
       amapConfigured: Boolean(amap.configuredKey()),
       localStorageMessage,
@@ -558,9 +560,34 @@ Page({
     if (this.docId && this.scopeReady) this.startPolling()
   },
 
+  refreshAccountIdentity() {
+    if (!this.localScopeMatches()) return
+    const app = typeof getApp === 'function' ? getApp() : null
+    this.accountProfile = app && app.globalData && app.globalData.accountProfile || this.accountProfile || null
+    const name = String(this.accountProfile && this.accountProfile.nickname || storage.getName() || '微信用户').trim() || '微信用户'
+    this.present({ name, mineName: name, accountAvatar: String(this.accountProfile && this.accountProfile.avatarFileId || ''), localPoints: normalizeLocalPoints(this.data.localPoints, this.accountProfile) })
+    if (this.data.room && this.viewer) this.renderRoom(this.data.room, this.viewer)
+  },
+
   onShow() {
     if (this.entryBlocked) return
+    const app = typeof getApp === 'function' ? getApp() : null
+    if (!app || !app.hasAccountConsent || !app.hasAccountConsent() || !storage.isAccountScoped()) {
+      this.stopPolling()
+      this.pageGeneration = (this.pageGeneration || 0) + 1
+      this.localSearchVersion = (this.localSearchVersion || 0) + 1
+      this.scopeReady = false
+      this.localStorageReady = false
+      this.accountProfile = null
+      this.viewer = null
+      this.docId = ''
+      this.entryBlocked = true
+      this.present({ room: null, people: [], localPoints: [], localCandidates: [], name: '', mineName: '', accountAvatar: '', markers: [], center: null, resultMode: false })
+      wx.switchTab({ url: '/pages/home/index' })
+      return
+    }
     if (this.localScope !== undefined && typeof storage.localScopeToken === 'function' && !this.localScopeMatches()) this.reloadLocalScope()
+    this.refreshAccountIdentity()
     if (this.docId && this.scopeReady) {
       this.startPolling()
       this.flushPendingMeetupMutation(false, true)
@@ -794,6 +821,7 @@ Page({
       wx.showToast({ title: '创建房间前请返回首页登录', icon: 'none' })
       return
     }
+    this.refreshAccountIdentity()
     const name = this.data.name.trim()
     if (!name) {
       wx.showToast({ title: '先填写名字', icon: 'none' })
@@ -835,10 +863,11 @@ Page({
       wx.showToast({ title: '加入房间前请返回首页登录', icon: 'none' })
       return
     }
+    this.refreshAccountIdentity()
     const name = this.data.name.trim()
     const code = cleanCode(this.data.code)
     if (!name || code.length !== 8) {
-      wx.showToast({ title: '请填写名字和 8 位房间码', icon: 'none' })
+      wx.showToast({ title: '请填写 8 位房间码', icon: 'none' })
       return
     }
     this.closeLocalPointEditor()
@@ -919,7 +948,11 @@ Page({
     const decision = currentDecision(room)
     const candidates = decisionCandidates(decision, viewer, room, this.candidateDetails)
     const participation = decisionParticipation(decision, room)
-    const people = (room.meetup && room.meetup.people) || []
+    const people = ((room.meetup && room.meetup.people) || []).map((person) => Object.assign({}, person, {
+      isSelf: Boolean(viewer && person && person.uid === viewer.uid),
+      name: viewer && person && person.uid === viewer.uid && this.accountProfile && this.accountProfile.nickname ? this.accountProfile.nickname : person.name,
+      ownAvatar: Boolean(viewer && person && person.uid === viewer.uid && this.accountProfile && this.accountProfile.avatarFileId) ? this.accountProfile.avatarFileId : ''
+    }))
     const mine = people.find((person) => viewer && person && person.uid === viewer.uid) || null
     const next = {
       room,
@@ -936,7 +969,7 @@ Page({
       isOwner: Boolean(this.viewer && this.viewer.isOwner)
     }
     if (!this.mineDraftDirty) {
-      next.mineName = (mine && mine.name) || (viewer && viewer.name) || ''
+      next.mineName = (this.accountProfile && this.accountProfile.nickname) || (mine && mine.name) || (viewer && viewer.name) || '微信用户'
       next.mineAddress = (mine && mine.address) || ''
       next.mineLocation = mine ? { lat: Number(mine.lat), lng: Number(mine.lng), address: mine.address } : null
       next.mineHasSavedLocation = Boolean(mine)
@@ -1396,6 +1429,8 @@ Page({
   },
 
   async saveMeetupLocation() {
+    if (!this.localScopeMatches() || this.entryBlocked) return
+    this.refreshAccountIdentity()
     const viewer = this.viewer
     if (!viewer || !viewer.uid || !viewer.membershipEpoch) {
       wx.showToast({ title: '成员身份尚未同步，请稍后重试', icon: 'none' })

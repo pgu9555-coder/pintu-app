@@ -44,7 +44,7 @@ async function staleSharedLedger(){
   const response=deferred();let calls=0;const h=loadPage('ledger',{scope:'account-a',gateway:{getRoom(){calls++;return response.promise;}}});prepareShared(h);
   const task=h.page.fetchRoom();h.changeScope('account-b');h.page.onShow();assert.equal(h.page.docId,'');assert.equal(h.page.viewer,null);assert.equal(h.page.scopeReady,false);assert.equal(h.page.data.room,null);h.page.startPolling();assert.equal(calls,1,'a stale shared poll cannot restart after switching account');
   if(reject)response.reject(Error('old A failure'));else response.resolve({room:{ledger},viewer:{uid:'wx:a'}});await task;
-  assert.equal(h.effects.filter(effect=>effect.scope==='account-b').length,0,'late A polls must never cache or persist into B');assert.equal(h.page.data.ledger.name,'');assert.equal(h.notices.length,0,'late failures must not alter the new page');
+  assert.equal(h.effects.filter(effect=>effect.scope==='account-b').length,0,'late A polls must never cache or persist into B');assert.equal(h.page.data.ledger.name,'');assert.equal(h.notices.length,1,'the only notice after a stale failure is the account-scope switch guard');assert.match(String(h.notices[0]),/账号空间已切换/);
  }
  const response=deferred();const h=loadPage('ledger',{scope:'account-a',gateway:{syncLedger:()=>response.promise}});prepareShared(h);
  h.scoped.set('account-a:pintu-ledger-outbox-v1',{entries:{'room-a':{mutationId:'a-write',membershipEpoch:'epoch-a',ledger}}});

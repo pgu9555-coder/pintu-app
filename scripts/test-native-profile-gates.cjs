@@ -78,13 +78,11 @@ assert.ok(calls.some(([kind, url]) => kind === 'switchTab' && url === '/pages/tr
 storage.setAccountScope(token)
 accountApp.hasAccountConsent = () => true
 calls.length = 0
-let closeProfile = null
-home.openProfilePanel = (onClose) => { closeProfile = onClose }
+let profileEditorOpened = false
+home.openProfileEditor = (fromTrips) => { profileEditorOpened = fromTrips }
 trips.data.accountSignedIn = true
 trips.profileCardTap()
-assert.equal(typeof closeProfile, 'function', 'the signed-in Trips card must open profile management')
-closeProfile()
-assert.ok(calls.some(([kind, url]) => kind === 'switchTab' && url === '/pages/trips/index'), 'closing profile management must return to Trips')
+assert.equal(profileEditorOpened, true, 'the signed-in Trips card must open the independent profile page in Trips return mode')
 
 storage.clearAccountScope()
 accountApp.hasAccountConsent = () => false

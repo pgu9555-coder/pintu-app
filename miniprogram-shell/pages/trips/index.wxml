@@ -8,6 +8,7 @@
     <view wx:else class="trips-account-avatar trips-account-avatar-placeholder"><image src="/assets/icons/person.svg" mode="aspectFit" /></view>
     <button wx:if="{{!accountSignedIn}}" class="trips-login-button" catchtap="profileCardTap">登录</button>
     <text wx:else class="trips-account-name">{{accountNickname}}</text>
+    <text wx:if="{{accountSignedIn}}" class="trips-edit-profile">编辑资料</text>
   </view>
   <view class="section-label trips-label">本地行程</view>
   <view wx:if="{{loginRequired && localTrips.length}}" class="trips-guest-note">登录后查看账号行程；原有本机账本可通过首页“备份与迁移”保留和导入。<button class="trips-backup-link" bindtap="backupGuestTrips">先备份访客账本</button></view>
@@ -66,4 +67,5 @@
 
   <button wx:if="{{hasMore}}" class="btn secondary load-more" bindtap="loadMore" loading="{{loadingMore}}" disabled="{{loadingMore}}">{{loadingMore ? '加载中…' : '加载更多房间'}}</button>
   </block>
+  <button wx:if="{{accountSignedIn}}" class="trips-logout" bindtap="logoutAccount">退出微信账号</button>
 </view>

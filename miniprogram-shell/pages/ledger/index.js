@@ -37,6 +37,16 @@ function emptyLocalLedger() {
   }
 }
 
+function initialLocalLedger(profile, scope, fallbackName) {
+  const ledger = emptyLocalLedger()
+  const name = String(profile && profile.nickname || fallbackName || '').trim().slice(0, 12)
+  if (!name || !scope || scope === 'guest') return ledger
+  const now = math.stamp()
+  ledger.members = [{ id: `self-${now}`, name, selfProfileScope: scope, color: AVATAR_COLORS[0], createdAt: now, updatedAt: now, updatedBy: scope }]
+  ledger.nextMemberId = 2
+  return ledger
+}
+
 function cleanTripId(value) {
   return String(value || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 80)
 }
@@ -199,7 +209,9 @@ Page({
     guestMode: false,
     isOwner: false,
     busy: false,
-    headerTopPx: 72
+    headerTopPx: 72,
+    accessBlocked: false,
+    accountAvatar: ''
   },
 
   async onLoad(options) {
@@ -239,10 +251,11 @@ Page({
       this.localScope = storage.localScopeToken()
       this.guestMode = !consentGranted
       const saved = localLedgerForTrip(this.tripId)
-      const ledger = isLedger(saved) ? saved : emptyLocalLedger()
+      const accountProfile = app && app.globalData && app.globalData.accountProfile
+      const ledger = isLedger(saved) ? saved : initialLocalLedger(accountProfile, storage.localScopeToken(), storage.getName())
       this.applyStandaloneLedger(ledger, false)
       this.resetExpenseForm(ledger)
-      this.setData({ name: '', step: saved ? 2 : 1, guestMode: this.guestMode, syncText: '本机保存' })
+      this.setData({ name: this.currentProfileName(), accountAvatar: this.currentProfileAvatar(), step: saved ? 2 : 1, guestMode: this.guestMode, syncText: '本机保存' })
       return
     }
     if (!consentGranted) {
@@ -251,14 +264,13 @@ Page({
     }
     if (!await this.ensureAccountScope()) return
     this.pendingCreateId = savedPendingCreateId()
-    this.setData({ name: storage.getName() })
+    this.setData({ name: this.currentProfileName(), accountAvatar: this.currentProfileAvatar() })
     this.startPolling()
   },
 
   onShow() {
     if (this.entryBlocked) return
     if (this.localScope !== storage.localScopeToken()) {
-      const wasShared = Boolean(this.docId)
       this.stopPolling()
       this.clearSettlementNotice()
       this.scopeGeneration = (this.scopeGeneration || 0) + 1
@@ -271,15 +283,20 @@ Page({
       this.pendingCreateId = ''
       this.lastRemoteLedgerFingerprint = ''
       this.formDirty = false
-      if (wasShared) this.tripId = newTripId()
-      const saved = localLedgerForTrip(this.tripId)
-      if (!saved) this.tripId = newTripId()
-      const ledger = isLedger(saved) ? saved : emptyLocalLedger()
-      const app = typeof getApp === 'function' ? getApp() : null
-      this.guestMode = !(app && app.hasAccountConsent && app.hasAccountConsent())
-      this.applyStandaloneLedger(ledger, false)
-      this.resetExpenseForm(ledger)
-      this.setData({ name: '', code: '', guestMode: this.guestMode, busy: false, isOwner: false, step: saved ? 2 : 1, syncPending: false, syncText: '本机保存' })
+      this.entryBlocked = true
+      const empty = emptyLocalLedger()
+      this.applyStandaloneLedger(empty, false)
+      this.resetExpenseForm(empty)
+      this.setData({ name: '', accountAvatar: '', code: '', guestMode: false, accessBlocked: true, busy: false, isOwner: false, step: 1, syncPending: false, syncText: '请重新登录' })
+      wx.showToast({ title: '账号空间已切换，请返回首页重新登录', icon: 'none' })
+      wx.switchTab({ url: '/pages/home/index' })
+      return
+    }
+    const profileName = this.currentProfileName()
+    const profileAvatar = this.currentProfileAvatar()
+    if (profileName !== this.data.name || profileAvatar !== this.data.accountAvatar) {
+      this.setData({ name: profileName, accountAvatar: profileAvatar })
+      this.applyLedger(this.data.ledger, true, this.data.room, this.viewer)
     }
     if (this.docId && this.scopeReady) {
       this.flushLedgerOutbox(false)
@@ -323,7 +340,7 @@ Page({
   },
 
   scopeMatches(snapshot) {
-    return !this.closed && this.localScope === storage.localScopeToken() && (!snapshot || (
+    return !this.closed && !this.entryBlocked && this.localScope === storage.localScopeToken() && (!snapshot || (
       snapshot.scope === this.localScope && snapshot.docId === this.docId && snapshot.generation === (this.scopeGeneration || 0)
     ))
   },
@@ -354,6 +371,16 @@ Page({
     this.setData({ name: event.detail.value })
   },
 
+  currentProfileName() {
+    const app = typeof getApp === 'function' ? getApp() : null
+    return String(app && app.globalData && app.globalData.accountProfile && app.globalData.accountProfile.nickname || storage.getName() || this.data.name || '微信用户').trim()
+  },
+
+  currentProfileAvatar() {
+    const app = typeof getApp === 'function' ? getApp() : null
+    return String(app && app.globalData && app.globalData.accountProfile && app.globalData.accountProfile.avatarFileId || '')
+  },
+
   codeInput(event) {
     this.setData({ code: cleanCode(event.detail.value) })
   },
@@ -369,6 +396,8 @@ Page({
   goBack() {
     wx.navigateBack({ fail: () => wx.switchTab({ url: '/pages/home/index' }) })
   },
+
+  returnHome() { wx.switchTab({ url: '/pages/home/index' }) },
 
   goStep(event) {
     const next = Number(event.currentTarget.dataset.step)
@@ -466,7 +495,7 @@ Page({
     let operationDocId = snapshot.docId
     const current = () => this.scopeMatches() && this.docId === operationDocId && snapshot.scope === this.localScope && snapshot.generation === (this.scopeGeneration || 0)
     if (!current()) return
-    const name = this.data.name.trim()
+    const name = this.currentProfileName()
     if (!name) {
       wx.showToast({ title: '先填写名字', icon: 'none' })
       return
@@ -513,7 +542,7 @@ Page({
     let operationDocId = snapshot.docId
     const current = () => this.scopeMatches() && this.docId === operationDocId && snapshot.scope === this.localScope && snapshot.generation === (this.scopeGeneration || 0)
     if (!current()) return
-    const name = this.data.name.trim()
+    const name = this.currentProfileName()
     const code = cleanCode(this.data.code)
     if (!name || code.length !== 8) {
       wx.showToast({ title: '请填写名字和 8 位房间码', icon: 'none' })
@@ -619,7 +648,11 @@ Page({
       (viewer.uid && member.uid === viewer.uid) ||
       (viewer.memberId && String(member.id) === String(viewer.memberId))
     ))
-    return index >= 0 ? index : 0
+    if (index >= 0) return index
+    if (!viewer.uid && !viewer.memberId && this.localScope && this.localScope !== 'guest') {
+      return (members || []).findIndex((member) => member.selfProfileScope === this.localScope)
+    }
+    return -1
   },
 
   applyLedger(source, preserveForm, room, viewer) {
@@ -634,10 +667,14 @@ Page({
     if (payerIndex < 0) payerIndex = this.defaultPayerIndex(members)
     const validSplitIds = this.data.splitIds.filter((id) => members.some((member) => String(member.id) === String(id)))
     const checkedIds = shouldKeepForm ? validSplitIds : members.map((member) => String(member.id))
+    const app = typeof getApp === 'function' ? getApp() : null
+    const accountProfile = app && app.globalData && app.globalData.accountProfile || null
     const decorated = Object.assign({}, source, {
       members: members.map((member) => Object.assign({}, member, {
+        displayName: accountProfile && accountProfile.nickname && ((activeViewer && ((activeViewer.uid && member.uid === activeViewer.uid) || (activeViewer.memberId && String(member.id) === String(activeViewer.memberId)))) || (!activeViewer && this.localScope && this.localScope !== 'guest' && member.selfProfileScope === this.localScope)) ? accountProfile.nickname : member.name,
         checked: checkedIds.map(String).includes(String(member.id)),
         payerSelected: String(member.id) === String(members[payerIndex] && members[payerIndex].id),
+        ownAvatar: Boolean(accountProfile && ((activeViewer && ((activeViewer.uid && member.uid === activeViewer.uid) || (activeViewer.memberId && String(member.id) === String(activeViewer.memberId)))) || (!activeViewer && this.localScope && this.localScope !== 'guest' && member.selfProfileScope === this.localScope))) ? String(accountProfile.avatarFileId || '') : '',
         initial: String(member.name || '?').slice(0, 1),
         color: member.color || AVATAR_COLORS[members.indexOf(member) % AVATAR_COLORS.length]
       })),
