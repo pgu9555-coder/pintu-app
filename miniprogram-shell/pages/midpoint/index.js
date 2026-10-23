@@ -506,6 +506,7 @@ Page({
     this.closed = false
     const generation = this.pageGeneration || 0
     this.docId = (options && options.docId) || ''
+    this.mineEditorRoomId = ''
     this.viewer = null
     this.mineDraftDirty = false
     this.addressSearchRequest = 0
@@ -915,6 +916,7 @@ Page({
           this.clearPointOutbox(removedId)
         }
         this.docId = ''
+        this.mineEditorRoomId = ''
         this.serverRoom = null
         this.stopPolling()
         storage.remove(removedId)
@@ -952,6 +954,9 @@ Page({
 
   renderRoom(room, viewer) {
     if (this.data.localPointEditorId) this.closeLocalPointEditor()
+    const roomId = String(this.docId || (room && (room.docId || room.code)) || '')
+    const enteringRoom = roomId !== this.mineEditorRoomId
+    if (enteringRoom) this.mineEditorRoomId = roomId
     const decision = currentDecision(room)
     const candidates = decisionCandidates(decision, viewer, room, this.candidateDetails)
     const participation = decisionParticipation(decision, room)
@@ -973,6 +978,7 @@ Page({
     const mineHasLocation = Boolean(mine && Number.isFinite(mine.lat) && Number.isFinite(mine.lng))
     const next = {
       room,
+      mineEditorOpen: enteringRoom ? true : this.data.mineEditorOpen,
       people,
       center: midpoint.average(room),
       markers: midpoint.markers(room),

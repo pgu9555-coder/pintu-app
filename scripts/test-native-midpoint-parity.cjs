@@ -34,9 +34,10 @@ async function run(){
     assert.equal(page.data.mineHasSavedLocation,false,'a waiting roster entry is not a saved location')
     assert.equal(page.data.mineLocation,null)
     assert.equal(page.data.center,null)
+    assert.equal(page.data.mineEditorOpen,true,'entering a room opens the address editor for a member without a saved location')
     page.showRoomResults();assert.equal(page.data.resultMode,false);assert.equal(calls.toast.length,1)
-    page.toggleMineEditor();assert.equal(page.data.mineEditorOpen,true)
     page.toggleMineEditor();assert.equal(page.data.mineEditorOpen,false)
+    page.toggleMineEditor();assert.equal(page.data.mineEditorOpen,true)
     room.meetup.people=[{uid:'self',name:'旧名称',address:'我的地址',lat:22,lng:114}]
     page.renderRoom(room,page.viewer);assert.equal(page.data.mineHasSavedLocation,true);assert.equal(page.data.center,null)
     room.meetup.people.push({uid:'friend',name:'朋友',address:'朋友地址',lat:24,lng:116})
@@ -113,6 +114,10 @@ async function run(){
     const {page}=fixture();page.viewer={uid:'wx:one',isOwner:false,membershipEpoch:'epoch-one'};page.candidateDetails={}
     const room={docId:'shared',members:[{uid:'wx:one'}],meetup:{people:[{uid:'wx:one',name:'甲',lat:22,lng:114},{uid:'wx:two',name:'乙',lat:24,lng:116}],decision:{candidates:pois,votes:[]}}}
     page.renderRoom(room,page.viewer);assert.equal(page.data.resultMode,true);assert.equal(page.data.room.docId,'shared')
+    assert.equal(page.data.mineEditorOpen,true,'entering an existing room opens the address editor even when a saved location exists')
+    page.toggleMineEditor();assert.equal(page.data.mineEditorOpen,false,'the editor can still be collapsed manually')
+    page.renderRoom({...room},page.viewer);assert.equal(page.data.mineEditorOpen,false,'room polling must not reopen an editor the user collapsed')
+    page.toggleMineEditor();assert.equal(page.data.mineEditorOpen,true,'a collapsed editor can be opened again')
     page.adjustPlaces();page.renderRoom({...room},page.viewer);assert.equal(page.data.resultMode,false,'poll cannot close place editor')
     page.showRoomResults();assert.equal(page.data.resultMode,true)
     assert.equal(page.viewer.membershipEpoch,'epoch-one')
