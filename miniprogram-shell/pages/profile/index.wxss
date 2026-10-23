@@ -11,7 +11,7 @@
 .avatar-unavailable{margin-top:12px;text-align:center;color:#75807C;font-size:12px}
 .name-field{margin-top:30px}
 .field-label{margin-bottom:9px;color:#4C5C5B;font-size:14px}
-.nickname-input{height:48px;box-sizing:border-box;padding:0 14px;border:1px solid #DCD5C1;border-radius:10px;background:#FFFDF6;color:#0F3D36;font-size:16px;line-height:44px}
+.nickname-input{display:block;width:100%;height:48px;box-sizing:border-box;padding:0 14px;border:1px solid #DCD5C1;border-radius:10px;background:#FFFDF6;color:#0F3D36;font-size:16px;line-height:44px}
 .field-hint{margin-top:8px;color:#75807C;font-size:12px;line-height:1.5}
 .profile-error{margin-top:12px;color:#A04435;font-size:13px;line-height:1.5}
 .primary{height:49px;margin-top:34px;padding:0 12px;border-radius:10px;background:#0F3D36;color:#FFFDF6;font-size:16px;font-weight:600;line-height:49px}
@@ -31,3 +31,4 @@ button::after{border:0}
 button[disabled]{opacity:.5}
 @media(max-width:340px){.profile-page{padding-left:20px;padding-right:20px}.profile-card{margin-top:20px}.profile-avatar-wrap,.profile-avatar{width:104px;height:104px}.name-field{margin-top:23px}.primary{margin-top:26px}}
 .profile-page{padding-top:14px;padding-bottom:calc(24px + env(safe-area-inset-bottom))}.profile-card{margin-top:16px}.profile-avatar-wrap,.profile-avatar{width:96px;height:96px}.profile-avatar-wrap{margin-bottom:0}.name-field{margin-top:20px}.field-label{margin-bottom:6px}.primary{margin-top:22px}.later-section{margin-top:20px}.edit-options{margin-top:14px}
+.profile-page button.primary{display:flex;align-items:center;justify-content:center;width:100%;}

@@ -12,7 +12,7 @@ const nativeDefaults = 'html,body{margin:0}view,scroll-view{display:block}block{
 async function render(page, name, data, scale) {
   const width = page.viewportSize().width
   const css = (read('app.wxss') + '\n' + read(`pages/${name}/index.wxss`)).replace(/(^|[}\s])page\s*\{/g, '$1body{').replace(/\bimage\b/g, 'img').replace(/([\d.]+)rpx/g, (_, n) => `${Number(n) * width / 750}px`)
-  const markup = read(`pages/${name}/index.wxml`).replace(/<image\b/g, '<img').replace(/<\/image>/g, '')
+  const markup = read(`pages/${name}/index.wxml`).replace(/<image\b/g, '<img').replace(/<\/image>/g, '').replace(/src="(\/assets\/[^" ]+)"/g, (_, asset) => `src="data:image/svg+xml;base64,${fs.readFileSync(path.join(root, asset)).toString('base64')}"`)
   await page.setContent(`<style>${nativeDefaults}\n${css}</style><main>${markup}</main>`)
   await page.evaluate(({ data, scale }) => {
     const expression = (text, state) => { try { return Function('s', `with(s){return (${text})}`)(state) } catch (_) { return '' } }
@@ -35,13 +35,21 @@ async function render(page, name, data, scale) {
         }
         for (const attribute of Array.from(node.attributes)) {
           if (attribute.name.startsWith('wx:')) node.removeAttribute(attribute.name)
-          else node.setAttribute(attribute.name, value(attribute.value, state))
+          else {
+            const resolved = value(attribute.value, state)
+            if (['disabled', 'hidden', 'checked'].includes(attribute.name) && (resolved === 'false' || resolved === '')) node.removeAttribute(attribute.name)
+            else node.setAttribute(attribute.name, resolved)
+          }
         }
         walk(node, state)
       }
     }
     walk(document.querySelector('main'), data)
-    if (scale !== 1) for (const element of document.querySelectorAll('main *')) element.style.fontSize = `${parseFloat(getComputedStyle(element).fontSize) * scale}px`
+    // Snapshot before applying: otherwise inherited fonts compound once per ancestor.
+    if (scale !== 1) {
+      const sizes = Array.from(document.querySelectorAll('main *'), element => [element, parseFloat(getComputedStyle(element).fontSize)])
+      for (const [element, size] of sizes) element.style.fontSize = `${size * scale}px`
+    }
   }, { data, scale })
 }
 async function main() {
@@ -127,4 +135,5 @@ async function checkBounds(page, width, label) {
   const overflow = await page.evaluate(width => Array.from(document.querySelectorAll('main button, main input, main .point-copy, main .identity-name')).filter(node => { const box = node.getBoundingClientRect(); return box.width && (box.left < -1 || box.right > width + 1 || node.scrollWidth > node.clientWidth + 2 && node.tagName === 'BUTTON') }).map(node => ({ class: node.className, width: node.getBoundingClientRect().width, scroll: node.scrollWidth, client: node.clientWidth })), width)
   assert.deepEqual(overflow, [], `${label}: interactive controls stay within viewport and button labels fit`)
 }
-main().catch(error => { console.error(error); process.exitCode = 1 })
+if (require.main === module) main().catch(error => { console.error(error); process.exitCode = 1 })
+module.exports = { render }
