@@ -5,3 +5,8 @@ node_modules/
 *.log
 cloudbase-site/
 .vercel/
+*.pem
+*.key
+*.p12
+*.pfx
+project.private.config.json
