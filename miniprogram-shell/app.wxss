@@ -67,7 +67,10 @@ button::after { border:0; }
   background:#F6F3EA;
   color:#1B2A2E;
   font-size:13px;
+  line-height:36px;
 }
+
+.native-input-placeholder { color:#737f7b; line-height:1.4; }
 
 .btn {
   display:flex;

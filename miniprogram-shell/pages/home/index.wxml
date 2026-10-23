@@ -11,7 +11,11 @@
         <view class="join-subtitle">输入任意碰面码或账本码，自动进入对应功能。</view>
       </view>
     </view>
-    <view class="join-input join-profile-name">{{name || '微信用户'}} <text>将以此名称加入</text></view>
+    <view class="join-input join-profile-name {{accountSignedIn ? '' : 'join-identity-guest'}}" bindtap="openJoinIdentity" role="button" aria-label="{{accountSignedIn ? '当前微信用户' : '未登录，点击登录'}}">
+      <text wx:if="{{!accountSignedIn}}" class="join-identity-status">未登录 · 去登录</text>
+      <text wx:else>{{name || '微信用户'}}</text>
+      <text wx:if="{{accountSignedIn}}">将以此名称加入</text>
+    </view>
     <view wx:if="{{inviteType}}" class="invite-notice">
       <view class="invite-notice-title">{{inviteLabel}}房间邀请</view>
       <view class="invite-notice-copy">房间码 {{code}}。将使用你的资料名称，点击加入以确认。</view>

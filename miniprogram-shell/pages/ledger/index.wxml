@@ -37,7 +37,7 @@
       </view>
       <view class="room-entry-row">
         <button class="room-small-button create-ledger-code" bindtap="create" loading="{{busy}}" disabled="{{busy}}">创建账本码</button>
-        <input class="input code-input" placeholder="输入 8 位账本码" value="{{code}}" maxlength="8" bindinput="codeInput" />
+        <input class="input code-input" placeholder="输入 8 位账本码" placeholder-class="native-input-placeholder" value="{{code}}" maxlength="8" bindinput="codeInput" />
         <button class="room-small-button outline" bindtap="join" loading="{{busy}}" disabled="{{busy}}">加入</button>
       </view>
     </block>
@@ -62,7 +62,7 @@
   <block wx:if="{{step === 1}}">
     <view class="card">
       <view class="section-title">这趟行程</view>
-      <input class="input" placeholder="例如：五一上海游" value="{{tripName}}" maxlength="20" bindinput="tripNameInput" bindblur="saveTripName" />
+      <input class="input" placeholder="例如：五一上海游" placeholder-class="native-input-placeholder" value="{{tripName}}" maxlength="20" bindinput="tripNameInput" bindblur="saveTripName" />
       <view class="section-label">同行的人</view>
       <view wx:if="{{!ledger.members.length}}" class="empty-copy">先把同行的人加进来，至少需要 2 人。</view>
       <view wx:for="{{ledger.members}}" wx:key="id" class="member-row">
@@ -77,7 +77,7 @@
         </view>
       </view>
       <view class="add-member-row">
-        <input class="input" placeholder="添加同行人名字" value="{{memberName}}" maxlength="12" bindinput="memberInput" />
+        <input class="input" placeholder="添加同行人名字" placeholder-class="native-input-placeholder" value="{{memberName}}" maxlength="12" bindinput="memberInput" />
         <button class="add-button" bindtap="addMember" loading="{{busy}}" disabled="{{busy}}">＋</button>
       </view>
     </view>
@@ -89,9 +89,9 @@
       <view wx:if="{{editingId}}" class="editor-handle"></view>
       <button wx:if="{{editingId}}" class="editor-close" bindtap="cancelEdit" aria-label="关闭支出编辑">×</button>
       <view class="section-title">{{editingId ? '修改这笔支出' : '加一笔支出'}}</view>
-      <input class="input" placeholder="花在哪里了，如 酒店 / 机票 / 晚餐" value="{{desc}}" maxlength="20" bindinput="descInput" />
+      <input class="input" placeholder="花在哪里了，如 酒店 / 机票 / 晚餐" placeholder-class="native-input-placeholder" value="{{desc}}" maxlength="20" bindinput="descInput" />
       <view class="money-row">
-        <input class="input amount-input" type="digit" placeholder="金额" value="{{amount}}" bindinput="amountInput" />
+        <input class="input amount-input" type="digit" placeholder="金额" placeholder-class="native-input-placeholder" value="{{amount}}" bindinput="amountInput" />
         <view class="currency">¥</view>
       </view>
 

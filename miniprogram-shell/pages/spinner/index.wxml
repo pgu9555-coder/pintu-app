@@ -23,7 +23,7 @@
   <view class="section-label people-label">在场的人</view>
   <view class="people-card">
     <view class="add-row">
-      <input class="name-input" maxlength="8" placeholder="加一个名字" value="{{newName}}" bindinput="nameInput" bindconfirm="add" confirm-type="done" disabled="{{spinning}}" />
+      <input class="name-input" maxlength="8" placeholder="加一个名字" placeholder-class="native-input-placeholder" value="{{newName}}" bindinput="nameInput" bindconfirm="add" confirm-type="done" disabled="{{spinning}}" />
       <view class="add-button {{spinning ? 'add-button-disabled' : ''}}" catchtap="add">＋</view>
     </view>
     <view wx:if="{{!names.length}}" class="empty-row">还没有人，从上面加第一个</view>

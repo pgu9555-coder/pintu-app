@@ -20,7 +20,7 @@
 .people-label { margin-top:7px; }
 .people-card { padding:12px 14px; border:1px solid #DED8C6; border-radius:14px; background:#FFFDF6; }
 .add-row { display:flex; align-items:center; gap:7px; margin-bottom:5px; }
-.name-input { flex:1; min-width:0; height:39px; box-sizing:border-box; padding:0 11px; border:1px solid #DED8C6; border-radius:8px; background:#F6F3EA; color:#1B2A2E; font-size:14px; }
+.name-input { flex:1; min-width:0; height:48px; box-sizing:border-box; padding:0 11px; border:1px solid #DED8C6; border-radius:8px; background:#F6F3EA; color:#1B2A2E; font-size:14px; line-height:44px; }
 .add-button { width:39px; height:39px; flex:0 0 39px; display:flex; align-items:center; justify-content:center; border-radius:8px; background:#0F3D36; color:#FFFDF6; font-size:25px; font-weight:300; }
 .add-button-disabled, .remove-button-disabled { opacity:.55; }
 .person-row { position:relative; min-height:38px; display:flex; align-items:center; gap:8px; padding:3px 2px; border-bottom:0.5px solid #EAE4D5; }

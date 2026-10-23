@@ -10,7 +10,7 @@
     <view wx:else class="avatar-unavailable">当前微信版本暂不支持选择头像</view>
     <view class="name-field">
       <view class="field-label">名称</view>
-      <input class="nickname-input" type="nickname" placeholder="输入你希望大家看到的名字" value="{{nickname}}" maxlength="24" bindinput="nicknameInput" disabled="{{busy}}" />
+      <input class="nickname-input" type="nickname" placeholder="输入你希望大家看到的名字" placeholder-class="native-input-placeholder" value="{{nickname}}" maxlength="24" bindinput="nicknameInput" disabled="{{busy}}" />
       <view class="field-hint">点击输入框，可选择微信昵称。</view>
     </view>
     <view wx:if="{{error}}" class="profile-error">{{error}}</view>

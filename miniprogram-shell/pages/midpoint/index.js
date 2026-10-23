@@ -273,6 +273,7 @@ Page({
     decisionMemberCount: 0,
     confirmedCandidate: null,
     localPoints: emptyLocalPoints(),
+    localValidPointCount: 0,
     localCandidates: [],
     localCalculated: false,
     localStorageMessage: '',
@@ -327,6 +328,11 @@ Page({
       points: [{latitude: marker.latitude, longitude: marker.longitude}, next.center], color: ['#ee9476aa','#638b68aa','#799ba4aa','#bd9b68aa'][i % 4], width: 2, dottedLine: true
     })) : []
     const derived = {resultRows,resultCount:rows.length,polyline}
+    if (Object.prototype.hasOwnProperty.call(patch, 'localPoints')) {
+      derived.localValidPointCount = (patch.localPoints || []).filter(hasLocalCoordinates).length
+    } else {
+      derived.localValidPointCount = (next.localPoints || []).filter(hasLocalCoordinates).length
+    }
     if (Object.prototype.hasOwnProperty.call(patch,'markers')) derived.mapFitPoints = (next.markers || []).map(marker => ({latitude:marker.latitude,longitude:marker.longitude}))
     this.setData(Object.assign({},patch,derived),callback)
   },

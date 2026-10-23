@@ -71,11 +71,8 @@
   <block wx:else>
     <block wx:if="{{!resultMode}}">
     <view class="card collaboration-card">
-      <view class="room-card-head">
-        <view class="room-card-icon meetup-room-icon"><image src="/assets/icons/midpoint.svg" /></view>
-        <view>
-          <view class="room-title-line"><view class="room-card-title">碰面房间</view><view wx:if="{{room}}" class="room-member-count">{{people.length}} 位成员</view></view>
-        </view>
+      <view class="room-card-head room-title-line">
+        <view class="room-card-title">碰面房间</view><view wx:if="{{room}}" class="room-member-count">{{people.length}} 位成员</view>
       </view>
       <block wx:if="{{room}}">
         <view class="active-room">
@@ -93,7 +90,7 @@
         <view class="account-identity"><image wx:if="{{accountAvatar}}" class="identity-avatar" src="{{accountAvatar}}" mode="aspectFill" /><view wx:else class="identity-avatar identity-placeholder"><image src="/assets/icons/person.svg" mode="aspectFit" /></view><text class="identity-name">{{name}}</text><text class="identity-me">我</text></view>
         <button class="room-create-button" bindtap="create" loading="{{busy}}" disabled="{{busy}}">＋ 创建房间</button>
         <view class="room-entry-row">
-          <input class="input code-input" placeholder="输入 8 位房间码" value="{{code}}" maxlength="8" bindinput="codeInput" />
+          <input class="input code-input" placeholder="输入 8 位房间码" placeholder-class="native-input-placeholder" value="{{code}}" maxlength="8" bindinput="codeInput" />
           <button class="room-small-button outline" bindtap="join" loading="{{busy}}" disabled="{{busy}}">加入房间</button>
         </view>
       </block>
@@ -111,7 +108,7 @@
           <button wx:if="{{item.isSelf}}" class="point-edit-link" bindtap="toggleMineEditor" disabled="{{busy}}">{{mineEditorOpen ? '收起' : (mineHasSavedLocation ? '修改' : '填写')}}</button>
         </view>
         <view wx:if="{{mineEditorOpen}}" class="mine-editor">
-          <input class="input" placeholder="输入地点后，从下方列表选择" value="{{mineAddress}}" maxlength="120" bindinput="mineAddressInput" bindfocus="mineAddressFocus" />
+          <input class="input" placeholder="输入地点后，从下方列表选择" placeholder-class="native-input-placeholder" value="{{mineAddress}}" maxlength="120" bindinput="mineAddressInput" bindfocus="mineAddressFocus" />
           <view wx:if="{{addressSearchLoading}}" class="suggestion-status">正在搜索地点…</view>
           <scroll-view wx:if="{{addressSuggestionsVisible && addressSuggestions.length}}" class="address-suggestions" scroll-y="true">
             <view class="suggestion-hint">请选择具体地点（可上下滑动查看更多）</view>
@@ -129,6 +126,7 @@
           <button wx:if="{{mineHasSavedLocation}}" class="text-action clear-location" bindtap="clearMeetupLocation" disabled="{{busy}}">清除已保存的出发点</button>
         </view>
         <button class="btn calculate-button" bindtap="showRoomResults" disabled="{{!center || busy}}">寻找碰面点</button>
+        <view wx:if="{{!center}}" class="local-valid-points-note">至少两位成员分别保存有效出发点后即可查询。</view>
       </block>
 
       <block wx:else>
@@ -143,7 +141,7 @@
         </view>
         <view wx:if="{{localPointEditorId}}" class="mine-editor local-point-editor">
           <view class="local-editor-heading"><view class="editor-label">{{localPointEditorLabel}}的出发地点</view><button class="text-action" bindtap="closeLocalPointEditor">收起</button></view>
-          <view class="local-search-row"><input class="input" value="{{localAddressQuery}}" placeholder="输入城市、地点名称或地址" maxlength="80" confirm-type="search" bindinput="localAddressInput" bindconfirm="searchLocalPointAddress" /><button class="room-small-button" bindtap="searchLocalPointAddress" loading="{{localAddressSearchLoading}}" disabled="{{busy || localAddressSearchLoading}}">搜索</button></view>
+          <view class="local-search-row"><input class="input" value="{{localAddressQuery}}" placeholder="输入城市、地点名称或地址" placeholder-class="native-input-placeholder" maxlength="80" confirm-type="search" bindinput="localAddressInput" bindconfirm="searchLocalPointAddress" /><button class="room-small-button" bindtap="searchLocalPointAddress" loading="{{localAddressSearchLoading}}" disabled="{{busy || localAddressSearchLoading}}">搜索</button></view>
           <view class="local-search-note">搜索关键词经云端高德查询，不读取当前位置。</view>
           <view wx:if="{{localAddressSearchLoading}}" class="suggestion-status">正在搜索地点…</view>
           <view wx:if="{{localAddressMessage}}" class="local-search-message {{localAddressError ? 'search-error' : ''}}">{{localAddressMessage}}</view>
@@ -153,7 +151,8 @@
           <button class="text-action local-map-choice" bindtap="chooseLocalPoint" data-id="{{localPointEditorId}}" disabled="{{busy}}">地图选点</button>
         </view>
         <button wx:if="{{localPoints.length < 6}}" class="dashed-button" bindtap="addLocalPoint">＋ 添加一位出发的朋友</button>
-        <button class="btn calculate-button" bindtap="calculateLocalMidpoint">寻找碰面点</button>
+        <button class="btn calculate-button" bindtap="calculateLocalMidpoint" disabled="{{localValidPointCount < 2 || localValidPointCount < localPoints.length}}">寻找碰面点</button>
+        <view class="local-search-note local-valid-points-note">至少填写并选择 2 个有效出发点后即可查询（当前 {{localValidPointCount}} 个）</view>
       </block>
     </view>
 

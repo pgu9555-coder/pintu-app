@@ -87,6 +87,20 @@ async function main() {
       assert.equal(editorBoxes.length, 2)
       assert.ok(editorBoxes.every(box => box.height >= 44 && box.width >= 44) && Math.abs(editorBoxes[0].y - editorBoxes[1].y) < 1, 'editor actions remain two columns with 44px tap targets')
       assert.equal(await page.locator('.mine-editor .account-identity').count(), 0, 'editor does not repeat avatar/name')
+      const inputMetrics = await page.locator('.mine-editor input').evaluate(element => {
+        const style = getComputedStyle(element)
+        return { height: element.getBoundingClientRect().height, line: parseFloat(style.lineHeight), font: parseFloat(style.fontSize), top: parseFloat(style.paddingTop), bottom: parseFloat(style.paddingBottom), border: parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth) }
+      })
+      assert.equal(inputMetrics.top + inputMetrics.bottom, 0, 'native editor input has no vertical padding competing with its internal text layer')
+      assert.ok(inputMetrics.line >= inputMetrics.font * 1.2 && inputMetrics.height - inputMetrics.border >= inputMetrics.line, `editor text line must fit inside explicit input height ${width}/${scale}: ${JSON.stringify(inputMetrics)}`)
+      const disabledContrast = await page.locator('.calculate-button').evaluate(element => {
+        const style = getComputedStyle(element)
+        const luminance = color => color.match(/[\d.]+/g).slice(0, 3).map(Number).map(x => x / 255).map(x => x <= .04045 ? x / 12.92 : ((x + .055) / 1.055) ** 2.4).reduce((sum, x, i) => sum + x * [.2126, .7152, .0722][i], 0)
+        const fg = luminance(style.color), bg = luminance(style.backgroundColor)
+        return { ratio: (Math.max(fg, bg) + .05) / (Math.min(fg, bg) + .05), opacity: style.opacity }
+      })
+      assert.ok(disabledContrast.ratio >= 4.5 && disabledContrast.opacity === '1', 'disabled find button stays readable without a faded opacity layer')
+      assert.match(await page.locator('.point-card').innerText(), /至少.*(?:2|两).*出发点/, 'room query explains the required two valid departure points')
       await checkBounds(page, width, `editor ${width}/${scale}`)
       cases += 4
       const otherPages = [

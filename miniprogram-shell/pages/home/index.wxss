@@ -14,7 +14,7 @@
 .invite-notice { margin:-1px 0 9px; padding:8px 9px; border-radius:8px; background:#E7F1EC; color:#174E42; }
 .invite-notice-title { font-size:12px; font-weight:700; line-height:1.35; }
 .invite-notice-copy { margin-top:2px; font-size:10.5px; line-height:1.45; letter-spacing:0.25px; }
-.join-input, .profile-input { box-sizing:border-box; width:100%; height:40px; padding:0 11px; border:1.5px solid #DED8C6; border-radius:10px; background:#F6F3EA; color:#1B2A2E; font-size:13px; }
+.join-input, .profile-input { box-sizing:border-box; width:100%; height:40px; padding:0 11px; border:1.5px solid #DED8C6; border-radius:10px; background:#F6F3EA; color:#1B2A2E; font-size:13px; line-height:36px; }
 .input-placeholder { color:#74807F; }
 .join-code-row { display:flex; align-items:center; gap:7px; margin-top:8px; }
 .code-input { flex:1; min-width:0; letter-spacing:1.5px; font-family:"IBM Plex Sans SC",sans-serif; text-transform:uppercase; }
@@ -63,6 +63,7 @@
 .profile-overlay { justify-content:center; }
 .profile-sheet { max-width:480px; }
 .join-profile-name{display:flex;align-items:center;justify-content:space-between;color:#1B2A2E}.join-profile-name text{color:#74807F;font-size:10px}
+.join-profile-name{min-height:44px;box-sizing:border-box;line-height:1.35}.join-profile-name.join-identity-guest{justify-content:flex-start;color:#0F3D36;font-weight:600}.join-profile-name .join-identity-status{color:#0F3D36;font-size:13px;font-weight:600}
 /* Reduced vertical whitespace while preserving tap targets and intrinsic heights. */
 .brand-row{margin-bottom:8px}.service-links{margin-bottom:10px}.join-card{padding:12px;margin-bottom:14px}.join-heading{margin-bottom:8px}.tool-list{gap:8px}.tool-card{min-height:76px;padding:11px;gap:11px}.tool-icon{width:36px;height:36px}.tool-title{font-size:13px}.tool-desc{font-size:11px;line-height:1.45}.profile-overlay .profile-sheet{padding-top:8px}.profile-sheet .sheet-header{margin-bottom:8px}
 .service-links{flex-wrap:wrap;gap:0 8px}.service-links button{width:auto;flex:0 0 auto;min-height:44px;display:flex;align-items:center;justify-content:center;white-space:normal}

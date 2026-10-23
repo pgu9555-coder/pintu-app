@@ -11,7 +11,7 @@
 .avatar-unavailable{margin-top:12px;text-align:center;color:#75807C;font-size:12px}
 .name-field{margin-top:30px}
 .field-label{margin-bottom:9px;color:#4C5C5B;font-size:14px}
-.nickname-input{height:48px;box-sizing:border-box;padding:0 14px;border:1px solid #DCD5C1;border-radius:10px;background:#FFFDF6;color:#0F3D36;font-size:16px}
+.nickname-input{height:48px;box-sizing:border-box;padding:0 14px;border:1px solid #DCD5C1;border-radius:10px;background:#FFFDF6;color:#0F3D36;font-size:16px;line-height:44px}
 .field-hint{margin-top:8px;color:#75807C;font-size:12px;line-height:1.5}
 .profile-error{margin-top:12px;color:#A04435;font-size:13px;line-height:1.5}
 .primary{height:49px;margin-top:34px;padding:0 12px;border-radius:10px;background:#0F3D36;color:#FFFDF6;font-size:16px;font-weight:600;line-height:49px}

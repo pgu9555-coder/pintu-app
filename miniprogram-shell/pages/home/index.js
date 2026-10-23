@@ -83,6 +83,7 @@ Page({
     busy: false,
     joinError: '',
     profileLoaded: false,
+    accountSignedIn: false,
     profileError: '',
     profileBusy: false,
     profileExists: false,
@@ -110,7 +111,9 @@ Page({
     this.setData({
       code: incomingInvite.code || cleanCode(options && options.code),
       inviteType: incomingInvite.type,
-      inviteLabel: incomingInvite.valid ? invite.INVITE_TYPES[incomingInvite.type].label : ''
+      inviteLabel: incomingInvite.valid ? invite.INVITE_TYPES[incomingInvite.type].label : '',
+      name: '',
+      accountSignedIn: false
     })
     // Mini-program storage is shared by every WeChat account that uses this
     // app on the same device. Clear the old room-name default before resolving
@@ -122,6 +125,35 @@ Page({
     storage.saveName('')
     this.setData({
       canChooseAvatar: Boolean(wx.canIUse && wx.canIUse('button.open-type.chooseAvatar'))
+    })
+  },
+
+  onShow() {
+    this.refreshJoinIdentity()
+  },
+
+  refreshJoinIdentity() {
+    const app = getApp()
+    const profile = app && app.globalData && app.globalData.accountProfile
+    const profileScope = profile && storage.scopeFromProfile(profile)
+    const signedIn = Boolean(app && typeof app.hasAccountConsent === 'function' &&
+      app.hasAccountConsent() && storage.isAccountScoped() && profileScope && profileScope === storage.localScopeToken())
+    if (!signedIn) {
+      this.profileScope = ''
+      this.setData({ accountSignedIn: false, name: '', profileNickname: '', profileAvatarFileId: '', profileAvatarPreview: '', profileLoaded: false })
+      return
+    }
+    const profileName = String(profile.nickname || '').trim()
+    this.profileScope = storage.localScopeToken()
+    this.setData({
+      accountSignedIn: true,
+      profileLoaded: true,
+      profileError: '',
+      profileExists: Boolean(profile.exists),
+      profileNickname: profileName,
+      profileAvatarFileId: String(profile.avatarFileId || ''),
+      profileAvatarPreview: String(profile.avatarFileId || ''),
+      name: profileName
     })
   },
 
@@ -338,6 +370,7 @@ Page({
       this.setData({
         profileBusy: false,
         profileLoaded: true,
+        accountSignedIn: Boolean(app.hasAccountConsent && app.hasAccountConsent() && storage.isAccountScoped()),
         profileError: '',
         profileExists: Boolean(profile.exists),
         profileNickname: nickname,
@@ -354,6 +387,7 @@ Page({
       storage.clearAccountScope()
       this.setData({
         profileLoaded: true,
+        accountSignedIn: false,
         profileError: error && error.message ? error.message : '微信账号暂时无法识别'
       })
       wx.showToast({ title: '微信账号暂时无法识别', icon: 'none' })
@@ -380,6 +414,11 @@ Page({
       return false
     }
     return true
+  },
+
+  openJoinIdentity() {
+    if (this.data.accountSignedIn) return
+    this.requestWechatLogin(null, '加入房间')
   },
 
   async retryProfile() {
