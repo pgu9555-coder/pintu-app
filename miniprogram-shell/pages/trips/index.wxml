@@ -10,7 +10,7 @@
   <view wx:if="{{loginRequired && localTrips.length}}" class="trips-guest-note">登录后查看账号行程；原有本机账本可通过首页“备份与迁移”保留和导入。<button class="trips-backup-link" bindtap="backupGuestTrips">先备份访客账本</button></view>
   <button class="btn secondary" style="margin:0 0 9px;" bindtap="newLocal">＋ 新建行程账本</button>
   <view wx:if="{{!localTrips.length}}" class="state-card empty-state">
-    <view class="empty-icon">⌁</view><view class="empty-title">还没有本地行程</view><view class="muted">新建一趟行程后，成员和支出保存在这台设备，可从首页导出备份。</view>
+    <view class="empty-icon"><image src="/assets/icons/trip-notebook.svg" mode="aspectFit" /></view><view class="empty-title">还没有本地行程</view><view class="muted">新建一趟行程后，成员和支出保存在这台设备，可从首页导出备份。</view>
   </view>
   <view
     wx:for="{{localTrips}}"
@@ -31,7 +31,7 @@
 
   <view class="section-label trips-label">进行中的房间</view>
   <view wx:if="{{loginRequired}}" class="state-card empty-state">
-    <view class="empty-icon">微</view>
+    <view class="empty-icon"><image src="/assets/icons/cloud-members.svg" mode="aspectFit" /></view>
     <view class="empty-title">登录后同步云端房间</view>
     <view class="muted">登录后可打开账号下的行程账本，并按微信身份找回有权限的云端房间。访客账本需先备份，再登录后导入。</view>
   </view>
@@ -41,7 +41,7 @@
   <view wx:if="{{loading}}" class="state-card"><view class="state-spinner"></view><text>正在同步你的云端房间…</text></view>
   <view wx:if="{{cloudError}}" class="state-card error-state">{{cloudError}}；为保护账号隐私，未显示云端房间的本机缓存。</view>
   <view wx:if="{{!loading && !rooms.length && !cloudError}}" class="state-card empty-state">
-    <view class="empty-icon">⌁</view><view class="empty-title">还没有进行中的房间</view><view class="muted">从首页创建房间，或输入房间码加入。</view>
+    <view class="empty-icon"><image src="/assets/icons/cloud-members.svg" mode="aspectFit" /></view><view class="empty-title">还没有进行中的房间</view><view class="muted">从首页创建房间，或输入房间码加入。</view>
   </view>
 
   <view

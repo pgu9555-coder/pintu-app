@@ -3,3 +3,4 @@
 .trips-edit-profile{margin-left:auto;color:#0F3D36;font-size:11px}.trips-logout{height:34px;margin:0 0 18px;border:1px solid #C9C1AF;border-radius:9px;background:transparent;color:#4C5C5B;font-size:12px;line-height:32px}
 .trips-page{padding-top:10px}.trips-header{margin-bottom:9px}.trips-account-card{margin-bottom:12px}.trip-row{min-height:50px;padding:8px}.trips-logout{margin-bottom:10px}
 .trips-page button.trips-logout{display:flex;align-items:center;justify-content:center;width:100%;}
+.trips-page .empty-icon{display:flex;align-items:center;justify-content:center;width:54px;height:54px;margin:0 auto 9px;border-radius:50%;background:#EDF2E9;color:#0F3D36}.trips-page .empty-icon image{display:block;width:36px;height:36px}
