@@ -1,0 +1,21 @@
+name: 功能建议
+description: 提出希望拼途改进的使用体验
+title: "[建议] "
+body:
+  - type: textarea
+    id: scenario
+    attributes:
+      label: 在什么场景遇到了问题？
+      description: 描述实际使用需求，无需提供真实位置或账目。
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 希望怎样改进？
+    validations:
+      required: true
+  - type: textarea
+    id: alternative
+    attributes:
+      label: 目前如何解决？（可选）

@@ -1,121 +1,107 @@
-# Pintu
+<img src="assets/pintu-miniapp-avatar-v1.png" alt="拼途" width="88">
 
-**A cross-platform collaboration tool for planning meetups, choosing destinations, and settling shared expenses.**
+# 拼途 · Pintu
 
-[Live Web Demo](https://pintu-app-nu.vercel.app/) · [WeChat Mini Program Guide](miniprogram-shell/README.md)
+和朋友约个地方、做个决定、把账算清楚。
 
-Pintu helps groups move from discussion to a shared decision. Friends can estimate a reference midpoint, propose and vote on destinations, make a random choice when preferences are unclear, and manage a shared ledger. The repository contains both a browser-based application and a native WeChat Mini Program backed by protected CloudBase services.
+拼途是一个面向小型聚会的协作工具：寻找参考中点、推荐附近去处、投票选地点，用转盘解决选择困难，再用共享账本整理同行花费。仓库包含网页、原生微信小程序和 CloudBase 云函数。
 
-## Product highlights
+[在线体验](https://pintu-app-nu.vercel.app/) · [部署与上线状态](LAUNCH.md) · [小程序开发指南](miniprogram-shell/README.md) · [更新公告与发布包](https://github.com/pgu9555-coder/pintu-app/releases) · [文档导航](docs/README.md)
 
-- **Cross-platform rooms:** Join the same protected room from the web application or WeChat Mini Program with an eight-character invitation code.
-- **Collaborative meetup planning:** Share starting locations, calculate a reference midpoint, add candidate destinations, vote, and let the room owner confirm the final choice.
-- **Shared expense tracking:** Add, edit, and delete expenses; select payers and participants; review balances; and generate settlement recommendations using exact-cent arithmetic.
-- **User-controlled identity:** WeChat users may add, replace, or remove a profile image and nickname, while cloud identity is derived from a trusted OpenID rather than client-supplied identifiers.
-- **Resilient room history:** Authorized WeChat users can recover their rooms across devices through stable cursor-based pagination.
-- **Secondary decision tools:** Use a local random spinner or destination picker without uploading their contents to a shared room.
+## 现在可以体验什么
 
-## Platform capabilities
+| 入口 | 当前用途与状态 |
+| --- | --- |
+| [Vercel 网页](https://pintu-app-nu.vercel.app/) | 本机工具与地图入口；多人协作会引导打开腾讯云测试站。中国大陆访问质量仍需实际网络验证。 |
+| [CloudBase 协作测试站](https://pintu-prod-d1grnmzg0f6778ea6-1303073868.tcloudbaseapp.com/) | 网页创建房间、加入房间和多人同步的测试入口。腾讯云默认域名用于开发测试。 |
+| 原生微信小程序 | 本轮界面与功能源码已对齐；待微信官方编译、真机预览、备案与权限核验、上传提审和正式发布。 |
 
-| Capability | Web | WeChat Mini Program | Cross-device synchronization |
-|---|:---:|:---:|:---:|
-| Reference midpoint and destination planning | Yes | Yes | Shared rooms |
-| Candidate proposals, voting, and owner confirmation | Yes | Yes | Shared rooms |
-| Multi-origin local planning and destination picker | Yes | Yes | Local only |
-| Animated random spinner | Yes | Yes | Local only |
-| Shared ledger and settlement recommendations | Yes | Yes | Shared rooms |
-| Expense creation, editing, and deletion | Yes | Yes | Shared rooms |
-| Membership, departure, and room dissolution | Yes | Yes | Shared rooms |
-| Unified room-code entry | Yes | Yes | — |
-| Native WeChat invitation cards | — | Yes | Invitation metadata only |
-| WeChat profile and room history | — | Yes | Same WeChat identity |
+以上是 2026-10-22 整理的项目状态。代码完成、后端部署和微信正式发布是不同阶段；最新部署结果请查看 [GitHub Actions](https://github.com/pgu9555-coder/pintu-app/actions)。
 
-The midpoint is a coordinate-based estimate, not a guarantee of equal travel time. Groups should evaluate roads, transit access, and accessibility before confirming a destination.
+## 功能
 
-## Architecture
+- **寻找中点**：本机填写多个出发地，或在多人房间各自填写；根据坐标计算参考中点，浏览附近咖啡、餐厅和商圈。
+- **一起选地方**：提议地点、投票、由房主确认目的地；也可以通过目的地盲盒逐个查看、跳过和收藏。
+- **谁买单 · 转盘**：本机随机选择，完成动画后显示结果；名单和结果不上传共享房间，也不跨会话保存。
+- **行程账本**：管理同行成员，新增、修改和删除支出，选择付款人与分摊人，查看余额及转账建议。金额按整数分计算；不能整除时余下的分按该笔分摊人顺序分配。
+- **房间管理**：通过 8 位邀请码进入碰面或账本房间；支持退出、房主转让和解散。网页与原生客户端使用同一套受保护的房间协议。
+- **备份与迁移**：网页与小程序使用兼容的 JSON 账本格式。导入创建独立本机账本，不覆盖原账本，也不恢复云端身份、房主权限或房间访问权。
 
-```text
-Web application ───────────────┐
-                              ├── roomGateway ── protected CloudBase data
-Native WeChat Mini Program ───┘        │
-                                      ├── authorization and membership epochs
-                                      ├── room, voting, and ledger operations
-                                      └── content-safety review
+> 中点是坐标估算，不能保证每个人路程或耗时相同。确认地点前，请结合公共交通、实际道路和个人需求判断。
 
-WeChat Mini Program ── mapGateway ── AMap Web Service
-```
+### 网页与小程序的对应关系
 
-- `index.html` contains the deployed, dependency-free web application.
-- `miniprogram-shell/` contains the native WeChat Mini Program; it does not rely on `web-view` or a third-party runtime.
-- `cloudfunctions/roomGateway/` centralizes authorization, membership, content-safety checks, and synchronized room operations.
-- `cloudfunctions/mapGateway/` proxies address suggestions and nearby-place searches so the AMap Web Service key remains server-side.
+| 能力 | 网页 | 原生小程序源码 | 数据范围 |
+| --- | --- | --- | --- |
+| 中点、附近地点、盲盒 | 支持 | 支持 | 本机草稿 / 已加入的共享房间 |
+| 地点投票、房主确认 | 支持 | 支持 | 共享房间 |
+| 账本、支出编辑、结算 | 支持 | 支持 | 本机 / 共享房间 |
+| 房主转让、成员退出、解散 | 支持 | 支持 | 共享房间 |
+| JSON 账本备份 | 支持 | 支持 | 当前设备已保存或下载的数据 |
+| 转盘 | 支持 | 支持 | 当前会话 |
+| 微信资料、邀请卡片、云端房间历史 | — | 支持 | 经授权的微信身份 |
 
-## Security and privacy design
+English summary: Join the same protected room from the web application or WeChat Mini Program with an eight-character invitation code. This describes the client protocol; the Mini Program has not been released on WeChat.
 
-- Clients cannot directly read or write the `rooms` collection; shared operations pass through `roomGateway`.
-- Current online rooms use `schemaVersion: 5` and remain available until the owner explicitly dissolves them.
-- Room codes function as invitation credentials and should be shared only with intended participants.
-- Every rejoin creates a new `membershipEpoch`, preventing departed members and stale devices from continuing to modify protected room data.
-- User-generated text displayed in the Mini Program passes through WeChat content-safety review. Web-created room content is reviewed before it is exposed to WeChat users.
-- WeChat identity is derived from a trusted OpenID. Profile documents use non-readable identifiers, and clients cannot impersonate another member by submitting a nickname.
-- Profile images remain in private CloudBase storage. Replacement and deletion use account-scoped paths plus retryable cleanup records; the storage bucket is never made publicly readable.
-- Browser room history is stored locally. Mini Program room history is retrieved only for the authenticated WeChat identity and is not replaced with device cache after a network failure.
+## 开发入口
 
-Legacy rooms retain their original platform rules and are upgraded only through a valid member flow; client parameters cannot force an untrusted room into the shared protocol.
-
-## Testing
-
-Run the repository checks with Node.js from the project root:
+网页使用原生 HTML、CSS 和 JavaScript，没有根目录前端依赖安装步骤；地图、云端身份及协作仍依赖对应平台服务。部署工作流使用 Node.js 20。
 
 ```bash
-node scripts/test-room-gateway.cjs
-node scripts/test-migrate-room-members.cjs
-node scripts/test-index-html.cjs
-node scripts/test-security-config.cjs
-node scripts/test-miniprogram-native.cjs
-node scripts/test-map-gateway.cjs
+git clone https://github.com/pgu9555-coder/pintu-app.git
+cd pintu-app
+node scripts/prepare-release.cjs
 ```
 
-The checks cover gateway authorization and validation, membership migration, security configuration, web-app invariants, native Mini Program structure, and map-gateway behavior.
+该命令生成 `cloudbase-site/` 网页产物，同时更新公开配置 `app-config.js`、`cloudbaserc.json` 和 `miniprogram-shell/environment.js`。自建环境前请先阅读 [LAUNCH.md](LAUNCH.md)，避免误用现有环境。
 
-To inspect the Mini Program locally, import `miniprogram-shell/` into WeChat Developer Tools. Deployment configuration is documented in the [Mini Program guide](miniprogram-shell/README.md).
+- **网页预览**：用静态 HTTP 服务打开 `cloudbase-site/` 可查看页面和本机逻辑。静态服务不提供 `api/amap.js`，`localhost` 也未默认加入地图与云端允许域名；完整联调需要配置自己的测试环境。
+- **小程序**：将 `miniprogram-shell/` 导入官方微信开发者工具。复用本项目账号需要管理员授权；Fork 项目请使用自己的 AppID、CloudBase 环境和平台配置。参见 [小程序指南](miniprogram-shell/README.md)。
+- **检查**：现有检查脚本位于 `scripts/test-*.cjs`，工作流包含 15 组源码、行为和运行时依赖检查。执行方式及验收边界见 [发布清单](LAUNCH.md#部署与验收)。离线检查不代替云端联调或微信真机验收。
 
-## Deployment
-
-Pushes to `main` trigger GitHub Actions to:
-
-1. Install and validate the CloudBase CLI.
-2. Run the static and gateway test suites.
-3. Prepare required collections and indexes, apply database security rules, and deploy `roomGateway`.
-4. Preserve private avatar storage and account-scoped profile access.
-5. Deploy the web application to CloudBase static hosting.
-
-Address search requires an `AMAP_WEB_SERVICE_KEY` repository secret created for AMap Web Services. The workflow injects the key only into the temporary cloud-function deployment configuration; it is not committed to Git or shipped to either client. Without the secret, the workflow skips `mapGateway` while continuing to test and deploy the remaining application.
-
-Mini Program releases are uploaded separately through WeChat Developer Tools or the WeChat CLI and must complete the WeChat review and publication process.
-
-## Repository structure
+## 结构
 
 ```text
 .
-├── index.html
-├── miniprogram-shell/
+├── index.html / midpoint.css / midpoint-ui.js  网页界面与中点交互
+├── launch-support.js / app-config.js          备份、上线辅助与公开配置
+├── api/amap.js                               Vercel 地图代理
+├── miniprogram-shell/                        原生微信小程序（非 web-view）
 ├── cloudfunctions/
-│   ├── roomGateway/
-│   └── mapGateway/
-├── cloudbase-security-rules.json
-├── cloudbase-function-security-rules.json
-├── scripts/
-└── .github/workflows/deploy-cloudbase.yml
+│   ├── roomGateway/                          身份、房间、投票与账本
+│   ├── mapGateway/                           小程序地图搜索与地点详情
+│   └── quotaCleanup/                         过期限流记录清理
+├── cloudbase-security-rules.json              数据库访问规则
+├── cloudbase-function-security-rules.json     云函数调用规则
+├── scripts/                                  部署、检查与微信手动上传工具
+├── .github/workflows/deploy-cloudbase.yml     CloudBase 部署流程
+└── docs/README.md                            文档导航
 ```
 
-## Known limitations
+## 数据与权限
 
-- Midpoint calculations use coordinates rather than real-time travel duration.
-- A room code is a shared invitation credential; Pintu does not provide a public-room discovery system.
-- Mini Program publication, content-safety availability, map-provider quotas, and CloudBase deployment depend on their respective external platforms.
-- The live web demo and released Mini Program may not always represent the same deployment revision.
+共享数据由 `roomGateway` 校验身份和成员权限，客户端不能直接读写 `rooms`、`user_profiles` 等受保护集合。当前房间协议使用 `schemaVersion: 5`；每次重新加入生成新的 `membershipEpoch`，旧设备和已退出成员不能继续用旧授权修改房间。房间持续保留至房主解散。
 
-## License
+房间码具有邀请凭据作用，请仅分享给准备加入的人。微信身份来自可信调用上下文的 OpenID；头像使用私有存储、账户路径和可重试清理流程。面向小程序展示的用户文本经过微信内容安全流程。地图安全码和 Web 服务 Key 保留在服务端，不应写入公开配置、客户端或备份。
 
-[MIT](LICENSE)
+本机数据依赖当前浏览器或微信设备的存储。小程序游客草稿与登录账户空间分开，登录不会自动合并游客草稿。更换浏览器、清理缓存、切换域名或换设备前，请主动导出账本。小程序备份只包含本机账本及已下载的共享快照，不会自动下载所有云端账本。
+
+- [网页隐私说明](https://pintu-app-nu.vercel.app/privacy.html)
+- [网页用户协议](https://pintu-app-nu.vercel.app/terms.html)
+- [安全问题报告方式](SECURITY.md)
+
+## 部署与后续上线
+
+Vercel 部署网页和地图代理；CloudBase 工作流在应用相关文件更新到 `main` 或手动触发时，运行检查、应用访问规则并部署云函数和测试网页。地图云函数还需要独立的 AMap Web 服务 Key。所需变量、密钥名称、配额和域名迁移步骤见 [LAUNCH.md](LAUNCH.md)。
+
+微信预览与上传通过 [手动发布工具](scripts/wechat-release/README.md) 或官方开发者工具单独进行。仓库推送不会自动提交微信审核或公开发布。备案、隐私声明、位置接口权限以及真机验收仍需在原账号继续完成。
+
+## 反馈与贡献
+
+使用问题、改进建议或可复现的缺陷，请通过 [Issues](https://github.com/pgu9555-coder/pintu-app/issues) 提交，并注明使用的是 Vercel 网页、CloudBase 测试站还是小程序开发版。截图请遮住房间码、个人信息及账本内容。
+
+贡献流程见 [CONTRIBUTING.md](CONTRIBUTING.md)。私密问题可联系 [pgu9555@gmail.com](mailto:pgu9555@gmail.com)，请勿提交密码、验证码、密钥或真实用户数据。
+
+## 许可证
+
+本仓库代码沿用现有 [MIT License](LICENSE)。地图、云服务和微信平台的使用仍需遵守相应服务条款。

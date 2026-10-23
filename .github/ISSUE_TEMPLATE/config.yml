@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 使用与部署说明
+    url: https://github.com/pgu9555-coder/pintu-app/blob/main/README.md
+    about: 查看功能、体验入口与文档导航
+  - name: 安全或隐私问题
+    url: https://github.com/pgu9555-coder/pintu-app/blob/main/SECURITY.md
+    about: 按说明私下反馈越权、泄露或凭据问题

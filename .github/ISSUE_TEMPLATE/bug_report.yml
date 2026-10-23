@@ -1,0 +1,51 @@
+name: 问题反馈
+description: 描述拼途功能或界面出现的问题
+title: "[问题] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        请使用虚构数据复现。截图请遮盖房间码、精确地址、真实账目和账号资料。
+        越权、泄露或凭据问题请按 SECURITY.md 私下反馈。
+  - type: dropdown
+    id: platform
+    attributes:
+      label: 使用的平台
+      options:
+        - 网页工具站（Vercel）
+        - 多人协作测试网页（CloudBase）
+        - 微信开发者工具或小程序预览
+        - 本地开发环境
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: 设备与版本
+      placeholder: 例如 iPhone / iOS / 微信版本，或 Windows / Chrome 版本
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 从打开哪个功能开始，按顺序描述操作。
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 预期结果
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际结果与截图
+      description: 可附已打码的截图或错误文字，请勿粘贴密钥或真实房间邀请信息。
+    validations:
+      required: true
+  - type: input
+    id: revision
+    attributes:
+      label: 部署版本或 Git 提交（如已知）
