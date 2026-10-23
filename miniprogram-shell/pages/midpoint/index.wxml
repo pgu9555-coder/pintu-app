@@ -133,8 +133,29 @@
           <view wx:if="{{pointSyncPending || pointSyncText}}" class="point-sync-state {{pointSyncPending ? 'pending' : ''}}">{{pointSyncText}}</view>
           <button wx:if="{{mineHasSavedLocation}}" class="text-action clear-location" bindtap="clearMeetupLocation" disabled="{{busy}}">清除已保存的出发点</button>
         </view>
-        <button class="btn calculate-button" bindtap="showRoomResults" disabled="{{!center || busy}}">寻找碰面点</button>
-        <view wx:if="{{!center}}" class="local-valid-points-note">至少两位成员分别保存有效出发点后即可查询。</view>
+        <view class="room-manual-points">
+          <view class="section-title">补充同行者出发点 <text class="local-only-tag">手动添加 · 仅本机</text></view>
+          <view wx:for="{{roomManualPoints}}" wx:key="id" class="point-row local-person-row">
+            <view class="point-copy" bindtap="editRoomManualPoint" data-id="{{item.id}}"><view class="point-name">{{item.name || '同行者'}} <text class="local-only-tag">仅本机</text></view><view class="point-address">{{item.address || '尚未选择有效地点'}}</view></view>
+            <button class="point-edit-link" bindtap="editRoomManualPoint" data-id="{{item.id}}">编辑</button>
+            <button class="text-action clear-location" bindtap="removeRoomManualPoint" data-id="{{item.id}}">删除</button>
+          </view>
+          <view wx:if="{{roomManualEditorId}}" class="mine-editor local-point-editor">
+            <view class="local-editor-heading"><view class="editor-label">手动出发点 · 仅本机</view><button class="text-action" bindtap="closeRoomManualEditor">收起</button></view>
+            <input class="input" value="{{roomManualName}}" placeholder="同行者称呼" placeholder-class="native-input-placeholder" maxlength="48" bindinput="roomManualNameInput" />
+            <view class="local-search-row"><input class="input" value="{{localAddressQuery}}" placeholder="输入城市、地点名称或地址" placeholder-class="native-input-placeholder" maxlength="80" confirm-type="search" bindinput="roomManualAddressInput" bindconfirm="searchRoomManualAddress" /><button class="room-small-button" bindtap="searchRoomManualAddress" loading="{{localAddressSearchLoading}}" disabled="{{localAddressSearchLoading}}">搜索</button></view>
+            <view class="local-search-note">选择搜索到的地点会保存真实坐标；也可以从微信地图选点。</view>
+            <view wx:if="{{localAddressSearchLoading}}" class="suggestion-status">正在搜索地点…</view>
+            <view wx:if="{{localAddressMessage}}" class="local-search-message {{localAddressError ? 'search-error' : ''}}">{{localAddressMessage}}</view>
+            <scroll-view wx:if="{{localAddressSuggestions.length}}" class="address-suggestions" scroll-y="true"><view wx:for="{{localAddressSuggestions}}" wx:key="index" class="suggestion-item" data-index="{{index}}" bindtap="selectRoomManualAddress"><view class="suggestion-name">{{item.name}}</view><view class="suggestion-address">{{item.address}}</view></view></scroll-view>
+            <button class="text-action local-map-choice" bindtap="chooseRoomManualPoint">微信地图选点</button>
+          </view>
+          <button wx:if="{{!roomManualEditorId}}" class="dashed-button" bindtap="addRoomManualPoint" disabled="{{busy}}">＋ 手动添加出发点 · 仅本机</button>
+          <view wx:if="{{roomManualPoints.length}}" class="local-search-note local-valid-points-note">仅本机参考；不会加入成员或共同投票。有效地点 {{roomActualValidPointCount}} + {{roomManualValidPointCount}} 个。</view>
+        </view>
+        <button wx:if="{{roomManualPoints.length}}" class="btn calculate-button local-reference-button" bindtap="calculateRoomManualMidpoint" disabled="{{roomActualValidPointCount + roomManualValidPointCount < 2 || busy}}">计算本机参考中点</button>
+        <button wx:else class="btn calculate-button" bindtap="showRoomResults" disabled="{{!center || busy}}">寻找碰面点</button>
+        <view wx:if="{{!center && !roomManualPoints.length}}" class="local-valid-points-note">至少两位成员分别保存有效出发点后即可查询。</view>
       </block>
 
       <block wx:else>
@@ -167,6 +188,7 @@
     </block>
     <block wx:if="{{resultMode && center}}">
       <view class="result-toolbar"><button class="adjust-button" bindtap="adjustPlaces">调整地点</button></view>
+      <view wx:if="{{roomManualReference}}" class="local-reference-notice">本机参考 · 包含手动添加地点，不会同步给房间成员，也不参与共同投票。<button class="text-action" bindtap="showRoomResults" disabled="{{roomActualValidPointCount < 2 || busy}}">查看房间共同中点</button></view>
       <view wx:if="{{room}}" class="result-room-strip">
         <view><view class="muted">多人协作 · {{syncText}}</view><view class="result-room-code">{{room.code}}</view></view>
         <view class="result-room-actions"><button class="text-action" bindtap="copyCode">复制</button><button class="text-action" open-type="share">邀请</button><button wx:if="{{isOwner}}" class="text-action" bindtap="transferOwner">房主管理</button><button class="text-action" bindtap="exitRoom">{{isOwner ? '解散' : '退出'}}</button></view>
@@ -203,12 +225,12 @@
               <block wx:if="{{cat.expanded}}"><view wx:for="{{cat.pois}}" wx:for-item="place" wx:key="id" class="category-place" bindtap="openCandidate" data-name="{{place.name}}" data-address="{{place.address}}" data-lat="{{place.lat}}" data-lng="{{place.lng}}"><view>{{place.name}}</view><view class="muted">{{place.address || place.typeStr}} · {{place.dist}} 米 ›</view></view><view wx:if="{{!cat.pois.length}}" class="muted">暂无同类地点</view><view wx:if="{{cat.error}}" class="query-error">{{cat.error}}</view><button wx:if="{{cat.pois.length < cat.total && cat.page < 4}}" class="text-action" bindtap="moreCategory" data-id="{{item.id}}" data-key="{{cat.key}}" disabled="{{cat.loading}}">{{cat.loading ? '加载中…' : cat.error ? '重试加载' : '加载更多'}}</button><view wx:if="{{cat.capped}}" class="muted">最多展示前 200 个地点</view></block>
             </view>
             <view class="candidate-actions"><button class="text-action" data-name="{{item.name}}" bindtap="copyCandidateName">复制名称</button><button class="text-action" data-address="{{item.address || item.details.info.address}}" data-type="{{item.typeStr}}" bindtap="copyCandidateAddress">复制地址</button><button class="text-action" data-name="{{item.name}}" data-address="{{item.address || item.details.info.address}}" data-lat="{{item.lat}}" data-lng="{{item.lng}}" bindtap="openCandidate">地图导航 ›</button></view>
-            <block wx:if="{{room}}"><view class="vote-summary">想去 {{item.wantVotes}} · 可以 {{item.okVotes}} · 不去 {{item.noVotes}}</view><view wx:if="{{!decisionConfirmed}}" class="vote-row"><button class="vote-option {{item.wantSelected ? 'selected' : ''}}" bindtap="voteDecision" data-candidate-id="{{item.id}}" data-value="want" disabled="{{busy}}">想去</button><button class="vote-option {{item.okSelected ? 'selected' : ''}}" bindtap="voteDecision" data-candidate-id="{{item.id}}" data-value="ok" disabled="{{busy}}">可以</button><button class="vote-option {{item.noSelected ? 'selected' : ''}}" bindtap="voteDecision" data-candidate-id="{{item.id}}" data-value="no" disabled="{{busy}}">不去</button><button wx:if="{{isOwner}}" class="text-action" bindtap="confirmDecision" data-candidate-id="{{item.id}}" disabled="{{busy}}">确定这里</button></view></block>
+            <block wx:if="{{room && !roomManualReference}}"><view class="vote-summary">想去 {{item.wantVotes}} · 可以 {{item.okVotes}} · 不去 {{item.noVotes}}</view><view wx:if="{{!decisionConfirmed}}" class="vote-row"><button class="vote-option {{item.wantSelected ? 'selected' : ''}}" bindtap="voteDecision" data-candidate-id="{{item.id}}" data-value="want" disabled="{{busy}}">想去</button><button class="vote-option {{item.okSelected ? 'selected' : ''}}" bindtap="voteDecision" data-candidate-id="{{item.id}}" data-value="ok" disabled="{{busy}}">可以</button><button class="vote-option {{item.noSelected ? 'selected' : ''}}" bindtap="voteDecision" data-candidate-id="{{item.id}}" data-value="no" disabled="{{busy}}">不去</button><button wx:if="{{isOwner}}" class="text-action" bindtap="confirmDecision" data-candidate-id="{{item.id}}" disabled="{{busy}}">确定这里</button></view></block>
             <button wx:else class="text-action clear-location" data-id="{{item.id}}" bindtap="removeLocalCandidate">移除这个候选</button>
           </view>
         </block>
         <view wx:if="{{resultCount}}" class="blind-entry" bindtap="startSwipe"><view class="blind-icon">◇</view><view class="blind-copy"><view class="blind-title">让盲盒替你选</view></view><view class="row-arrow">›</view></view>
-        <view class="manual-actions"><button wx:if="{{room && !decisionConfirmed}}" class="text-action" bindtap="addDecisionCandidate">＋ 从微信地图添加</button><button wx:if="{{!room}}" class="text-action" bindtap="addLocalCandidate">＋ 从微信地图添加</button><button wx:if="{{room && isOwner && decisionConfirmed}}" class="text-action" bindtap="reopenDecision">重新选择共同去处</button><button class="text-action" bindtap="openCenter">打开参考中点</button></view>
+        <view class="manual-actions"><button wx:if="{{room && !roomManualReference && !decisionConfirmed}}" class="text-action" bindtap="addDecisionCandidate">＋ 从微信地图添加</button><button wx:if="{{!room || roomManualReference}}" class="text-action" bindtap="addLocalCandidate">＋ 从微信地图添加（仅本机）</button><button wx:if="{{room && !roomManualReference && isOwner && decisionConfirmed}}" class="text-action" bindtap="reopenDecision">重新选择共同去处</button><button class="text-action" bindtap="openCenter">打开参考中点</button></view>
       </view>
     </block>
   </block>

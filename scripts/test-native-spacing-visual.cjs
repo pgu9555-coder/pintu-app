@@ -5,13 +5,14 @@ const assert = require('node:assert/strict')
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright')
 const { render } = require('./test-native-mobile-layout.cjs')
 const out = path.resolve(process.env.VISUAL_OUTPUT || '../../outputs/native-spacing-audit')
-const base = {headerMetrics:{statusBarPx:24,headerHeightPx:44,capsuleInsetRightPx:97},screen:'main',resultMode:false,name:'小林',accountAvatar:'',busy:false,inviteType:'',onboarding:false,moreOpen:false}
+const base = {roomManualPoints:[],roomManualEditorId:"",roomActualValidPointCount:0,roomManualValidPointCount:0,headerMetrics:{statusBarPx:24,headerHeightPx:44,capsuleInsetRightPx:97},screen:'main',resultMode:false,name:'小林',accountAvatar:'',busy:false,inviteType:'',onboarding:false,moreOpen:false}
 const room = {...base, room:{code:'5LA22PFK'},isOwner:true,people:[{uid:'a',name:'小林',isSelf:true,address:'上海市黄浦区人民广场'}],mineEditorOpen:false,mineHasSavedLocation:true,center:null}
 const longAddress = 'The Grove, 189 The Grove Drive, Los Angeles, California 90036, United States — meet at the main entrance by the fountain'
 const fixtures = [
  ['midpoint-collapsed','midpoint',room],
  ['midpoint-expanded','midpoint',{...room,mineEditorOpen:true,mineAddress:'上海人民广场',amapConfigured:true}],
  ['midpoint-long-address','midpoint',{...room,people:[{...room.people[0],address:longAddress}],mineEditorOpen:true,mineAddress:longAddress,mineLocation:null,amapConfigured:true}],
+ ['midpoint-manual','midpoint',{...room,roomActualValidPointCount:1,roomManualValidPointCount:1,roomManualPoints:[{id:'manual-1',name:'同行的朋友',address:longAddress,lat:22.5,lng:114.1}],roomManualEditorId:'manual-1',roomManualName:'同行的朋友',localAddressQuery:'上海人民广场',localAddressSuggestions:[],localAddressMessage:'搜索并选择地点',amapConfigured:true}],
  ['home-guest','home',{...base,accountSignedIn:false,code:'',profilePanelOpen:false,wechatLoginVisible:false}],
  ['midpoint-empty-address','midpoint',{...room,people:[{...room.people[0],address:''}],mineHasSavedLocation:false}],
  ['midpoint-entry','midpoint',{...base,room:null,code:''}],

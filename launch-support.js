@@ -23,17 +23,17 @@
   window.pintuCheckCloudOrigin = function () {
     var origin = (window.PINTU_CONFIG || {}).collaborationOrigin;
     if (!origin || window.location.origin === origin) return true;
-    window.rmTcbError = Object.assign(new Error('多人协作请使用测试入口；当前页面的本机功能仍可使用。'), { code: 'COLLABORATION_ENTRY_REQUIRED', publicMessage: true });
+    window.rmTcbError = Object.assign(new Error('请使用拼途统一入口；当前旧页面的本机功能仍可使用。'), { code: 'COLLABORATION_ENTRY_REQUIRED', publicMessage: true });
     if (!entryDialog) {
-      var box = entryDialog = dialog('打开多人协作测试版', [
-        '多人协作目前使用独立的测试地址。请在新页面创建或加入房间，测试服务可能受访问限额影响。',
+      var box = entryDialog = dialog('拼途已统一网页入口', [
+        '地图、转盘、账本和房间协作现已集中在统一入口，进入后无需再切换网站。',
         '当前页面的本机账本不会自动搬过去。如需迁移，请先从首页“备份与迁移”导出，再在新页面导入。'
       ]);
       var target = new URL(origin);
       // Preserve room invitation links while leaving local ledger data on-device.
       target.search = window.location.search;
       target.hash = window.location.hash;
-      link(box, '打开协作测试版', target.href);
+      link(box, '打开拼途统一入口', target.href);
       button(box, '留在当前页面', function () { box.close(); });
       box.addEventListener('close', function () { entryDialog = null; });
       box.showModal();

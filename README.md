@@ -6,15 +6,15 @@
 
 拼途是一个面向小型聚会的协作工具：寻找参考中点、推荐附近去处、投票选地点，用转盘解决选择困难，再用共享账本整理同行花费。仓库包含网页、原生微信小程序和 CloudBase 云函数。
 
-[在线体验](https://pintu-app-nu.vercel.app/) · [部署与上线状态](LAUNCH.md) · [小程序开发指南](miniprogram-shell/README.md) · [更新公告与发布包](https://github.com/pgu9555-coder/pintu-app/releases) · [文档导航](docs/README.md)
+[在线体验](https://pintu-prod-d1grnmzg0f6778ea6-1303073868.tcloudbaseapp.com/) · [部署与上线状态](LAUNCH.md) · [小程序开发指南](miniprogram-shell/README.md) · [更新公告与发布包](https://github.com/pgu9555-coder/pintu-app/releases) · [文档导航](docs/README.md)
 
 ## 现在可以体验什么
 
 | 入口 | 当前用途与状态 |
 | --- | --- |
-| [Vercel 网页](https://pintu-app-nu.vercel.app/) | 本机工具与地图入口；多人协作会引导打开腾讯云测试站。中国大陆访问质量仍需实际网络验证。 |
-| [CloudBase 协作测试站](https://pintu-prod-d1grnmzg0f6778ea6-1303073868.tcloudbaseapp.com/) | 网页创建房间、加入房间和多人同步的测试入口。腾讯云默认域名用于开发测试。 |
-| 原生微信小程序 | `1.1.1` 已通过官方编译、生成预览码并上传开发版；手机真机体验、备案与接口核验、提审和正式发布仍待完成。 |
+| [拼途网页](https://pintu-prod-d1grnmzg0f6778ea6-1303073868.tcloudbaseapp.com/) | 统一入口：地图、转盘、账本、房间协作均在同一网页内使用。 |
+| 托管说明 | 当前使用腾讯云默认域名；Vercel 仅保留地图代理等技术服务，不再作为推荐入口。 |
+| 原生微信小程序 | `1.1.11` 已通过官方编译、生成预览码并上传开发版；手机真机体验、备案与接口核验、提审和正式发布仍待完成。 |
 
 以上是 2026-10-23 整理的项目状态。代码完成、后端部署和微信正式发布是不同阶段；最新部署结果请查看 [GitHub Actions](https://github.com/pgu9555-coder/pintu-app/actions)。
 
@@ -28,6 +28,10 @@
 - **备份与迁移**：网页与小程序使用兼容的 JSON 账本格式。导入创建独立本机账本，不覆盖原账本，也不恢复云端身份、房主权限或房间访问权。
 
 > 中点是坐标估算，不能保证每个人路程或耗时相同。确认地点前，请结合公共交通、实际道路和个人需求判断。
+
+### 一个人也能规划碰面
+
+进入碰面房间后，可用“手动添加出发点”为未登录的同行者选择地址。自己的有效出发点加一条手动地点即可计算本机参考中点。手动地点按当前账号与房间保存在本机，不会变成房间成员，也不会自动同步或参与共同投票。
 
 ### 网页与小程序的对应关系
 
@@ -88,13 +92,13 @@ node scripts/prepare-release.cjs
 
 本机数据依赖当前浏览器或微信设备的存储。小程序游客草稿与登录账户空间分开，登录不会自动合并游客草稿。更换浏览器、清理缓存、切换域名或换设备前，请主动导出账本。小程序备份只包含本机账本及已下载的共享快照，不会自动下载所有云端账本。
 
-- [网页隐私说明](https://pintu-app-nu.vercel.app/privacy.html)
-- [网页用户协议](https://pintu-app-nu.vercel.app/terms.html)
+- [网页隐私说明](https://pintu-prod-d1grnmzg0f6778ea6-1303073868.tcloudbaseapp.com/privacy.html)
+- [网页用户协议](https://pintu-prod-d1grnmzg0f6778ea6-1303073868.tcloudbaseapp.com/terms.html)
 - [安全问题报告方式](SECURITY.md)
 
 ## 部署与后续上线
 
-Vercel 部署网页和地图代理；CloudBase 工作流在应用相关文件更新到 `main` 或手动触发时，运行检查、应用访问规则并部署云函数和测试网页。地图云函数还需要独立的 AMap Web 服务 Key。所需变量、密钥名称、配额和域名迁移步骤见 [LAUNCH.md](LAUNCH.md)。
+CloudBase 托管统一网页入口，Vercel 保留地图代理和兼容旧页；CloudBase 工作流在应用相关文件更新到 `main` 或手动触发时，运行检查、应用访问规则并部署云函数和测试网页。地图云函数还需要独立的 AMap Web 服务 Key。所需变量、密钥名称、配额和域名迁移步骤见 [LAUNCH.md](LAUNCH.md)。
 
 2026-10-23 已通过官方微信开发者工具 `2.02.2609231` 完成编译、预览码生成，并上传 `1.1.1` 开发版，包体为 276,531 字节（约 270 KB）。本次未完成手机真机体验，也未提交审核或正式发布。备案、隐私指引、位置接口权限、云存储规则及实际业务调用仍需核验。
 
@@ -104,7 +108,7 @@ Vercel 部署网页和地图代理；CloudBase 工作流在应用相关文件更
 
 ## 反馈与贡献
 
-使用问题、改进建议或可复现的缺陷，请通过 [Issues](https://github.com/pgu9555-coder/pintu-app/issues) 提交，并注明使用的是 Vercel 网页、CloudBase 测试站还是小程序开发版。截图请遮住房间码、个人信息及账本内容。
+使用问题、改进建议或可复现的缺陷，请通过 [Issues](https://github.com/pgu9555-coder/pintu-app/issues) 提交，并注明使用的是统一网页入口还是小程序开发版。截图请遮住房间码、个人信息及账本内容。
 
 贡献流程见 [CONTRIBUTING.md](CONTRIBUTING.md)。私密问题可联系 [pgu9555@gmail.com](mailto:pgu9555@gmail.com)，请勿提交密码、验证码、密钥或真实用户数据。
 

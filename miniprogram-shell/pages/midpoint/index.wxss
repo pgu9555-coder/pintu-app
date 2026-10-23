@@ -89,3 +89,11 @@ page { background:#f7f6f0; color:#163f3b; }
 .midpoint-page button.calculate-button[disabled]{opacity:1;background:#e7eee4;color:#17473f;border:1px solid #d4dfd1}
 
 .midpoint-page .local-valid-points-note{margin-top:7px;color:#66746a;font-size:12px;line-height:1.5}
+.midpoint-page .room-manual-points{margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}
+.midpoint-page .room-manual-points>.section-title{display:flex;align-items:center;flex-wrap:wrap;gap:8px;font-size:14px;font-weight:600}
+.midpoint-page .local-only-tag{display:inline-flex;padding:3px 7px;border-radius:999px;background:#edf2e9;color:#526a55;font-size:10px;font-weight:500}
+.midpoint-page .room-manual-points .local-person-row{align-items:center}
+.midpoint-page .room-manual-points .local-person-row .point-name{white-space:normal;overflow:visible}
+.midpoint-page .room-manual-points .local-person-row .point-address{white-space:normal;overflow-wrap:anywhere}
+.midpoint-page .local-reference-button{background:#edf2e9!important;color:#17473f!important;border:1px solid #d4dfd1}
+.midpoint-page .local-reference-notice{margin:0 0 12px;padding:12px 14px;border:1px solid #d4dfd1;border-radius:12px;background:#edf2e9;color:#365947;font-size:13px;line-height:1.55}

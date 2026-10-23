@@ -43,6 +43,26 @@
 #viewMidpoint .tool-room-active-main{min-width:120px;}
 #viewMidpoint .tool-room-link{min-height:44px;padding:6px 8px;color:var(--green);font-size:12px;}
 #viewMidpoint .mp-card{padding:17px;border:1px solid var(--line);border-radius:20px;background:var(--paper-raised);margin-bottom:16px;}
+#viewMidpoint .mp-room-manual{margin-top:15px;padding-top:13px;border-top:1px solid var(--line);}
+#viewMidpoint .mp-room-manual-heading{display:flex;align-items:center;flex-wrap:wrap;gap:8px;font-size:14px;font-weight:600;}
+#viewMidpoint .mp-local-only-tag{padding:4px 8px;border-radius:999px;background:#edf2e9;color:#526a55;font-size:10px;font-weight:500;}
+#viewMidpoint .mp-room-manual-list{display:grid;gap:7px;margin-top:8px;}
+#viewMidpoint .mp-room-manual-item{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:6px;padding:8px 0;border-bottom:1px solid var(--line);}
+#viewMidpoint .mp-room-manual-person{min-width:0;overflow-wrap:anywhere;font-size:14px;font-weight:550;}
+#viewMidpoint .mp-room-manual-address{display:block;margin-top:3px;color:var(--ink-soft);font-size:12px;line-height:1.45;font-weight:400;}
+#viewMidpoint .mp-room-manual-item button,#viewMidpoint .mp-room-manual-close{min-width:44px;min-height:44px;padding:5px 8px;border:0;border-radius:9px;background:transparent;color:var(--green-deep);font-size:12px;line-height:1.4;}
+#viewMidpoint .mp-room-manual-item .delete{color:#8c5147;}
+#viewMidpoint .mp-room-manual-add{width:100%;min-height:44px;margin-top:9px;padding:8px 12px;border:1px dashed #cbd7c8;border-radius:11px;background:#f7f8f2;color:var(--green-deep);font-size:13px;font-weight:550;}
+#viewMidpoint .mp-room-manual-editor[hidden],#viewMidpoint .mp-room-manual-note[hidden],#viewMidpoint .mp-local-reference-notice[hidden]{display:none!important;}
+#viewMidpoint .mp-room-manual-editor{margin-top:9px;padding:11px 0 0;border-top:1px solid var(--line);}
+#viewMidpoint .mp-room-manual-editor-title{margin-bottom:7px;color:var(--green-deep);font-size:13px;font-weight:600;}
+#viewMidpoint .mp-room-manual-editor .mp-manual-name{width:100%;min-height:46px;margin:4px 0 8px;padding:9px 11px;border:1px solid var(--line);border-radius:10px;background:#fffefa;color:var(--ink);font-size:16px;}
+#viewMidpoint .mp-room-manual-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:7px;}
+#viewMidpoint .mp-room-manual-actions button{min-width:0;min-height:44px;padding:8px 5px;border:1px solid #d9e1d6;border-radius:10px;background:#f6f7f1;color:var(--green-deep);font-size:13px;line-height:1.4;}
+#viewMidpoint .mp-room-manual-note{margin:6px 0 0;color:var(--ink-soft);font-size:11px;line-height:1.5;}
+#viewMidpoint .mp-local-reference-notice{margin:0 0 12px;padding:11px 13px;border:1px solid #d4dfd1;border-radius:12px;background:#edf2e9;color:#365947;font-size:13px;line-height:1.55;}
+#viewMidpoint .mp-local-reference-notice button{min-height:40px;margin-left:5px;padding:3px 5px;border:0;background:transparent;color:var(--green-deep);font-size:12px;text-decoration:underline;}
+#viewMidpoint .mp-room-manual-item .mp-local-only-tag{font-size:9px;}
 #viewMidpoint .city-scope-bar{background:#eff2e9;padding:8px 10px;gap:8px;border-radius:11px;margin-bottom:18px;}
 #viewMidpoint .city-select{min-height:40px;border:0;border-radius:8px;background:var(--paper-raised);padding:6px;font-size:13px;font-weight:500;color:var(--ink);}
 #viewMidpoint .mp-title{font-size:13px;font-weight:550;margin-bottom:12px;}

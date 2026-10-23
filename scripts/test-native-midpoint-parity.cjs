@@ -304,6 +304,56 @@ async function run(){
     page.closeLocalPointEditor()
   }
   {
+    let activeScope='account-a'
+    const {page,storage,amap,calls}=fixture()
+    const stored=new Map()
+    storage.localScopeToken=()=>activeScope
+    storage.getScoped=(key,fallback)=>stored.has(`${activeScope}:${key}`)?stored.get(`${activeScope}:${key}`):fallback
+    storage.setScoped=(key,value)=>{calls.scoped.push({key,value});stored.set(`${activeScope}:${key}`,JSON.parse(JSON.stringify(value)));return true}
+    page.localScope=activeScope;page.docId='manual-room-a';page.viewer={uid:'member-a',membershipEpoch:'epoch',isOwner:true};page.accountProfile={nickname:'房间成员'}
+    const room={docId:'manual-room-a',code:'ROOMA',members:[{uid:'member-a',name:'房间成员'}],meetup:{people:[{uid:'member-a',name:'房间成员',address:'真实成员地址',lat:22,lng:114}]}}
+    const original=JSON.stringify(room)
+    page.searchLocalCandidates=()=>{}
+    page.renderRoom(room,page.viewer)
+    page.addRoomManualPoint()
+    const pointId=page.data.roomManualEditorId
+    assert.ok(pointId)
+    assert.equal(page.data.roomManualValidPointCount,0,'a blank manual point has no valid coordinate')
+    page.calculateRoomManualMidpoint()
+    assert.equal(page.data.roomManualReference,false,'blank manual addresses cannot calculate a midpoint')
+    page.roomManualNameInput({detail:{value:'同行者'}})
+    page.roomManualAddressInput({detail:{value:'上海人民广场'}})
+    amap.inputTips=async query=>[{name:'人民广场',address:`${query}附近`,lat:24,lng:116}]
+    await page.searchRoomManualAddress()
+    assert.equal(page.data.localAddressSuggestions.length,1)
+    page.selectRoomManualAddress(event({index:0}))
+    assert.equal(page.data.roomManualValidPointCount,1)
+    assert.equal(page.data.roomManualPoints[0].localOnly,true)
+    assert.equal('uid' in page.data.roomManualPoints[0],false,'manual point never receives a room member uid')
+    page.calculateRoomManualMidpoint()
+    assert.equal(page.data.roomManualReference,true,'one real room location plus one manual location is enough')
+    assert.equal(page.data.center.latitude,23)
+    assert.equal(JSON.stringify(room),original,'calculation does not mutate members or shared meetup locations')
+    page.renderRoom(room,page.viewer)
+    assert.equal(page.data.roomManualReference,true,'poll updates do not reset a local reference result')
+    page.editRoomManualPoint(event({id:pointId}))
+    page.roomManualAddressInput({detail:{value:'未解析的新地址'}})
+    assert.equal(page.data.roomManualValidPointCount,0,'editing the address immediately invalidates the prior coordinates')
+    page.calculateRoomManualMidpoint()
+    assert.equal(page.data.roomManualReference,false,'an unresolved replacement address cannot reuse the old coordinate')
+    page.removeRoomManualPoint(event({id:pointId}))
+    assert.equal(page.data.roomManualPoints.length,0,'manual points can be deleted')
+    page.addRoomManualPoint();assert.equal(page.data.roomManualPoints.length,1)
+    page.docId='manual-room-b'
+    page.renderRoom({docId:'manual-room-b',members:[{uid:'member-a'}],meetup:{people:[]}},page.viewer)
+    assert.equal(page.data.roomManualPoints.length,0,'switching rooms loads an empty room-specific local list')
+    activeScope='account-b'
+    assert.equal(page.localScopeMatches(),false)
+    page.reloadLocalScope()
+    assert.equal(page.data.roomManualPoints.length,0,'switching account scope clears the previous account manual points')
+    assert.ok(calls.scoped.every(call=>call.key.startsWith('pintu-room-manual-points-v1:')),'manual entries use a separate scoped local-storage namespace')
+  }
+  {
     const wxml=fs.readFileSync(path.join(root,'miniprogram-shell/pages/midpoint/index.wxml'),'utf8'),stack=[]
     for(const match of wxml.matchAll(/<\/?([a-z][\w-]*)\b[^>]*>/g)){
       if(match[0].startsWith('</'))assert.equal(stack.pop(),match[1]);else if(!match[0].endsWith('/>'))stack.push(match[1])

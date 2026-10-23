@@ -71,7 +71,7 @@ async function main() {
       await render(page, 'profile', { canChooseAvatar: true, nickname: '很长的昵称'.repeat(4), avatar: '', busy: false }, scale)
       const badge = await page.locator('.avatar-badge').boundingBox()
       assert.ok(badge.width <= 40 && badge.width === badge.height, `camera circle ${width}/${scale}: ${JSON.stringify(badge)}`)
-      const common = { headerMetrics: { statusBarPx: 24, headerHeightPx: 44, capsuleInsetRightPx: 97 }, screen: 'main', resultMode: false, name: '很长的昵称'.repeat(4), accountAvatar: '', busy: false }
+      const common = { roomManualPoints: [], roomManualEditorId: '', roomActualValidPointCount: 0, roomManualValidPointCount: 0, headerMetrics: { statusBarPx: 24, headerHeightPx: 44, capsuleInsetRightPx: 97 }, screen: 'main', resultMode: false, name: '很长的昵称'.repeat(4), accountAvatar: '', busy: false }
       await render(page, 'midpoint', { ...common, room: null, code: 'ABCD1234' }, scale)
       assert.equal(await page.locator('.point-card').count(), 0, 'no departure editor before joining')
       const input = await page.locator('.code-input').boundingBox()

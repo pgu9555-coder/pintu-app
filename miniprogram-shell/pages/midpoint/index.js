@@ -9,6 +9,7 @@ const LOCAL_MIDPOINT_KEY = 'pintu-local-midpoint-v2'
 const PENDING_CREATE_KEY = 'pintu-midpoint-pending-create-v1'
 const POINT_OUTBOX_PREFIX = 'pintu-midpoint-point-outbox-v1:'
 const MAX_LOCAL_POINTS = 6
+const MAX_ROOM_MANUAL_POINTS = 8
 
 function localFriendLetter(index) {
   return String.fromCharCode(66 + index)
@@ -273,6 +274,10 @@ Page({
     decisionMemberCount: 0,
     confirmedCandidate: null,
     localPoints: emptyLocalPoints(),
+    roomManualPoints: [],
+    roomManualEditorId: '',
+    roomManualName: '',
+    roomManualReference: false,
     localValidPointCount: 0,
     localCandidates: [],
     localCalculated: false,
@@ -316,7 +321,7 @@ Page({
 
   present(patch, callback) {
     const next = Object.assign({}, this.data, patch)
-    const source = next.room ? next.decisionCandidates : next.localCandidates
+    const source = next.room && !next.roomManualReference ? next.decisionCandidates : next.localCandidates
     const rows = (source || []).map(poi => {
       const details = (this.poiDetails || {})[candidateDetailKey(poi)] || {}
       const row = presentationPoi(Object.assign({},poi,{photos:details.loaded && details.info && details.info.photos || poi.photos}))
@@ -333,6 +338,7 @@ Page({
     } else {
       derived.localValidPointCount = (next.localPoints || []).filter(hasLocalCoordinates).length
     }
+    if (Object.prototype.hasOwnProperty.call(patch, 'roomManualPoints')) derived.roomManualValidPointCount = (patch.roomManualPoints || []).filter(hasLocalCoordinates).length
     if (Object.prototype.hasOwnProperty.call(patch,'markers')) derived.mapFitPoints = (next.markers || []).map(marker => ({latitude:marker.latitude,longitude:marker.longitude}))
     this.setData(Object.assign({},patch,derived),callback)
   },
@@ -345,9 +351,11 @@ Page({
   },
 
   showRoomResults() {
-    if (!this.data.center) { wx.showToast({title:'至少两位成员保存出发点后才能寻找',icon:'none'}); return }
+    const sharedCenter = midpoint.average(this.data.room)
+    if (!sharedCenter) { wx.showToast({title:'至少两位成员保存出发点后才能寻找',icon:'none'}); return }
+    this.roomManualReference = false
     this.adjustingPlaces = false
-    this.present({resultMode:true})
+    this.present({center:sharedCenter,markers:midpoint.markers(this.data.room),localCandidates:[],resultMode:true, roomManualReference:false})
     this.fitMap()
     if (!this.data.decisionCandidates.length) this.searchRoomCandidates()
   },
@@ -477,13 +485,14 @@ Page({
     this.detailGeneration = (this.detailGeneration || 0) + 1
     this.addressSearchRequest = (this.addressSearchRequest || 0) + 1
     this.docId = ''; this.viewer = null; this.serverRoom = null; this.pendingMeetupMutation = null
+    this.mineEditorRoomId = ''; this.roomManualReference = false; this.roomManualPoints = []
     this.poiDetails = Object.create(null); this.candidateDetails = Object.create(null); this.mineDraftDirty = false
     const app = typeof getApp === 'function' ? getApp() : null
     this.accountProfile = app && app.globalData && app.globalData.accountProfile || null
     this.scopeReady = Boolean(storage.isAccountScoped && storage.isAccountScoped())
     const local = validLocalState(storage.getLocal(LOCAL_MIDPOINT_KEY,null),this.accountProfile)
     this.localStorageReady = true
-    this.present({room:null,people:[],center:null,markers:[],resultMode:false,localPoints:local.points,localCandidates:local.candidates,decisionCandidates:[],screen:'main',swipeCurrent:null,swipeDeck:[],swipeLikes:[],swipeVoteBusy:false,busy:false,pointSyncBusy:false,mapLoading:false,mapError:'',expandedPoiId:'',mineName:'',mineAddress:'',mineLocation:null,mineHasSavedLocation:false,pointSyncPending:false,pointSyncText:'',name:storage.getName(),code:''})
+    this.present({room:null,people:[],center:null,markers:[],resultMode:false,roomManualPoints:[],roomManualEditorId:'',roomManualName:'',roomManualReference:false,localPoints:local.points,localCandidates:local.candidates,decisionCandidates:[],screen:'main',swipeCurrent:null,swipeDeck:[],swipeLikes:[],swipeVoteBusy:false,busy:false,pointSyncBusy:false,mapLoading:false,mapError:'',expandedPoiId:'',mineName:'',mineAddress:'',mineLocation:null,mineHasSavedLocation:false,pointSyncPending:false,pointSyncText:'',name:storage.getName(),code:''})
   },
 
   async onLoad(options) {
@@ -590,7 +599,7 @@ Page({
       this.viewer = null
       this.docId = ''
       this.entryBlocked = true
-      this.present({ room: null, people: [], localPoints: [], localCandidates: [], name: '', mineName: '', accountAvatar: '', markers: [], center: null, resultMode: false })
+      this.present({ room: null, people: [], localPoints: [], roomManualPoints: [], roomManualEditorId: '', roomManualReference:false, localCandidates: [], name: '', mineName: '', accountAvatar: '', markers: [], center: null, resultMode: false })
       wx.switchTab({ url: '/pages/home/index' })
       return
     }
@@ -957,6 +966,23 @@ Page({
     const roomId = String(this.docId || (room && (room.docId || room.code)) || '')
     const enteringRoom = roomId !== this.mineEditorRoomId
     if (enteringRoom) this.mineEditorRoomId = roomId
+    if (enteringRoom) {
+      this.localSearchVersion = (this.localSearchVersion || 0) + 1
+      this.roomManualScopeRoomId = roomId
+      const savedManual = roomId && storage.getScoped ? storage.getScoped(`pintu-room-manual-points-v1:${roomId}`, []) : []
+      this.roomManualPoints = Array.isArray(savedManual) ? savedManual.filter((point) => point && typeof point.id === 'string').map((point) => ({ id: point.id, name: String(point.name || '').slice(0,48), address: String(point.address || '').slice(0,120), lat: hasLocalCoordinates(point) ? Number(point.lat) : null, lng: hasLocalCoordinates(point) ? Number(point.lng) : null, localOnly: true })) : []
+      this.roomManualReference = false
+      this.roomManualEditorId = ''
+    }
+    const memberUids = new Set(((room.members || []).map((member) => member && String(member.uid || '')).filter(Boolean)))
+    const actualSignature = ((room.meetup && room.meetup.people) || []).filter((person) => person && memberUids.has(String(person.uid || '')) && hasLocalCoordinates(person)).map((person) => `${person.uid}:${Number(person.lat).toFixed(6)},${Number(person.lng).toFixed(6)}`).sort().join('|')
+    const manualSignature = (this.roomManualPoints || []).filter(hasLocalCoordinates).map((point) => `${point.id}:${Number(point.lat).toFixed(6)},${Number(point.lng).toFixed(6)}`).sort().join('|')
+    const calculationSignature = `${roomId}|${actualSignature}|${manualSignature}`
+    if (this.roomManualReference && this.roomManualReferenceSignature && this.roomManualReferenceSignature !== calculationSignature) {
+      this.roomManualReference = false
+      this.roomManualReferenceSignature = ''
+      this.localSearchVersion = (this.localSearchVersion || 0) + 1
+    }
     const decision = currentDecision(room)
     const candidates = decisionCandidates(decision, viewer, room, this.candidateDetails)
     const participation = decisionParticipation(decision, room)
@@ -980,9 +1006,13 @@ Page({
       room,
       mineEditorOpen: enteringRoom ? true : this.data.mineEditorOpen,
       people,
-      center: midpoint.average(room),
-      markers: midpoint.markers(room),
-      resultMode: Boolean(midpoint.average(room)) && !this.adjustingPlaces,
+      center: this.roomManualReference && !enteringRoom ? this.data.center : midpoint.average(room),
+      markers: this.roomManualReference && !enteringRoom ? this.data.markers : midpoint.markers(room),
+      resultMode: this.roomManualReference && !enteringRoom ? true : Boolean(midpoint.average(room)) && !this.adjustingPlaces,
+      roomManualPoints: this.roomManualPoints || [],
+      roomManualReference: enteringRoom ? false : Boolean(this.roomManualReference),
+      roomActualValidPointCount: locationPeople.filter((person) => person && hasLocalCoordinates(person) && (room.members || []).some((member) => member && member.uid === person.uid)).length,
+      roomManualValidPointCount: (this.roomManualPoints || []).filter(hasLocalCoordinates).length,
       decision,
       decisionCandidates: candidates,
       decisionConfirmed: decision.state === 'confirmed',
@@ -1003,6 +1033,7 @@ Page({
   },
 
   maybeAutoSearchRoomCandidates() {
+    if (this.data.roomManualReference) return
     const decision = currentDecision(this.data.room)
     const viewer = this.viewer
     if (!viewer || !viewer.isOwner || this.data.busy || this.roomSearchBusy || this.pendingMeetupMutation || !this.data.center || decision.state === 'confirmed' || decision.candidates.length || !amap.configuredKey()) return
@@ -1255,7 +1286,7 @@ Page({
     const points = this.data.localPoints.map((point) => String(point.id) === context.pointId ? Object.assign({}, point, {
       name: String(location.name || location.address || point.name).slice(0, 48), address, lat: Number(location.lat), lng: Number(location.lng)
     }) : point)
-    if (!this.resetLocalCalculation(points)) {
+      if (!this.resetLocalCalculation(points)) {
       this.present({ localAddressError: true, localAddressMessage: '新地点未保存，本机存储不可用，请清理空间后重新选择。' })
       return
     }
@@ -1297,6 +1328,133 @@ Page({
     this.searchLocalCandidates(center, ++this.localSearchVersion)
   },
 
+  saveRoomManualPoints(points) {
+    const roomId = String(this.docId || (this.data.room && (this.data.room.docId || this.data.room.code)) || '')
+    if (!roomId || !this.localScopeMatches() || !storage.setScoped) return false
+    const clean = (points || []).map((point) => ({ id: String(point.id), name: String(point.name || '').slice(0,48), address: String(point.address || '').slice(0,120), lat: hasLocalCoordinates(point) ? Number(point.lat) : null, lng: hasLocalCoordinates(point) ? Number(point.lng) : null, localOnly: true }))
+    if (!storage.setScoped(`pintu-room-manual-points-v1:${roomId}`, clean)) {
+      wx.showToast({title:'本机存储不可用，修改暂未保存',icon:'none'})
+      return false
+    }
+    if (JSON.stringify(this.roomManualPoints || []) !== JSON.stringify(clean)) this.invalidateRoomManualReference()
+    this.roomManualPoints = clean
+    return true
+  },
+
+  invalidateRoomManualReference() {
+    if (!this.roomManualReference) return
+    this.roomManualReference = false
+    this.roomManualReferenceSignature = ''
+    this.localSearchVersion = (this.localSearchVersion || 0) + 1
+    const room = this.data.room
+    const center = midpoint.average(room)
+    this.present({roomManualReference:false,center,markers:midpoint.markers(room),resultMode:Boolean(center) && !this.adjustingPlaces,localCandidates:[],mapLoading:false,mapSearchMessage:''})
+  },
+
+  addRoomManualPoint() {
+    if (!this.data.room || !this.localScopeMatches()) return
+    if ((this.data.roomManualPoints || []).length >= MAX_ROOM_MANUAL_POINTS) { wx.showToast({title:'最多添加 8 条本机手动地点',icon:'none'}); return }
+    const point = { id: `manual-${Date.now()}-${Math.random().toString(36).slice(2,7)}`, name: `同行者 ${(this.data.roomManualPoints || []).length + 1}`, address: '', lat: null, lng: null, localOnly: true }
+    const points = (this.data.roomManualPoints || []).concat(point)
+    if (!this.saveRoomManualPoints(points)) { wx.showToast({ title:'本机保存不可用，请稍后重试', icon:'none' }); return }
+    this.present({ roomManualPoints: points, roomManualEditorId:point.id, roomManualName:point.name, localAddressQuery:'', localAddressSuggestions:[], localAddressMessage:'搜索并选择带坐标的地点，或使用地图选点。' })
+  },
+
+  editRoomManualPoint(event) {
+    const id = String(event.currentTarget.dataset.id || '')
+    const point = (this.data.roomManualPoints || []).find((item) => item.id === id)
+    if (!point) return
+    this.closeLocalPointEditor()
+    this.present({ roomManualEditorId:id, roomManualName:point.name, localAddressQuery:'', localAddressSuggestions:[], localAddressMessage:'搜索并选择带坐标的地点，或使用地图选点。', localAddressError:false })
+  },
+
+  closeRoomManualEditor() {
+    this.roomManualSearchToken = (this.roomManualSearchToken || 0) + 1
+    this.present({roomManualEditorId:'',roomManualName:'',localAddressQuery:'',localAddressSuggestions:[],localAddressSearchLoading:false,localAddressMessage:'',localAddressError:false})
+  },
+
+  roomManualNameInput(event) {
+    const id = this.data.roomManualEditorId
+    const name = String(event.detail.value || '').slice(0,48)
+    const points = (this.data.roomManualPoints || []).map((point) => point.id === id ? Object.assign({},point,{name}) : point)
+    if (id && this.saveRoomManualPoints(points)) this.present({roomManualPoints:points,roomManualName:name})
+  },
+
+  removeRoomManualPoint(event) {
+    const id = String(event.currentTarget.dataset.id || '')
+    const points = (this.data.roomManualPoints || []).filter((point) => point.id !== id)
+    if (!this.saveRoomManualPoints(points)) return
+    if (this.data.roomManualEditorId === id) this.present({roomManualEditorId:'',roomManualName:''})
+    this.present({roomManualPoints:points})
+    if (this.roomManualReference) this.calculateRoomManualMidpoint()
+  },
+
+  roomManualAddressInput(event) {
+    this.roomManualSearchToken = (this.roomManualSearchToken || 0) + 1
+    const query = String(event.detail.value || '').slice(0,80)
+    const id = this.data.roomManualEditorId
+    const points = (this.data.roomManualPoints || []).map((point) => point.id === id ? Object.assign({},point,{address:query,lat:null,lng:null}) : point)
+    if (id) { this.saveRoomManualPoints(points); this.roomManualPoints = points }
+    this.present({ roomManualPoints:points, localAddressQuery:query, localAddressSuggestions:[], localAddressMessage:'输入至少 2 个字后搜索具体地点。', localAddressError:false })
+  },
+
+  async searchRoomManualAddress() {
+    if (!this.data.roomManualEditorId || !this.localScopeMatches()) return
+    const query = String(this.data.localAddressQuery || '').trim()
+    if (query.length < 2) { this.present({localAddressError:true,localAddressMessage:'请输入至少 2 个字。'}); return }
+    const roomId = this.docId, scope = this.localScope, id = this.data.roomManualEditorId
+    const token = this.roomManualSearchToken = (this.roomManualSearchToken || 0) + 1
+    this.present({localAddressSearchLoading:true,localAddressError:false,localAddressMessage:'正在搜索地点…',localAddressSuggestions:[]})
+    try {
+      const results = await amap.inputTips(query)
+      if (roomId !== this.docId || scope !== this.localScope || id !== this.data.roomManualEditorId || token !== this.roomManualSearchToken || query !== String(this.data.localAddressQuery || '').trim() || !this.localScopeMatches()) return
+      const suggestions = (Array.isArray(results) ? results : []).filter((item) => item && hasLocalCoordinates(item) && String(item.name || item.address || '').trim()).slice(0,10).map((item) => ({name:String(item.name || item.address).slice(0,80),address:String(item.address || '').slice(0,120),lat:Number(item.lat),lng:Number(item.lng)}))
+      this.present({localAddressSearchLoading:false,localAddressSuggestions:suggestions,localAddressMessage:suggestions.length ? '选择地点后保存为本机手动出发点。' : '没有找到有效坐标，请换关键词或用地图选点。'})
+    } catch (error) {
+      if (roomId !== this.docId || scope !== this.localScope || id !== this.data.roomManualEditorId || token !== this.roomManualSearchToken || query !== String(this.data.localAddressQuery || '').trim() || !this.localScopeMatches()) return
+      this.present({localAddressSearchLoading:false,localAddressError:true,localAddressMessage:error.message || '地点搜索失败。'})
+    }
+  },
+
+  selectRoomManualAddress(event) {
+    const pointId = this.data.roomManualEditorId
+    const location = this.data.localAddressSuggestions[Number(event.currentTarget.dataset.index)]
+    if (!location || !hasLocalCoordinates(location)) return
+    const points = (this.data.roomManualPoints || []).map((point) => point.id === pointId ? Object.assign({},point,{name:this.data.roomManualName || location.name,address:[location.name,location.address].filter(Boolean).join(' · ').slice(0,120),lat:Number(location.lat),lng:Number(location.lng)}) : point)
+    if (!this.saveRoomManualPoints(points)) { this.present({localAddressError:true,localAddressMessage:'本机保存失败，地点未更改。'}); return }
+    this.present({roomManualPoints:points,roomManualEditorId:'',localAddressSuggestions:[],localAddressQuery:'',localAddressMessage:''})
+  },
+
+  chooseRoomManualPoint() {
+    const id = this.data.roomManualEditorId
+    if (!id) return
+    const roomId = this.docId, scope = this.localScope
+    this.requestLocation((location) => {
+      if (roomId !== this.docId || scope !== this.localScope || id !== this.data.roomManualEditorId || !hasLocalCoordinates({lat:location.latitude,lng:location.longitude})) return
+      const points = (this.data.roomManualPoints || []).map((point) => point.id === id ? Object.assign({},point,{name:this.data.roomManualName || location.name || location.address,address:[location.name,location.address].filter(Boolean).join(' · ').slice(0,120),lat:Number(location.latitude),lng:Number(location.longitude)}) : point)
+      if (this.saveRoomManualPoints(points)) this.present({roomManualPoints:points,roomManualEditorId:'',localAddressSuggestions:[],localAddressMessage:''})
+    })
+  },
+
+  calculateRoomManualMidpoint() {
+    if (!this.data.room || !this.localScopeMatches()) return
+    const members = new Set(((this.data.room.members || []).map((member) => member && String(member.uid || '')).filter(Boolean)))
+    const actual = ((this.data.room.meetup && this.data.room.meetup.people) || []).filter((point) => point && members.has(String(point.uid || '')) && hasLocalCoordinates(point))
+    const manual = (this.data.roomManualPoints || []).filter(hasLocalCoordinates)
+    const points = actual.concat(manual)
+    if (points.length < 2) { wx.showToast({title:'需要至少两个有效地点（可由一位成员和一条手动地点组成）',icon:'none'}); return }
+    const localRoom = {meetup:{people:points}}
+    const center = midpoint.average(localRoom)
+    if (!center) { wx.showToast({title:'有效坐标不足，暂时无法计算',icon:'none'}); return }
+    this.roomManualReference = true
+    const actualSignature = ((this.data.room.meetup && this.data.room.meetup.people) || []).filter((point) => point && members.has(String(point.uid || '')) && hasLocalCoordinates(point)).map((point) => `${point.uid}:${Number(point.lat).toFixed(6)},${Number(point.lng).toFixed(6)}`).sort().join('|')
+    const manualSignature = manual.map((point) => `${point.id}:${Number(point.lat).toFixed(6)},${Number(point.lng).toFixed(6)}`).sort().join('|')
+    this.roomManualReferenceSignature = `${this.docId}|${actualSignature}|${manualSignature}`
+    this.adjustingPlaces = false
+    this.present({center,markers:midpoint.markers(localRoom),roomManualReference:true,resultMode:true,localCandidates:[],mapSearchMessage:'本机参考 · 包含手动添加地点，不会同步给房间成员，也不参与共同投票。'})
+    this.searchLocalCandidates(center, ++this.localSearchVersion)
+  },
+
   async searchLocalCandidates(center, searchVersion) {
     const scope = this.localScope
     if (!this.localScopeMatches()) return
@@ -1313,11 +1471,11 @@ Page({
       const candidates = normalizeSearchPlaces(places, center)
       if (searchVersion !== this.localSearchVersion || scope !== this.localScope || !this.localScopeMatches()) return
       this.rememberCandidateDetails(candidates)
-      this.saveLocalState(this.data.localPoints, candidates)
+      if (!this.data.roomManualReference) this.saveLocalState(this.data.localPoints, candidates)
       this.present({
         localCandidates: candidates,
         mapLoading:false,
-        mapSearchMessage: candidates.length ? `已找到 ${candidates.length} 个真实地点` : '附近没有可用结果；可改用地图手动选点。'
+        mapSearchMessage: this.data.roomManualReference ? `本机参考 · 手动地点不会同步给房间成员或参与共同投票。${candidates.length ? `已找到 ${candidates.length} 个附近真实地点` : ''}` : candidates.length ? `已找到 ${candidates.length} 个真实地点` : '附近没有可用结果；可改用地图手动选点。'
       })
     } catch (error) {
       if (searchVersion !== this.localSearchVersion) return
@@ -1572,7 +1730,7 @@ Page({
       })
       this.localSearchVersion += 1
       const candidates = this.data.localCandidates.concat(candidate)
-      this.saveLocalState(this.data.localPoints, candidates)
+      if (!this.data.roomManualReference) this.saveLocalState(this.data.localPoints, candidates)
       this.present({ localCandidates: candidates })
     })
   },
@@ -1581,12 +1739,12 @@ Page({
     const id = String(event.currentTarget.dataset.id || '')
     this.localSearchVersion += 1
     const candidates = this.data.localCandidates.filter((candidate) => String(candidate.id) !== id)
-    this.saveLocalState(this.data.localPoints, candidates)
+    if (!this.data.roomManualReference) this.saveLocalState(this.data.localPoints, candidates)
     this.present({ localCandidates: candidates })
   },
 
   activeSwipeCandidates() {
-    return this.data.room ? this.data.decisionCandidates : this.data.localCandidates
+    return this.data.room && !this.data.roomManualReference ? this.data.decisionCandidates : this.data.localCandidates
   },
 
   startSwipe() {
@@ -1619,7 +1777,7 @@ Page({
     const context = this.captureRoomContext()
     const current = this.data.swipeCurrent
     if (!current || this.data.swipeVoteBusy || !['like', 'pass'].includes(action)) return
-    if (this.data.room && !this.data.decisionConfirmed) {
+    if (this.data.room && !this.data.roomManualReference && !this.data.decisionConfirmed) {
       this.present({ swipeVoteBusy: true })
       const saved = await this.runDecisionMutation(
         'setDecisionVote',

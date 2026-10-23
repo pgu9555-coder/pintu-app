@@ -1446,6 +1446,20 @@
               </div>
               <button class="mp-clear-location" id="mpMineClear" type="button" hidden>清除已保存的出发点</button>
             </div>
+            <div class="mp-room-manual" id="mpRoomManual">
+              <div class="mp-room-manual-heading"><span>补充同行者出发点</span><span class="mp-local-only-tag">手动添加 · 仅本机</span></div>
+              <div class="mp-room-manual-list" id="mpRoomManualList"></div>
+              <div class="mp-mine mp-room-manual-editor" id="mpRoomManualEditor" hidden>
+                <div class="mp-room-manual-editor-title">手动地点 · 仅本机</div>
+                <input class="mp-manual-name" id="mpRoomManualName" type="text" maxlength="48" placeholder="同行者称呼" autocomplete="off">
+                <div class="loc-field"><div class="loc-input-wrap"><input type="text" class="loc-input" id="mpRoomManualInput" placeholder="搜索地点名称或地址" autocomplete="off"></div><div class="loc-suggest" id="mpRoomManualSuggest"></div></div>
+                <div class="mp-room-manual-actions"><button class="loc-action-btn" id="mpRoomManualGeo" type="button">定位我的位置</button><button class="add-loc-btn" id="mpRoomManualSave" type="button">保存本机地点</button></div>
+                <div class="mp-manual-note">选择搜索结果或定位后保存真实坐标；未选到有效位置时不能参与计算。</div>
+                <button class="mp-room-manual-close" id="mpRoomManualClose" type="button">收起编辑</button>
+              </div>
+              <button class="mp-room-manual-add" id="mpRoomManualAdd" type="button">＋ 手动添加出发点 · 仅本机</button>
+              <p class="mp-room-manual-note" id="mpRoomManualNote" hidden>仅本机参考；不会加入成员或共同投票。</p>
+            </div>
           </div>
         </div>
 
@@ -1456,6 +1470,7 @@
         </button>
 
         <div id="mpResultArea" style="display: none;">
+          <div class="mp-local-reference-notice" id="mpLocalReferenceNotice" hidden>本机参考 · 包含手动添加地点，不会同步给房间成员，也不参与共同投票。 <button type="button" onclick="mpShowSharedRoomResult()">查看房间共同中点</button></div>
           <div class="mp-map-frame">
             <div id="realMap" aria-label="出发点与参考中点地图"></div>
             <div class="mp-map-controls" aria-label="地图操作">
@@ -1775,6 +1790,172 @@ var mpRoomMode = false;   /* 当前是否处于房间协作模式 */
 var mpRoomRef = null;     /* 协作模式下对应的房间对象 */
 var mpMineEditorRoomId = '';
 var mpMineEditorOpen = true;
+var mpRoomManualPoints = [];
+var mpRoomManualKey = '';
+var mpRoomManualEditorId = '';
+var mpLocalReferenceMode = false;
+var mpLocalReferenceSignature = '';
+
+function mpValidManualPoint(point){
+  if (!point) return false;
+  if (point.lat === null || point.lat === undefined || point.lng === null || point.lng === undefined || (typeof point.lat === 'string' && !point.lat.trim()) || (typeof point.lng === 'string' && !point.lng.trim())) return false;
+  var lat = Number(point.lat), lng = Number(point.lng);
+  return Number.isFinite(lat) && Number.isFinite(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
+}
+function mpRoomManualStorageKey(room){
+  var docId = room && String(room.docId || '');
+  var uid = window.rmMyUid ? String(window.rmMyUid) : '';
+  return docId && uid ? 'pintu_room_manual_points_v1:' + encodeURIComponent(uid) + ':' + encodeURIComponent(docId) : '';
+}
+function mpEnsureRoomManualContext(room){
+  var key = mpRoomManualStorageKey(room);
+  if (key === mpRoomManualKey) return;
+  mpCancelRoomManualInputWork();
+  mpRoomManualKey = key;
+  mpRoomManualEditorId = '';
+  mpLocalReferenceMode = false;
+  mpLocalReferenceSignature = '';
+  mpRoomManualPoints = [];
+  try {
+    var saved = key ? JSON.parse(localStorage.getItem(key) || '[]') : [];
+    if (Array.isArray(saved)) mpRoomManualPoints = saved.slice(0,8).filter(function(point){return point && typeof point.id === 'string';}).map(function(point){
+      var valid = mpValidManualPoint(point);
+      return {id:String(point.id).slice(0,100),name:String(point.name || '').slice(0,48),address:String(point.address || '').slice(0,120),lat:valid?Number(point.lat):null,lng:valid?Number(point.lng):null,localOnly:true};
+    });
+  } catch (_) { mpRoomManualPoints = []; }
+}
+function mpSaveRoomManualPoints(points){
+  if (!mpRoomManualKey || !mpRoomMode || !mpRoomRef || mpRoomManualStorageKey(mpRoomRef) !== mpRoomManualKey) return false;
+  var cleaned = (points || []).slice(0,8).map(function(point){
+    var valid = mpValidManualPoint(point);
+    return {id:String(point.id),name:String(point.name || '').slice(0,48),address:String(point.address || '').slice(0,120),lat:valid?Number(point.lat):null,lng:valid?Number(point.lng):null,localOnly:true};
+  });
+  try { localStorage.setItem(mpRoomManualKey, JSON.stringify(cleaned)); }
+  catch (_) { alert('本机存储不可用，手动地点未保存。'); return false; }
+  var changed = JSON.stringify(mpRoomManualPoints) !== JSON.stringify(cleaned);
+  mpRoomManualPoints = cleaned;
+  if (changed) mpInvalidateLocalReference();
+  mpRenderRoomManual();
+  return true;
+}
+function mpActualRoomPoints(room){
+  var members = new Set((room && room.members || []).filter(function(member){return member && member.uid;}).map(function(member){return String(member.uid);}));
+  return (room && room.meetup && room.meetup.people || []).filter(function(point){return point && members.has(String(point.uid || '')) && mpValidManualPoint(point);}).map(function(point){return {uid:String(point.uid),name:String(point.name || '成员'),address:String(point.address || ''),lat:Number(point.lat),lng:Number(point.lng)};});
+}
+function mpRoomPointsSignature(room){
+  return mpActualRoomPoints(room).map(function(point){return point.uid+':'+point.lat.toFixed(6)+','+point.lng.toFixed(6);}).sort().join('|')+'#'+mpRoomManualPoints.filter(mpValidManualPoint).map(function(point){return point.id+':'+Number(point.lat).toFixed(6)+','+Number(point.lng).toFixed(6);}).sort().join('|');
+}
+function mpInvalidateLocalReference(){
+  if (!mpLocalReferenceMode) return;
+  mpLocalReferenceMode = false;
+  mpLocalReferenceSignature = '';
+  var notice = document.getElementById('mpLocalReferenceNotice'); if (notice) notice.hidden = true;
+  var decision = document.getElementById('mpDecisionPanel');
+  if (decision && mpRoomRef) mpRenderDecisionPanel(mpRoomRef);
+  var result = document.getElementById('mpResultArea');
+  if (result && result.style.display !== 'none') resetMidpoint();
+}
+function mpRenderRoomManual(){
+  var list = document.getElementById('mpRoomManualList');
+  var editor = document.getElementById('mpRoomManualEditor');
+  var note = document.getElementById('mpRoomManualNote');
+  var add = document.getElementById('mpRoomManualAdd');
+  if (!list || !editor) return;
+  list.replaceChildren();
+  mpRoomManualPoints.forEach(function(point){
+    var row = document.createElement('div'); row.className = 'mp-room-manual-item';
+    var copy = document.createElement('div'); copy.className = 'mp-room-manual-person';
+    copy.textContent = point.name || '同行者';
+    var tag = document.createElement('span'); tag.className = 'mp-local-only-tag'; tag.textContent = '仅本机'; copy.appendChild(tag);
+    var address = document.createElement('span'); address.className = 'mp-room-manual-address'; address.textContent = point.address || '尚未选择有效地点'; copy.appendChild(address);
+    var edit = document.createElement('button'); edit.type = 'button'; edit.textContent = '编辑'; edit.setAttribute('aria-label','编辑 '+(point.name || '同行者')+' 的手动地点');
+    edit.addEventListener('click',function(){ mpOpenRoomManualEditor(point.id); });
+    var remove = document.createElement('button'); remove.type = 'button'; remove.className = 'delete'; remove.textContent = '删除';
+    remove.addEventListener('click',function(){ mpDeleteRoomManualPoint(point.id); });
+    row.append(copy,edit,remove); list.appendChild(row);
+  });
+  editor.hidden = !mpRoomManualEditorId;
+  if (note) note.hidden = !mpRoomManualPoints.length;
+  if (add) add.hidden = !!mpRoomManualEditorId;
+  var point = mpRoomManualPoints.find(function(item){return item.id === mpRoomManualEditorId;});
+  var nameInput = document.getElementById('mpRoomManualName'), addressInput = document.getElementById('mpRoomManualInput');
+  if (mpRoomManualEditorId && point && nameInput && addressInput && !editor.dataset.loadedId) {
+    mpCancelRoomManualInputWork();
+    nameInput.value = point.name || '';
+    addressInput.value = point.address || '';
+    delete addressInput.dataset.lat; delete addressInput.dataset.lng; delete addressInput.dataset.selectedSearchName;
+    if (mpValidManualPoint(point)) { addressInput.dataset.lat=String(point.lat); addressInput.dataset.lng=String(point.lng); }
+    editor.dataset.loadedId = point.id;
+  }
+  if (!mpRoomManualEditorId) delete editor.dataset.loadedId;
+  var calc = document.getElementById('btnCalc');
+  if (calc && mpRoomMode && mpRoomRef) {
+    if (mpRoomManualPoints.length) {
+      calc.textContent = '计算本机参考中点';
+      calc.disabled = mpActualRoomPoints(mpRoomRef).length + mpRoomManualPoints.filter(mpValidManualPoint).length < 2;
+    } else {
+      calc.textContent = '寻找碰面点';
+      calc.disabled = mpActualRoomPoints(mpRoomRef).length < 2;
+    }
+  }
+}
+function mpOpenRoomManualEditor(id){
+  if (!mpRoomMode || !mpRoomManualKey) return;
+  mpRoomManualEditorId = id;
+  var editor = document.getElementById('mpRoomManualEditor'); if (editor) delete editor.dataset.loadedId;
+  mpRenderRoomManual();
+}
+function mpAddRoomManualPoint(){
+  if (!mpRoomMode || !mpRoomManualKey || mpRoomManualPoints.length >= 8) return;
+  var point = {id:'manual-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,8),name:'同行者 '+(mpRoomManualPoints.length+1),address:'',lat:null,lng:null,localOnly:true};
+  if (mpSaveRoomManualPoints(mpRoomManualPoints.concat(point))) mpOpenRoomManualEditor(point.id);
+}
+function mpDeleteRoomManualPoint(id){
+  if (!confirm('删除这条仅保存在本机的手动出发点？')) return;
+  if (mpRoomManualEditorId === id) mpCloseRoomManualEditor();
+  mpSaveRoomManualPoints(mpRoomManualPoints.filter(function(point){return point.id !== id;}));
+}
+function mpCloseRoomManualEditor(){
+  mpCancelRoomManualInputWork();
+  mpRoomManualEditorId = '';
+  var editor=document.getElementById('mpRoomManualEditor'); if(editor) delete editor.dataset.loadedId;
+  mpRenderRoomManual();
+}
+function mpCancelRoomManualInputWork(){
+  var input=document.getElementById('mpRoomManualInput');
+  var box=document.getElementById('mpRoomManualSuggest');
+  if (input){ input.dataset.locationGeneration=String(Number(input.dataset.locationGeneration || 0)+1); if (typeof input.pintuCancelAutocomplete==='function') input.pintuCancelAutocomplete(); }
+  if (box){box.style.display='none';box.replaceChildren();}
+}
+function mpSaveRoomManualEditor(){
+  var point = mpRoomManualPoints.find(function(item){return item.id === mpRoomManualEditorId;});
+  var nameInput=document.getElementById('mpRoomManualName'), input=document.getElementById('mpRoomManualInput');
+  if (!point || !input) return;
+  var lat=Number(input.dataset.lat), lng=Number(input.dataset.lng);
+  if (!mpValidManualPoint({lat:input.dataset.lat,lng:input.dataset.lng})) { alert('请先从搜索结果或定位选择一个有效地点，再保存。'); input.focus(); return; }
+  var updated=Object.assign({},point,{name:(nameInput && nameInput.value.trim() || point.name || '同行者').slice(0,48),address:(input.value || '').trim().slice(0,120),lat:lat,lng:lng});
+  var points=mpRoomManualPoints.map(function(item){return item.id===point.id?updated:item;});
+  if (mpSaveRoomManualPoints(points)) mpCloseRoomManualEditor();
+}
+async function mpCalcFromRoomManual(){
+  var room=mpRoomRef;
+  if (!mpRoomMode || !room || mpRoomManualStorageKey(room) !== mpRoomManualKey) return;
+  var coords=mpActualRoomPoints(room).concat(mpRoomManualPoints.filter(mpValidManualPoint).map(function(point){return {name:point.name,address:point.address,lat:Number(point.lat),lng:Number(point.lng)};}));
+  if (coords.length<2){alert('至少需要两个有效地点；一位房间成员加一条手动地点即可。');return;}
+  mpLocalReferenceMode=true;
+  mpLocalReferenceSignature=mpRoomPointsSignature(room);
+  var notice=document.getElementById('mpLocalReferenceNotice'); if(notice) notice.hidden=false;
+  var decision=document.getElementById('mpDecisionPanel'); if(decision) decision.style.display='none';
+  await renderMidpointResult(coords);
+}
+function mpShowSharedRoomResult(){
+  var room=mpRoomRef; var coords=mpActualRoomPoints(room);
+  if(coords.length<2){alert('至少两位房间成员保存有效出发点后，才能计算共同中点。');return;}
+  mpLocalReferenceMode=false; mpLocalReferenceSignature='';
+  var notice=document.getElementById('mpLocalReferenceNotice'); if(notice) notice.hidden=true;
+  mpRenderDecisionPanel(room);
+  renderMidpointResult(coords);
+}
 
 function openMidpoint(roomMode){
   mpPointSaveGeneration++;
@@ -1785,6 +1966,11 @@ function openMidpoint(roomMode){
   if (sharedRoom) mpMineEditorOpen = true;
   mpRoomMode = !!sharedRoom;
   mpRoomRef = sharedRoom ? room : null;
+  mpLocalReferenceMode = false;
+  mpLocalReferenceSignature = '';
+  mpRoomManualEditorId = '';
+  if (sharedRoom) mpEnsureRoomManualContext(sharedRoom);
+  else { mpRoomManualKey=''; mpRoomManualPoints=[]; }
 
   hideAllViews();
   document.getElementById('viewMidpoint').classList.add('show');
@@ -1792,6 +1978,7 @@ function openMidpoint(roomMode){
 
   /* 复位结果区，回到输入态 */
   var resArea = document.getElementById('mpResultArea'); if (resArea) resArea.style.display = 'none';
+  var localNotice = document.getElementById('mpLocalReferenceNotice'); if (localNotice) localNotice.hidden = true;
   if(window.pintuSetMidpointState) pintuSetMidpointState(false);
   var ia = document.getElementById('mpInputArea'); if (ia) ia.style.display = 'none';
   var btn = document.getElementById('btnCalc'); if (btn){ btn.style.display = 'flex'; btn.disabled = false; }
@@ -1817,7 +2004,7 @@ function openMidpoint(roomMode){
     if (panel) panel.style.display = 'block';
     if (ia) ia.style.display = 'block';
     if (btn) btn.style.display = 'flex';
-    if (btn) btn.textContent = '寻找碰面点';
+    if (btn) btn.textContent = mpRoomManualPoints.length ? '计算本机参考中点' : '寻找碰面点';
     mpRenderRoomPanel(mpRoomRef);
     mpRenderDecisionPanel(mpRoomRef);
     mpLoadMineEditor(mpRoomRef);
@@ -1832,7 +2019,8 @@ function openMidpoint(roomMode){
 
 /* 计算按钮分发：协作模式从共享点算，单人模式从输入框算 */
 function mpCalcDispatch(){
-  if (mpRoomMode) mpCalcFromRoom();
+  if (mpRoomMode && mpRoomManualPoints.length) mpCalcFromRoomManual();
+  else if (mpRoomMode) mpCalcFromRoom();
   else calculateRealMidpoint();
 }
 
@@ -1877,6 +2065,13 @@ function mpRenderRoomPanel(room){
   var listEl = document.getElementById('mpRoomList');
   var countEl = document.getElementById('mpRoomCount');
   if (!listEl) return;
+  mpEnsureRoomManualContext(room);
+  if (mpLocalReferenceMode && mpLocalReferenceSignature !== mpRoomPointsSignature(room)) {
+    mpLocalReferenceMode = false; mpLocalReferenceSignature = '';
+    var localNotice=document.getElementById('mpLocalReferenceNotice'); if(localNotice) localNotice.hidden=true;
+    var resultArea=document.getElementById('mpResultArea');
+    if (resultArea && resultArea.style.display !== 'none') resetMidpoint();
+  }
   var people = (room && room.meetup && room.meetup.people) ? room.meetup.people.slice() : [];
   var byUid = new Map(people.filter(function(person){ return person && person.uid; }).map(function(person){ return [String(person.uid), person]; }));
   (room && room.members || []).forEach(function(member){
@@ -1886,12 +2081,12 @@ function mpRenderRoomPanel(room){
     else if (!byUid.get(uid).name && member.name) byUid.get(uid).name = member.name;
   });
   people = Array.from(byUid.values());
-  var ready = people.filter(function(p){ return p.lat != null && p.lng != null; }).length;
+  var ready = mpActualRoomPoints(room).length;
   var headerTitle = document.getElementById('mpRoomCardTitle');
   if (headerTitle) headerTitle.textContent = '碰面房间 · ' + people.length + ' 位成员';
-  if (countEl) countEl.textContent = ready >= 2 ? ('· ' + ready + ' 人已放点，可算中点') : ('· ' + ready + ' 人已放点，至少 2 人');
+  if (countEl) countEl.textContent = mpRoomManualPoints.length ? ('· ' + ready + ' 位房间成员已放点 · ' + mpRoomManualPoints.length + ' 条手动点仅供本机参考') : ready >= 2 ? ('· ' + ready + ' 人已放点，可算中点') : ('· ' + ready + ' 人已放点，至少 2 人');
   var calcBtn = document.getElementById('btnCalc');
-  if (calcBtn && mpRoomMode) calcBtn.disabled = ready < 2;
+  if (calcBtn && mpRoomMode) calcBtn.disabled = mpRoomManualPoints.length ? ready + mpRoomManualPoints.filter(mpValidManualPoint).length < 2 : ready < 2;
   listEl.innerHTML = '';
   if (people.length === 0){
     listEl.innerHTML = '<div class="mp-room-empty">还没有人放点，你可以第一个放下自己的出发点 ↓</div>';
@@ -1921,6 +2116,7 @@ function mpRenderRoomPanel(room){
     }
     listEl.appendChild(row);
   });
+  mpRenderRoomManual();
 }
 
 /* 把当前用户的资料装入下方编辑区。仅本人行会出现“修改”按钮。 */
@@ -2071,9 +2267,7 @@ function mpClearMyPoint(){
 async function mpCalcFromRoom(){
   var room = mpRoomRef;
   if (!room) return;
-  var people = (room.meetup && room.meetup.people) ? room.meetup.people : [];
-  var coords = people.filter(function(p){ return p.lat != null && p.lng != null; })
-                     .map(function(p){ return { lat: p.lat, lng: p.lng }; });
+  var coords = mpActualRoomPoints(room);
   if (coords.length < 2){ alert('至少要有 2 个人放下出发点，才能算公平中点～'); return; }
   await renderMidpointResult(coords);
 }
@@ -2149,6 +2343,7 @@ function mpDecisionWrite(room, action, payload, label){
   return rmRoomGateway(action, Object.assign({ docId: room.docId, membershipEpoch: rmMembershipEpochForRoom(room), roundId: version.roundId, revision: version.revision }, payload || {}), label);
 }
 function mpPublishDecisionCandidates(room, pois){
+  if (mpLocalReferenceMode) return;
   var candidates = mpDecisionCandidatesFromPois(pois);
   if (!room || candidates.length === 0) return;
   var decision = mpDecisionFor(room);
@@ -2229,7 +2424,7 @@ function mpRenderDecisionPanel(room){
   var panel = document.getElementById('mpDecisionPanel');
   var decision = mpDecisionFor(room);
   if (!panel) return;
-  if (!mpRoomMode || !decision || !(decision.candidates || []).length) { panel.style.display = 'none'; panel.innerHTML = ''; return; }
+  if (!mpRoomMode || mpLocalReferenceMode || !decision || !(decision.candidates || []).length) { panel.style.display = 'none'; panel.innerHTML = ''; return; }
   var members = (room.members || []).filter(function(m){ return m && m.uid; });
   var memberIds = new Set(members.map(function(m){ return m.uid; }));
   var candidateIds = new Set((decision.candidates || []).map(function(c){ return c.id; }));
@@ -2260,7 +2455,7 @@ function mpRenderDecisionPanel(room){
 
 function mpRecordSwipeDecision(poi, dir){
   var decision = mpDecisionFor(mpRoomRef);
-  if (!mpRoomMode || !decision || decision.state === 'confirmed' || !poi) return;
+  if (!mpRoomMode || mpLocalReferenceMode || !decision || decision.state === 'confirmed' || !poi) return;
   var candidate = (decision.candidates || []).find(function(c){ return c.name === poi.name && Math.abs(Number(c.lat) - Number(poi.lat)) < 0.00001 && Math.abs(Number(c.lng) - Number(poi.lng)) < 0.00001; });
   if (candidate) mpSetDecisionVote(candidate.id, dir > 0 ? 'want' : 'no');
 }
@@ -2283,6 +2478,31 @@ function mpRecordSwipeDecision(poi, dir){
   if (setBtn) setBtn.addEventListener('click', mpSetMyPoint);
   if (cancelBtn) cancelBtn.addEventListener('click', mpCancelMineEdit);
   if (clearBtn) clearBtn.addEventListener('click', mpClearMyPoint);
+})();
+
+(function initRoomManualPoints(){
+  var input=document.getElementById('mpRoomManualInput'), suggest=document.getElementById('mpRoomManualSuggest');
+  var name=document.getElementById('mpRoomManualName'), geo=document.getElementById('mpRoomManualGeo');
+  if (input && suggest) {
+    bindAddressAutocompleteUI(input,suggest);
+    input.addEventListener('input',function(){
+      var point=mpRoomManualPoints.find(function(item){return item.id===mpRoomManualEditorId;});
+      if (!point) return;
+      var points=mpRoomManualPoints.map(function(item){return item.id===point.id?Object.assign({},item,{address:input.value.slice(0,120),lat:null,lng:null}):item;});
+      mpSaveRoomManualPoints(points);
+    });
+  }
+  if (name) name.addEventListener('input',function(){
+    var point=mpRoomManualPoints.find(function(item){return item.id===mpRoomManualEditorId;});
+    if (!point) return;
+    var points=mpRoomManualPoints.map(function(item){return item.id===point.id?Object.assign({},item,{name:name.value.slice(0,48)}):item;});
+    mpSaveRoomManualPoints(points);
+  });
+  if (geo && input) geo.addEventListener('click',function(){geolocateMe(input);});
+  var add=document.getElementById('mpRoomManualAdd'), save=document.getElementById('mpRoomManualSave'), close=document.getElementById('mpRoomManualClose');
+  if (add) add.addEventListener('click',mpAddRoomManualPoint);
+  if (save) save.addEventListener('click',mpSaveRoomManualEditor);
+  if (close) close.addEventListener('click',mpCloseRoomManualEditor);
 })();
 
 /* ============================================================
@@ -2568,6 +2788,7 @@ function bindAddressAutocompleteUI(inputEl, boxEl) {
       }
     }, 350);
   });
+  inputEl.pintuCancelAutocomplete = function(){ clearTimeout(timer); requestId += 1; lastTips = []; lastQuery = ''; };
 }
 
 function reverseGeocodePosition(lng, lat, fallbackAddress) {
@@ -2765,6 +2986,10 @@ async function calculateRealMidpoint() {
 
 /* 拿到一组坐标后：算中点、画地图、搜周边——单人模式和房间协作模式共用 */
 async function renderMidpointResult(coordsList) {
+  const startedLocalReference = mpLocalReferenceMode;
+  const startedRoomDocId = mpRoomRef && mpRoomRef.docId || '';
+  const startedManualKey = mpRoomManualKey;
+  const startedViewerUid = window.rmMyUid || '';
   const btn = document.getElementById('btnCalc');
   let requestVersion = null;
   try {
@@ -2844,7 +3069,7 @@ async function renderMidpointResult(coordsList) {
 
     // —— 美食盲盒：把这 3 个商圈 + 8 个餐饮拼成滑一滑的牌堆 ——
     window.foodSwipeDeck = malls.slice(0, 3).concat(foods.slice(0, 8));
-    if (mpRoomMode && mpRoomRef) mpPublishDecisionCandidates(mpRoomRef, window.foodSwipeDeck);
+    if (mpRoomMode && mpRoomRef && !startedLocalReference && !mpLocalReferenceMode && mpRoomRef.docId === startedRoomDocId && mpRoomManualKey === startedManualKey && window.rmMyUid === startedViewerUid) mpPublishDecisionCandidates(mpRoomRef, window.foodSwipeDeck);
     const fbEntry = document.getElementById('foodSwipeEntry');
     if (fbEntry && window.foodSwipeDeck.length > 0) {
       document.getElementById('fbCount').textContent = window.foodSwipeDeck.length;
@@ -2870,6 +3095,9 @@ function drawBaseMap(points, center) {
 }
 
 function resetMidpoint() {
+  mpLocalReferenceMode = false;
+  mpLocalReferenceSignature = '';
+  var localNotice=document.getElementById('mpLocalReferenceNotice'); if(localNotice) localNotice.hidden=true;
   pintuSetMidpointState(false);
   document.getElementById('mpResultArea').style.display = 'none';
   document.getElementById('mpInputArea').style.display = 'block';
@@ -2884,8 +3112,9 @@ function resetMidpoint() {
   if (mpRoomMode){
     if (stand) stand.style.display = 'none';
     if (panel) panel.style.display = 'block';
-    btn.textContent = '寻找碰面点';
+    btn.textContent = mpRoomManualPoints.length ? '计算本机参考中点' : '寻找碰面点';
     if (mpRoomRef) mpRenderRoomPanel(mpRoomRef);
+    if (mpRoomRef) mpRenderDecisionPanel(mpRoomRef);
   } else {
     if (stand) stand.style.display = 'block';
     if (panel) panel.style.display = 'none';
