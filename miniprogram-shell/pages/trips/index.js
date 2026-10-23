@@ -1,6 +1,5 @@
 const storage = require('../../utils/storage')
 const gateway = require('../../services/roomGateway')
-const layout = require('../../utils/layout')
 
 const LOCAL_LEDGER_TRIPS_KEY = 'pintu-local-ledger-trips-v1'
 const LEDGER_OUTBOX_KEY = 'pintu-ledger-outbox-v1'
@@ -150,13 +149,11 @@ Page({
     accountSignedIn: false,
     accountNickname: '',
     accountAvatar: '',
-    headerTopPx: 72
   },
 
   onLoad() {
     this.localScope = storage.localScopeToken()
     this.closed = false
-    this.setData({ headerTopPx: layout.headerTopPx() })
   },
 
   onShow() {

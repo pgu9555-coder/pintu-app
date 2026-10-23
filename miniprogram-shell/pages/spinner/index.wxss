@@ -40,3 +40,4 @@
 @keyframes wheel-pointer-tick { from { transform:translate3d(-50%,0,0) rotate(-7deg); } to { transform:translate3d(-50%,0,0) rotate(7deg); } }
 @keyframes spin-status-pulse { from { opacity:.55; transform:scale(.98); } to { opacity:1; transform:scale(1.02); } }
 @keyframes spin-result-pop { 0% { opacity:0; transform:scale(.6); } 60% { transform:scale(1.1); } 100% { opacity:1; transform:scale(1); } }
+.spinner-page{padding-top:10px}.spin-sub{margin-bottom:9px}.wheel-stage{margin-top:0;margin-bottom:2px}.people-label{margin-top:4px}.people-card{padding:10px 12px}

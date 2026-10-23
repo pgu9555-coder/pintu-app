@@ -1,8 +1,4 @@
-<view class="page trips-page" style="padding-top: {{headerTopPx}}px;">
-  <view class="trips-header">
-    <view class="trips-mark"><image src="/assets/icons/brand-plane.svg" mode="aspectFit" /></view>
-    <view class="page-title">我的行程</view>
-  </view>
+<view class="page trips-page">
   <view class="trips-account-card" bindtap="profileCardTap" role="button" hover-class="trips-account-card-active">
     <image wx:if="{{accountSignedIn && accountAvatar}}" class="trips-account-avatar" src="{{accountAvatar}}" mode="aspectFill" />
     <view wx:else class="trips-account-avatar trips-account-avatar-placeholder"><image src="/assets/icons/person.svg" mode="aspectFit" /></view>

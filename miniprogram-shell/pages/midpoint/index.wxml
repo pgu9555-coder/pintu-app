@@ -1,8 +1,8 @@
-<view class="page midpoint-page" style="padding-top: {{headerTopPx}}px;">
-  <view class="page-header">
+<view class="page midpoint-page" style="padding-top: {{headerMetrics.statusBarPx}}px;">
+  <view class="page-header" style="height: {{headerMetrics.headerHeightPx}}px;">
     <view class="back-button" bindtap="goBack">‹</view>
     <view class="page-title">{{screen === 'swipe' ? '吃什么盲盒' : '寻找中点'}}</view>
-    <button wx:if="{{resultMode && screen !== 'swipe'}}" class="adjust-button" bindtap="adjustPlaces">调整地点</button>
+    <view class="nav-right-space" style="width: {{headerMetrics.capsuleInsetRightPx}}px;"></view>
   </view>
 
   <block wx:if="{{screen === 'swipe'}}">
@@ -74,8 +74,7 @@
       <view class="room-card-head">
         <view class="room-card-icon meetup-room-icon"><image src="/assets/icons/midpoint.svg" /></view>
         <view>
-          <view class="room-card-title">多人实时碰面</view>
-          <view class="room-card-sub">朋友输入同一个码，各自选择出发点。</view>
+          <view class="room-title-line"><view class="room-card-title">碰面房间</view><view wx:if="{{room}}" class="room-member-count">{{people.length}} 位成员</view></view>
         </view>
       </view>
       <block wx:if="{{room}}">
@@ -102,18 +101,16 @@
 
     <view wx:if="{{room}}" class="card point-card">
       <view class="section-heading">
-        <view><view class="section-title">{{room ? '大家的出发点' : '大家的出发地址'}}</view><view class="muted">{{room ? people.length : localPoints.length}} 位出发的人</view></view>
+        <view class="point-heading-line"><view class="section-title">{{room ? '大家的出发点' : '大家的出发地址'}}</view></view>
       </view>
 
       <block wx:if="{{room}}">
         <view wx:for="{{people}}" wx:key="uid" class="point-row">
           <image wx:if="{{item.ownAvatar}}" class="point-avatar" src="{{item.ownAvatar}}" mode="aspectFill" /><view wx:else class="point-avatar">{{item.name[0]}}</view>
           <view class="point-copy"><view class="point-name"><text class="point-nickname">{{item.name}}</text><text wx:if="{{item.isSelf}}" class="identity-me">我</text></view><view class="point-address">{{item.address || '等待填写出发点'}}</view></view>
+          <button wx:if="{{item.isSelf}}" class="point-edit-link" bindtap="toggleMineEditor" disabled="{{busy}}">{{mineEditorOpen ? '收起' : (mineHasSavedLocation ? '修改' : '填写')}}</button>
         </view>
-        <button class="edit-my-point" bindtap="toggleMineEditor" disabled="{{busy}}">{{mineEditorOpen ? '收起编辑' : (mineHasSavedLocation ? '修改我的出发点' : '填写我的出发点')}}</button>
         <view wx:if="{{mineEditorOpen}}" class="mine-editor">
-          <view class="editor-label">我的出发点</view>
-          <view class="account-identity"><image wx:if="{{accountAvatar}}" class="identity-avatar" src="{{accountAvatar}}" mode="aspectFill" /><view wx:else class="identity-avatar identity-placeholder"><image src="/assets/icons/person.svg" mode="aspectFit" /></view><text class="identity-name">{{name}}</text><text class="identity-me">我</text></view>
           <input class="input" placeholder="输入地点后，从下方列表选择" value="{{mineAddress}}" maxlength="120" bindinput="mineAddressInput" bindfocus="mineAddressFocus" />
           <view wx:if="{{addressSearchLoading}}" class="suggestion-status">正在搜索地点…</view>
           <scroll-view wx:if="{{addressSuggestionsVisible && addressSuggestions.length}}" class="address-suggestions" scroll-y="true">
@@ -162,6 +159,7 @@
 
     </block>
     <block wx:if="{{resultMode && center}}">
+      <view class="result-toolbar"><button class="adjust-button" bindtap="adjustPlaces">调整地点</button></view>
       <view wx:if="{{room}}" class="result-room-strip">
         <view><view class="muted">多人协作 · {{syncText}}</view><view class="result-room-code">{{room.code}}</view></view>
         <view class="result-room-actions"><button class="text-action" bindtap="copyCode">复制</button><button class="text-action" open-type="share">邀请</button><button wx:if="{{isOwner}}" class="text-action" bindtap="transferOwner">房主管理</button><button class="text-action" bindtap="exitRoom">{{isOwner ? '解散' : '退出'}}</button></view>

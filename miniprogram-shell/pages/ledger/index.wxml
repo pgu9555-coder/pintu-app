@@ -1,9 +1,5 @@
-<view class="page ledger-page" style="padding-top: {{headerTopPx}}px;">
-  <view class="page-header">
-    <view class="back-button" bindtap="goBack">‹</view>
-    <view class="page-title">行程账本</view>
-    <view class="page-status">● {{syncText}}</view>
-  </view>
+<view class="page ledger-page">
+  <view class="page-status">● {{syncText}}</view>
   <view wx:if="{{guestMode}}" style="margin-bottom:9px;padding:8px 9px;border-radius:7px;background:#FFF4D9;color:#8B641F;font-size:11px;line-height:1.5;">共享账本需登录微信账号；本机行程保存在此设备，可从首页备份与迁移导出。</view>
   <view wx:if="{{syncPending}}" style="margin-bottom:9px;padding:8px 9px;border-radius:7px;background:#FFF4D9;color:#8B641F;font-size:11px;line-height:1.5;">修改已保存在本机，恢复网络后会自动同步。</view>
 

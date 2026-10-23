@@ -99,8 +99,7 @@ Page({
     wechatLoginBusy: false,
     privacyConsentChecked: false,
     serviceAgreementOpened: false,
-    privacyContractOpened: false,
-    headerTopPx: 52
+    privacyContractOpened: false
   },
 
   onLoad(options) {
@@ -121,16 +120,8 @@ Page({
     if (app && typeof app.resetAccountScope === 'function') app.resetAccountScope()
     else storage.clearAccountScope()
     storage.saveName('')
-    const systemInfo = wx.getSystemInfoSync ? wx.getSystemInfoSync() : {}
-    const fallbackHeaderTop = Number(systemInfo.statusBarHeight || 20) + 52
-    let headerTopPx = fallbackHeaderTop
-    try {
-      const menuButton = wx.getMenuButtonBoundingClientRect && wx.getMenuButtonBoundingClientRect()
-      if (menuButton && menuButton.bottom) headerTopPx = Number(menuButton.bottom) + 8
-    } catch (_) {}
     this.setData({
-      canChooseAvatar: Boolean(wx.canIUse && wx.canIUse('button.open-type.chooseAvatar')),
-      headerTopPx
+      canChooseAvatar: Boolean(wx.canIUse && wx.canIUse('button.open-type.chooseAvatar'))
     })
   },
 

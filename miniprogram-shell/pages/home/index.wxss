@@ -63,3 +63,6 @@
 .profile-overlay { justify-content:center; }
 .profile-sheet { max-width:480px; }
 .join-profile-name{display:flex;align-items:center;justify-content:space-between;color:#1B2A2E}.join-profile-name text{color:#74807F;font-size:10px}
+/* Reduced vertical whitespace while preserving tap targets and intrinsic heights. */
+.brand-row{margin-bottom:8px}.service-links{margin-bottom:10px}.join-card{padding:12px;margin-bottom:14px}.join-heading{margin-bottom:8px}.tool-list{gap:8px}.tool-card{min-height:76px;padding:11px;gap:11px}.tool-icon{width:36px;height:36px}.tool-title{font-size:13px}.tool-desc{font-size:11px;line-height:1.45}.profile-overlay .profile-sheet{padding-top:8px}.profile-sheet .sheet-header{margin-bottom:8px}
+.service-links{flex-wrap:wrap;gap:0 8px}.service-links button{width:auto;flex:0 0 auto;min-height:44px;display:flex;align-items:center;justify-content:center;white-space:normal}

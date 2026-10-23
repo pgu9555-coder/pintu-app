@@ -1,5 +1,4 @@
-<view class="page" style="padding-top:{{headerTopPx}}px;">
-  <view class="header"><view class="back" bindtap="goBack" role="button" aria-label="返回">‹</view><view class="title">{{title}}</view></view>
+<view class="page">
   <view class="card">
     <view class="updated">更新日期：2026 年 10 月 22 日</view>
     <view class="intro">{{privacy ? '了解你填写的信息如何保存、共享和删除。' : '使用拼途前，请阅读以下约定。你可以返回首页使用无需登录的功能。'}}</view>

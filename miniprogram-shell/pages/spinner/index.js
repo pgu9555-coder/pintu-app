@@ -1,4 +1,3 @@
-const layout = require('../../utils/layout')
 
 const DEFAULT_NAMES = []
 // Keep this in the same order as the web spinner so a person's list colour
@@ -22,7 +21,6 @@ Page({
     wheelImage: '',
     wheelReady: false,
     motionReduced: false,
-    headerTopPx: 72,
     canvasSize: 280
   },
 
@@ -43,7 +41,6 @@ Page({
     this.setData({
       names: DEFAULT_NAMES.slice(),
       decision: '谁买单',
-      headerTopPx: layout.headerTopPx(),
       motionReduced: Boolean(system.prefersReducedMotion || system.reduceMotion || system.reducedMotion),
       canvasSize
     })

@@ -2,7 +2,6 @@ const transferOwnership = require('../../utils/ownership')
 const gateway = require('../../services/roomGateway')
 const storage = require('../../utils/storage')
 const math = require('../../utils/ledger')
-const layout = require('../../utils/layout')
 const invite = require('../../utils/invite')
 const AVATAR_COLORS = ['#0F3D36', '#B8842A', '#3E6E8E', '#A8506E', '#C05B3C', '#4C5C5B']
 const LOCAL_LEDGER_TRIPS_KEY = 'pintu-local-ledger-trips-v1'
@@ -209,7 +208,6 @@ Page({
     guestMode: false,
     isOwner: false,
     busy: false,
-    headerTopPx: 72,
     accessBlocked: false,
     accountAvatar: ''
   },
@@ -244,7 +242,6 @@ Page({
     this.initialRoomApplied = false
     this.scopeReady = false
     this.guestMode = false
-    this.setData({ headerTopPx: layout.headerTopPx() })
     const app = typeof getApp === 'function' ? getApp() : null
     const consentGranted = Boolean(app && typeof app.hasAccountConsent === 'function' && app.hasAccountConsent())
     if (!this.docId) {

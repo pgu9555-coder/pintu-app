@@ -1,11 +1,4 @@
-<view class="page" style="padding-top: {{headerTopPx}}px;">
-  <view class="brand-row">
-    <view class="brand">
-      <view class="brand-mark"><image class="brand-glyph" src="/assets/icons/brand-plane.svg" mode="aspectFit" /></view>
-      <text class="brand-name">拼途</text>
-    </view>
-  </view>
-
+<view class="page">
   <view class="service-links" aria-label="服务与数据">
     <button bindtap="openPrivacyNotice">隐私说明</button><button bindtap="openServiceAgreement">用户协议</button><button bindtap="contactDeveloper">联系开发者</button><button bindtap="openDataTools">备份与迁移</button>
   </view>

@@ -1,8 +1,4 @@
-<view class="page spinner-page" style="padding-top: {{headerTopPx}}px;">
-  <view class="page-header">
-    <view class="back-button" bindtap="goBack">‹</view>
-    <view class="page-title">谁买单 · 转盘</view>
-  </view>
+<view class="page spinner-page">
 
   <view class="spin-sub">由一个人把在场所有人的名字都填进来（转盘不用房间码，一台手机大家围着转就行），然后转一转，天意决定这顿谁买单 🎲</view>
 

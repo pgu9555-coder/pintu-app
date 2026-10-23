@@ -4,13 +4,14 @@
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
+const vm = require('node:vm')
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright')
 const root = path.resolve(__dirname, '../miniprogram-shell')
 const read = file => fs.readFileSync(path.join(root, file), 'utf8')
 const nativeDefaults = 'html,body{margin:0}view,scroll-view{display:block}block{display:contents}text{display:inline}button{box-sizing:border-box;display:block;margin-left:auto;margin-right:auto;padding:0 14px;line-height:2.55555556;border:0}button:not([size=mini]){width:calc(100% - 64px)}button[size=mini]{display:inline-block;line-height:2.3;font-size:13px;padding:0 1.34em}input{box-sizing:border-box;min-width:0}'
 async function render(page, name, data, scale) {
   const width = page.viewportSize().width
-  const css = (read('app.wxss') + '\n' + read(`pages/${name}/index.wxss`)).replace(/\bpage\s*\{/g, 'body{').replace(/\bimage\b/g, 'img').replace(/([\d.]+)rpx/g, (_, n) => `${Number(n) * width / 750}px`)
+  const css = (read('app.wxss') + '\n' + read(`pages/${name}/index.wxss`)).replace(/(^|[}\s])page\s*\{/g, '$1body{').replace(/\bimage\b/g, 'img').replace(/([\d.]+)rpx/g, (_, n) => `${Number(n) * width / 750}px`)
   const markup = read(`pages/${name}/index.wxml`).replace(/<image\b/g, '<img').replace(/<\/image>/g, '')
   await page.setContent(`<style>${nativeDefaults}\n${css}</style><main>${markup}</main>`)
   await page.evaluate(({ data, scale }) => {
@@ -44,6 +45,15 @@ async function render(page, name, data, scale) {
   }, { data, scale })
 }
 async function main() {
+  for (const statusBarHeight of [20, 44, 59]) {
+    const capsule = { top: statusBarHeight + 6, bottom: statusBarHeight + 38, height: 32, left: 278 }
+    const context = { module: { exports: {} }, wx: { getSystemInfoSync: () => ({ statusBarHeight, windowWidth: 375 }), getMenuButtonBoundingClientRect: () => capsule } }
+    vm.runInNewContext(read('utils/layout.js'), context)
+    const metrics = context.module.exports.headerMetrics()
+    assert.equal(metrics.statusBarPx, statusBarHeight)
+    assert.ok(metrics.statusBarPx + metrics.headerHeightPx >= capsule.bottom)
+    assert.ok(375 - metrics.capsuleInsetRightPx <= capsule.left)
+  }
   const browser = await chromium.launch({ headless: true, ...(process.env.PLAYWRIGHT_CHANNEL ? { channel: process.env.PLAYWRIGHT_CHANNEL } : {}) })
   try {
     const page = await browser.newPage()
@@ -53,11 +63,15 @@ async function main() {
       await render(page, 'profile', { canChooseAvatar: true, nickname: '很长的昵称'.repeat(4), avatar: '', busy: false }, scale)
       const badge = await page.locator('.avatar-badge').boundingBox()
       assert.ok(badge.width <= 40 && badge.width === badge.height, `camera circle ${width}/${scale}: ${JSON.stringify(badge)}`)
-      const common = { headerTopPx: 72, screen: 'main', resultMode: false, name: '很长的昵称'.repeat(4), accountAvatar: '', busy: false }
+      const common = { headerMetrics: { statusBarPx: 24, headerHeightPx: 44, capsuleInsetRightPx: 97 }, screen: 'main', resultMode: false, name: '很长的昵称'.repeat(4), accountAvatar: '', busy: false }
       await render(page, 'midpoint', { ...common, room: null, code: 'ABCD1234' }, scale)
       assert.equal(await page.locator('.point-card').count(), 0, 'no departure editor before joining')
       const input = await page.locator('.code-input').boundingBox()
       assert.ok(input.width >= 150, `room code input too narrow ${width}/${scale}: ${input.width}`)
+      const nav = await page.locator('.page-header').boundingBox()
+      assert.ok(nav.y >= 24 && nav.y <= 25, 'custom navigation starts below the status bar without a second reserved row')
+      const title = await page.locator('.page-header .page-title').boundingBox()
+      assert.ok(title.x + title.width <= width - 97, `custom title stays left of the simulated WeChat capsule ${width}/${scale}: ${JSON.stringify(title)}`)
       await checkBounds(page, width, `entry ${width}/${scale}`)
       await render(page, 'midpoint', { ...common, room: { code: 'ABCD1234' }, isOwner: true, people: [{ uid: 'a', name: common.name, isSelf: true, address: '非常长的地址'.repeat(15) }, { uid: 'b', name: '另一个很长的昵称'.repeat(3), address: '' }], mineEditorOpen: false, center: null }, scale)
       const buttons = await page.locator('.active-room-actions button').all()
@@ -68,8 +82,29 @@ async function main() {
       await render(page, 'midpoint', { ...common, room: { code: 'ABCD1234' }, isOwner: false, people: [{ uid: 'a', name: common.name, isSelf: true, address: '' }], mineEditorOpen: true, mineHasSavedLocation: true, mineAddress: '非常长的地址'.repeat(15), center: null, amapConfigured: false }, scale)
       assert.equal(await page.locator('.active-room-actions button').count(), 3, 'member has copy/share/leave actions')
       assert.equal(await page.locator('.active-room-actions').getByText('转交房主').count(), 0)
+      const editorButtons = await page.locator('.mine-actions button').all()
+      const editorBoxes = await Promise.all(editorButtons.map(button => button.boundingBox()))
+      assert.equal(editorBoxes.length, 2)
+      assert.ok(editorBoxes.every(box => box.height >= 44 && box.width >= 44) && Math.abs(editorBoxes[0].y - editorBoxes[1].y) < 1, 'editor actions remain two columns with 44px tap targets')
+      assert.equal(await page.locator('.mine-editor .account-identity').count(), 0, 'editor does not repeat avatar/name')
       await checkBounds(page, width, `editor ${width}/${scale}`)
       cases += 4
+      const otherPages = [
+        ['home', { name: common.name, code: '', profilePanelOpen: false, wechatLoginVisible: false }],
+        ['trips', { accountSignedIn: true, accountNickname: common.name, localTrips: [], rooms: [], loading: false, loginRequired: false }],
+        ['spinner', { names: ['很长名字甲乙丙丁'], decision: '这次谁来买单', canvasSize: Math.min(280, width - 40), result: '', spinning: false }],
+        ['ledger', { step: 1, room: null, name: common.name, ledger: { members: [], expenses: [] }, syncText: '本机保存' }],
+        ['agreement', { title: '隐私说明', privacy: true, sections: [{ title: '信息的保存', text: '较长的说明文字。'.repeat(30) }] }],
+        ['data-tools', { scopeLabel: '当前微信账号', localCount: 12, cachedCount: 20 }]
+      ]
+      for (const [name, data] of otherPages) {
+        assert.notEqual(JSON.parse(read(`pages/${name}/index.json`)).navigationStyle, 'custom', `${name} uses native navigation`)
+        assert.ok(!read(`pages/${name}/index.wxml`).includes('headerTopPx'), `${name} does not reserve native navigation twice`)
+        await page.setViewportSize({ width, height: 568 })
+        await render(page, name, { ...common, ...data }, scale)
+        await checkBounds(page, width, `${name} ${width}/${scale}`)
+        cases++
+      }
     }
     console.log(`Native mobile CSS proxy passed: ${cases} cases, 320/375/390/430px, 100%/140% fonts, long names/addresses, simulated native button defaults. Real WeChat/device rendering is not covered.`)
   } finally { await browser.close() }

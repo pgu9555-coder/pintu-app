@@ -307,7 +307,7 @@ Page({
     swipeDragX: 0,
     swipeCardStyle: '',
     swipeVoteBusy: false,
-    headerTopPx: 72,
+    headerMetrics: { statusBarPx: 20, headerHeightPx: 44, capsuleInsetRightPx: 96 },
     isOwner: false,
     busy: false,
     syncText: '已同步'
@@ -546,7 +546,7 @@ Page({
     this.present({
       name: String(accountProfile && accountProfile.nickname || storage.getName() || '微信用户'),
       accountAvatar: String(accountProfile && accountProfile.avatarFileId || ''),
-      headerTopPx: layout.headerTopPx(),
+      headerMetrics: layout.headerMetrics(),
       amapConfigured: Boolean(amap.configuredKey()),
       localStorageMessage,
       localPoints: localState.points,

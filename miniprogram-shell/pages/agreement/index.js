@@ -1,4 +1,3 @@
-const layout = require('../../utils/layout')
 
 const TERMS = [
   { title: '1. 服务内容', text: '拼途提供多人公平碰面、地点建议、盲盒、转盘和行程账本。参考中点按坐标估算，不保证实际交通时间相等。出行前请核实地点、营业信息和路线。' },
@@ -18,10 +17,10 @@ const PRIVACY = [
 ]
 
 Page({
-  data: { privacy: false, title: '用户服务协议', sections: TERMS, headerTopPx: 72 },
+  data: { privacy: false, title: '用户服务协议', sections: TERMS },
   onLoad(options) {
     const privacy = Boolean(options && options.type === 'privacy')
-    this.setData({ privacy, title: privacy ? '隐私说明' : '用户服务协议', sections: privacy ? PRIVACY : TERMS, headerTopPx: layout.headerTopPx() })
+    this.setData({ privacy, title: privacy ? '隐私说明' : '用户服务协议', sections: privacy ? PRIVACY : TERMS })
     if (wx.setNavigationBarTitle) wx.setNavigationBarTitle({ title: this.data.title })
   },
   openNativePrivacy() {

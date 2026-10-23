@@ -66,7 +66,7 @@ async function localLedgerSelfMember() {
     Page(value) { definition = value }, wx, getApp: () => app, setInterval: () => 1, clearInterval() {}, console,
     require(request) {
       if (request === '../../utils/storage') return storage
-      if (request === '../../utils/layout') return { headerTopPx: () => 72 }
+      if (request === '../../utils/layout') return { headerTopPx: () => 72, headerMetrics: () => ({ statusBarPx: 20, headerHeightPx: 44, headerSidePx: 96 }) }
       if (request === '../../services/roomGateway') return new Proxy({}, { get: (_target, key) => () => { throw Error('unexpected cloud call: ' + String(key)) } })
       return require(path.resolve(path.dirname(file), request))
     }
@@ -100,7 +100,7 @@ async function homeFirstLoginRoute() {
   const wx = { navigateTo(options) { navigations.push(options) }, showToast() {}, getPrivacySetting: ({ success }) => success({ needAuthorization: false }), showTabBar() {} }
   vm.runInNewContext(fs.readFileSync(path.join(root, 'pages/home/index.js'), 'utf8'), {
     Page(value) { definition = value }, wx, getApp: () => app,
-    require(request) { if (request.includes('roomGateway')) return gateway; if (request.includes('storage')) return storage; if (request.includes('invite')) return { fromOptions: () => ({}) }; return { headerTopPx: () => 72 } }, console
+    require(request) { if (request.includes('roomGateway')) return gateway; if (request.includes('storage')) return storage; if (request.includes('invite')) return { fromOptions: () => ({}) }; return { headerTopPx: () => 72, headerMetrics: () => ({ statusBarPx: 20, headerHeightPx: 44, headerSidePx: 96 }) } }, console
   })
   const home = Object.assign({}, definition, { data: structuredClone(definition.data), accountPageGeneration: 1, accountPageGone: false, setData(value) { Object.assign(this.data, value) } })
   home.ensurePrivacyAuthorized = async () => {}
@@ -131,7 +131,7 @@ async function logoutBehavior() {
   const wx = { showModal(options) { modal = options }, showToast() {} }
   vm.runInNewContext(fs.readFileSync(path.join(root, 'pages/trips/index.js'), 'utf8'), {
     Page(value) { definition = value }, wx, getApp: () => app, getCurrentPages: () => [],
-    require(request) { if (request.includes('roomGateway')) return {}; if (request.includes('storage')) return storage; if (request.includes('layout')) return { headerTopPx: () => 72 }; return {} }, console
+    require(request) { if (request.includes('roomGateway')) return {}; if (request.includes('storage')) return storage; if (request.includes('layout')) return { headerTopPx: () => 72, headerMetrics: () => ({ statusBarPx: 20, headerHeightPx: 44, headerSidePx: 96 }) }; return {} }, console
   })
   const page = Object.assign({}, definition, { data: structuredClone(definition.data), setData(value) { Object.assign(this.data, value) } })
   page.data.accountSignedIn = true

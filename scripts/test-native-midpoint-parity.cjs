@@ -15,7 +15,7 @@ function fixture(overrides={}){
   Object.assign(amap,overrides.amap||{})
   const wx={showToast:data=>calls.toast.push(data),showModal:data=>calls.modal.push(data),createMapContext:()=>({includePoints:values=>calls.map.push(values)}),pageScrollTo(){},onNetworkStatusChange(){},offNetworkStatusChange(){},navigateBack(){},switchTab(){}}
   Object.assign(wx,overrides.wx||{})
-  const modules={'../../utils/ownership':async()=>{},'../../services/roomGateway':{},'../../utils/storage':storage,'../../utils/midpoint':math,'../../utils/layout':{headerTopPx:()=>72},'../../utils/amap':amap,'../../utils/invite':{}}
+  const modules={'../../utils/ownership':async()=>{},'../../services/roomGateway':{},'../../utils/storage':storage,'../../utils/midpoint':math,'../../utils/layout':{headerTopPx:()=>72,headerMetrics:()=>({statusBarPx:20,headerHeightPx:44,headerSidePx:96})},'../../utils/amap':amap,'../../utils/invite':{}}
   const context={Page:value=>definition=value,require:key=>modules[key],getApp:()=>overrides.app || ({hasAccountConsent:()=>true,ensureAccountScope:async()=>({})}),wx,console,setTimeout,clearTimeout,setInterval,clearInterval,Set,Map,Date}
   vm.runInNewContext(fs.readFileSync(file,'utf8'),context,{filename:file})
   const page=Object.assign({},definition,{data:JSON.parse(JSON.stringify(definition.data)),setData(patch,callback){Object.assign(this.data,patch);if(callback)callback()}})
