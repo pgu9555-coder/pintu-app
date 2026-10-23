@@ -62,7 +62,7 @@ async function pointSaveLifecycle(){
   const c={mpRoomRef:{docId:'room-a',epoch:1,meetup:{people:[]}},mpRoomMode:true,mpPointSaveGeneration:0,window:{rmMyUid:'me'},LOC_COLORS:['green'],localStorage:{setItem(){}},setTimeout(){},
    document:{getElementById:id=>({mpMineName:name,mpMineInput:input,viewMidpoint:{classList:{contains:()=>true}},mpMineSet:{}}[id])},
    rmMembershipEpochForRoom:room=>room.epoch,getCoordinates:()=>new Promise((a,b)=>{resolve=a;reject=b;}),mpRoomWrite:(room,people)=>writes.push({room,people}),mpSetMineEditing(){},showAppToast:message=>notices.push(message),alert:message=>notices.push(message)};
-  functionsBetween('function mpSetMyPoint(){','function mpRemoveMyPoint(',c);
+  functionsBetween('function mpSetMyPoint(){','function mpClearMyPoint(',c);
   return {c,input,name,writes,notices,resolve:()=>resolve({lat:31,lng:121}),reject:()=>reject(Error('timeout'))};
  }
  let h=harness();h.c.mpSetMyPoint();h.reject();await settle();assert.equal(h.writes.length,0);assert.equal(h.input.value,'测试地址');assert.match(h.notices.join(' '),/失败|超时/);

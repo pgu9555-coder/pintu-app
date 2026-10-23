@@ -13,6 +13,8 @@ on:
       - legal.css
       - midpoint.css
       - midpoint-ui.js
+      - web-parity.css
+      - "assets/icons/**"
       - "scripts/**"
       - cloudbaserc.json
       - "cloudfunctions/**"

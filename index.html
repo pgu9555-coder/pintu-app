@@ -1202,6 +1202,7 @@
 </style>
 <style>.launch-links{display:flex;flex-wrap:wrap;gap:12px;margin:0 0 16px;font-size:12px}.launch-links a,.launch-links button{color:var(--green);background:none;border:0;padding:0;font:inherit;text-decoration:underline;cursor:pointer}.launch-dialog{border:1px solid #D8D5C8;border-radius:18px;padding:24px;width:calc(100% - 48px);max-width:440px;box-sizing:border-box;background:#FFFDF6;color:#0F3D36}.launch-dialog::backdrop{background:#0007}.launch-dialog h2{margin-top:0;font-size:20px}.launch-dialog p{font-size:14px;line-height:1.65}.launch-dialog button,.launch-dialog select{padding:10px;margin:6px 6px 0 0;font-size:15px;max-width:100%}.launch-dialog a{color:#174f47}</style>
 <link rel="stylesheet" href="/midpoint.css">
+<link rel="stylesheet" href="/web-parity.css">
 </head>
 <body>
 
@@ -1286,23 +1287,54 @@
               <path d="M3 12L21 4L15 20L11 13L3 12Z" stroke="#F6F3EA" stroke-width="1.8" stroke-linejoin="round"/>
             </svg>
           </div>
-          <span class="brand-name">行程</span>
+          <span class="brand-name">我的行程</span>
         </div>
       </div>
 
       <div class="home-content">
+        <section class="visitor-profile-card" id="visitorProfileCard" aria-label="访客资料">
+          <div class="visitor-avatar-wrap">
+            <img id="visitorProfileAvatar" class="visitor-avatar" src="/assets/icons/person.svg" alt="访客头像">
+            <label class="visitor-avatar-edit" for="visitorAvatarInput" aria-label="更换访客头像" title="更换访客头像"><i class="ti-camera"></i></label>
+            <input id="visitorAvatarInput" type="file" accept="image/*" aria-label="选择访客头像">
+          </div>
+          <div class="visitor-profile-copy">
+            <div class="visitor-profile-name" id="visitorProfileName">当前浏览器访客</div>
+            <div class="visitor-profile-note">访客资料仅保存在当前浏览器，不代表微信账号</div>
+          </div>
+          <button class="visitor-profile-edit" id="visitorProfileEdit" type="button">编辑</button>
+          <div class="visitor-profile-editor" id="visitorProfileEditor" hidden>
+            <label for="visitorProfileNameInput">访客名称</label>
+            <input id="visitorProfileNameInput" maxlength="24" autocomplete="nickname" placeholder="输入你希望显示的名称">
+            <div class="visitor-profile-actions">
+              <button type="button" id="visitorProfileCancel">取消</button>
+              <button type="button" id="visitorProfileSave">保存名称</button>
+            </div>
+          </div>
+        </section>
+        <div class="section-label" id="glHomeTripsLabel" style="display:none;">本地行程</div>
+        <button class="trips-create-button" id="tripsCreateButton" type="button" onclick="openGroupLedger()">＋ 新建行程账本</button>
+        <div id="glHomeTripsList" style="display:none;"></div>
+        <div class="trips-empty-card" id="glHomeTripsEmpty" hidden>
+          <img src="/assets/icons/trip-notebook.svg" alt="">
+          <div class="empty-title">还没有本机行程</div>
+          <div class="muted">新建一趟行程后，成员和支出会保存在这台设备。</div>
+        </div>
+
         <div class="section-label" id="rmHomeRoomsLabel" style="display:none;">进行中的房间</div>
         <div id="rmHomeRoomsList" style="display:none;"></div>
+        <div class="trips-empty-card" id="rmHomeRoomsEmpty" hidden>
+          <img src="/assets/icons/cloud-members.svg" alt="">
+          <div class="empty-title">还没有进行中的房间</div>
+          <div class="muted">从首页创建房间，或输入房间码加入。</div>
+        </div>
 
-        <div class="section-label" id="glHomeTripsLabel" style="display:none;">进行中的行程</div>
-        <div id="glHomeTripsList" style="display:none;"></div>
-
-        <div id="tripsEmptyState" class="m-empty" style="display:none;padding:40px 0;">还没有进行中的房间或行程<br>去首页开一个吧</div>
+        <div id="tripsEmptyState" hidden></div>
       </div>
 
       <div class="tabbar">
         <div class="tab" data-tab="home"><i class="ti-home"></i><span>首页</span></div>
-        <div class="tab active" data-tab="trips"><i class="ti-ticket"></i><span>行程</span></div>
+        <div class="tab active" data-tab="trips"><i class="ti-ticket"></i><span>我的行程</span></div>
       </div>
     </div>
 
@@ -1349,29 +1381,32 @@
         <div class="tool-room-card" data-room-type="midpoint">
           <div class="tool-room-head">
             <div class="tool-room-icon"><i class="ti-users"></i></div>
-            <div><div class="tool-room-title">多人实时碰面</div><div class="tool-room-sub">朋友输入同一个码，各自填写名字和出发点。</div></div>
+            <div><div class="tool-room-title" id="mpRoomCardTitle">碰面房间</div><div class="tool-room-sub" id="mpRoomCardSubtitle">创建房间并分享邀请链接，朋友加入后各自填写出发点。</div></div>
           </div>
           <div class="tool-room-entry" id="mpCollabEntry">
             <label class="mp-entry-name"><i class="ti-user"></i><input class="tool-room-input" id="mpEntryName" maxlength="20" autocomplete="nickname" aria-label="你的名字" placeholder="先填写你的名字"></label>
+            <button class="tool-room-btn mp-create-room" id="mpCreateRoomBtn" type="button">＋ 创建房间</button>
             <div class="tool-room-row">
-              <button class="tool-room-btn" id="mpCreateRoomBtn" type="button">创建碰面码</button>
               <input class="tool-room-input tool-room-code-input" id="mpJoinCode" maxlength="8" autocapitalize="characters" spellcheck="false" aria-label="8 位碰面码" placeholder="8 位碰面码">
-              <button class="tool-room-btn secondary" id="mpJoinRoomBtn" type="button">加入</button>
+              <button class="tool-room-btn secondary" id="mpJoinRoomBtn" type="button">加入房间</button>
             </div>
             <div class="mp-entry-hint">名字用于在房间中识别你</div>
             <div class="tool-room-error" id="mpRoomError" role="status"></div>
           </div>
           <div class="tool-room-active" id="mpCollabActive">
-            <button class="tool-room-link" type="button" onclick="pintuTransferOwner()">房主管理</button>
             <div class="tool-room-active-main"><div class="tool-room-active-label">正在共享碰面位置 · 房间码</div><div class="tool-room-active-code" id="mpActiveCode">------</div></div>
-            <button class="tool-room-link" id="mpCopyCodeBtn" type="button">复制</button>
-            <button class="tool-room-link" id="mpLeaveRoomBtn" type="button">退出</button>
+            <div class="mp-room-actions" id="mpRoomActions">
+              <button class="tool-room-link" id="mpCopyCodeBtn" type="button">复制房间码</button>
+              <button class="tool-room-link" id="mpShareRoomBtn" type="button">分享邀请链接</button>
+              <button class="tool-room-link" id="mpTransferRoomBtn" type="button" onclick="pintuTransferOwner()" hidden>转交房主</button>
+              <button class="tool-room-link danger" id="mpLeaveRoomBtn" type="button">退出房间</button>
+            </div>
           </div>
         </div>
         <div class="mp-card" id="mpInputArea">
-          <div class="mp-intro"><h1>从哪里出发？</h1><p>找到大家都方便的碰面位置</p></div>
+          <div class="mp-intro" id="mpStandaloneIntro"><h1>从哪里出发？</h1><p>找到大家都方便的碰面位置</p></div>
           
-          <div class="city-scope-bar">
+          <div class="city-scope-bar" id="mpCityScopeBar">
             <i class="ti-map-pin"></i>
             <select aria-label="所在省份" id="selProvince" class="city-select"><option value="">所在省份</option></select>
             <select aria-label="所在城市" id="selCity" class="city-select"><option value="">所在城市</option></select>
@@ -1394,29 +1429,29 @@
             </div>
             <div class="mp-room-list" id="mpRoomList"></div>
             <div class="mp-mine" id="mpMineEditor">
-              <div class="mp-mine-label" id="mpMineLabel">我的名字和出发点</div>
+              <div class="mp-mine-head"><div class="mp-mine-label" id="mpMineLabel">搜索或修改地点</div></div>
               <div class="mp-mine-name-wrap">
                 <span class="mp-mine-name-label">名字</span>
                 <input type="text" class="mp-mine-name" id="mpMineName" maxlength="20" placeholder="输入你的名字" autocomplete="nickname">
               </div>
               <div class="loc-field">
                 <div class="loc-input-wrap">
-                  <input type="text" class="loc-input" id="mpMineInput" placeholder="输入地址，或点右侧定位" autocomplete="off">
-                  <button class="loc-action-btn" id="mpMineGeo" type="button" aria-label="获取当前位置" title="获取我的当前位置"></button>
+                  <input type="text" class="loc-input" id="mpMineInput" placeholder="搜索地点名称或地址" autocomplete="off">
+
                 </div>
                 <div class="loc-suggest" id="mpMineSuggest"></div>
               </div>
-              <div class="mp-mine-actions">
-                <button class="add-loc-btn" id="mpMineSet">保存 / 更新名字和地点</button>
-                <button class="mp-mine-cancel" id="mpMineCancel" type="button">取消</button>
+              <div class="mp-mine-actions"><button class="loc-action-btn" id="mpMineGeo" type="button" aria-label="定位我的位置" title="定位我的位置"></button>
+                <button class="add-loc-btn" id="mpMineSet">保存我的地点</button>
               </div>
+              <button class="mp-clear-location" id="mpMineClear" type="button" hidden>清除已保存的出发点</button>
             </div>
           </div>
         </div>
 
         <section class="mp-decision" id="mpDecisionPanel" style="display:none;" aria-live="polite"></section>
 
-        <button class="btn-main" id="btnCalc" onclick="mpCalcDispatch()" style="background:var(--blue); margin-bottom: 24px;">
+        <button class="btn-main" id="btnCalc" onclick="mpCalcDispatch()" style="background:var(--blue); margin-bottom: 24px;" disabled>
           寻找碰面点
         </button>
 
@@ -1492,22 +1527,23 @@
       <div class="content" style="padding-bottom:0;">
         <div class="tool-room-card" data-room-type="ledger">
           <div class="tool-room-head">
-            <div class="tool-room-icon"><i class="ti-receipt"></i></div>
+            <div class="tool-room-icon"><i class="ti-receipt-2"></i></div>
             <div><div class="tool-room-title">多人共享账本</div><div class="tool-room-sub">账本码与碰面码互不通用；每个人加入时只填写自己的名字。</div></div>
           </div>
           <div class="tool-room-entry" id="glCollabEntry">
             <input class="tool-room-input" id="glEntryName" maxlength="20" autocomplete="nickname" placeholder="先填写你自己的名字">
+            <button class="tool-room-btn gl-create-room" id="glCreateRoomBtn" type="button">＋ 创建账本房间</button>
             <div class="tool-room-row">
-              <button class="tool-room-btn" id="glCreateRoomBtn" type="button">创建账本码</button>
               <input class="tool-room-input tool-room-code-input" id="glJoinCode" maxlength="8" placeholder="输入 8 位账本码">
-              <button class="tool-room-btn secondary" id="glJoinRoomBtn" type="button">加入</button>
+              <button class="tool-room-btn secondary" id="glJoinRoomBtn" type="button">加入房间</button>
             </div>
             <div class="tool-room-error" id="glRoomError"></div>
           </div>
           <div class="tool-room-active" id="glCollabActive">
-            <button class="tool-room-link" type="button" onclick="pintuTransferOwner()">房主管理</button>
+            <button class="tool-room-link" id="glTransferRoomBtn" type="button" onclick="pintuTransferOwner()" hidden>转交房主</button>
             <div class="tool-room-active-main"><div class="tool-room-active-label">正在共享行程花费 · 房间码</div><div class="tool-room-active-code" id="glActiveCode">------</div></div>
-            <button class="tool-room-link" id="glCopyCodeBtn" type="button">复制</button>
+            <button class="tool-room-link" id="glCopyCodeBtn" type="button">复制房间码</button>
+            <button class="tool-room-link" id="glShareRoomBtn" type="button">分享邀请链接</button>
             <button class="tool-room-link" id="glLeaveRoomBtn" type="button">退出</button>
           </div>
         </div>
@@ -1693,6 +1729,7 @@
 <script>
 /* ================= SVG 图标系统 ================= */
 const SVG_PATHS = {
+  'camera': 'M3 7h4l2-3h6l2 3h4v14H3z M8 13a4 4 0 1 0 8 0a4 4 0 1 0 -8 0',
   'user': 'M8 7a4 4 0 1 0 8 0a4 4 0 0 0 -8 0 M6 21v-2a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4v2',
   'map-2': 'M12 18.5l-3 -1.5l-6 3v-13l6 -3l6 3l6 -3v7.5 M9 4v13 M15 7v5 M21.121 20.121a3 3 0 1 0 -4.242 0c.418 .419 1.125 1.045 2.121 1.879c1.051 -.89 1.759 -1.516 2.121 -1.879z M19 18v.01',
   'arrow-right': 'M5 12h14 M13 18l6 -6 M13 6l6 6',
@@ -1736,11 +1773,16 @@ function goHome(){
 /* ---------- 公平碰面：模式状态。房间协作模式 = 每人放自己的点、实时同步 ---------- */
 var mpRoomMode = false;   /* 当前是否处于房间协作模式 */
 var mpRoomRef = null;     /* 协作模式下对应的房间对象 */
+var mpMineEditorRoomId = '';
+var mpMineEditorOpen = true;
 
 function openMidpoint(roomMode){
   mpPointSaveGeneration++;
   var room = (roomMode && typeof rmCurrentRoom === 'function') ? rmCurrentRoom() : null;
   var sharedRoom = room && room.toolType === 'midpoint';
+  var roomId = sharedRoom ? String(room.docId || '') : '';
+  mpMineEditorRoomId = roomId;
+  if (sharedRoom) mpMineEditorOpen = true;
   mpRoomMode = !!sharedRoom;
   mpRoomRef = sharedRoom ? room : null;
 
@@ -1751,22 +1793,39 @@ function openMidpoint(roomMode){
   /* 复位结果区，回到输入态 */
   var resArea = document.getElementById('mpResultArea'); if (resArea) resArea.style.display = 'none';
   if(window.pintuSetMidpointState) pintuSetMidpointState(false);
-  var ia = document.getElementById('mpInputArea'); if (ia) ia.style.display = 'block';
+  var ia = document.getElementById('mpInputArea'); if (ia) ia.style.display = 'none';
   var btn = document.getElementById('btnCalc'); if (btn){ btn.style.display = 'flex'; btn.disabled = false; }
 
   var stand = document.getElementById('mpStandaloneInputs');
   var panel = document.getElementById('mpRoomPanel');
+  var standaloneIntro = document.getElementById('mpStandaloneIntro');
+  var cityScope = document.getElementById('mpCityScopeBar');
+  var roomCardTitle = document.getElementById('mpRoomCardTitle');
+  var roomCardSubtitle = document.getElementById('mpRoomCardSubtitle');
+  var roomCardIcon = document.querySelector('[data-room-type="midpoint"] .tool-room-icon');
+  var roomEditorName = document.querySelector('#mpMineEditor .mp-mine-name-wrap');
+  var roomTitle = document.querySelector('[data-room-type="midpoint"] .tool-room-title');
+  if (roomTitle) roomTitle.textContent = '碰面房间';
+  if (roomCardSubtitle) roomCardSubtitle.textContent = mpRoomMode ? '成员填写的出发点会同步给房间成员。' : '创建房间并分享邀请链接，朋友加入后各自填写出发点。';
+  if (roomCardIcon) roomCardIcon.hidden = !!mpRoomMode;
+  if (standaloneIntro) standaloneIntro.hidden = !!mpRoomMode;
+  if (cityScope) cityScope.hidden = !!mpRoomMode;
+  if (roomEditorName) roomEditorName.hidden = !!mpRoomMode;
+  document.getElementById('viewMidpoint').classList.toggle('room-mode', !!mpRoomMode);
   if (mpRoomMode){
     if (stand) stand.style.display = 'none';
     if (panel) panel.style.display = 'block';
+    if (ia) ia.style.display = 'block';
+    if (btn) btn.style.display = 'flex';
     if (btn) btn.textContent = '寻找碰面点';
     mpRenderRoomPanel(mpRoomRef);
     mpRenderDecisionPanel(mpRoomRef);
     mpLoadMineEditor(mpRoomRef);
+    mpSetMineEditorOpen(mpMineEditorOpen);
   } else {
     if (stand) stand.style.display = 'block';
     if (panel) panel.style.display = 'none';
-    if (btn) btn.textContent = '寻找碰面点';
+    if (btn) btn.style.display = 'none';
   }
   if (typeof rmRefreshTypedRoomUI === 'function') rmRefreshTypedRoomUI('midpoint');
 }
@@ -1818,9 +1877,21 @@ function mpRenderRoomPanel(room){
   var listEl = document.getElementById('mpRoomList');
   var countEl = document.getElementById('mpRoomCount');
   if (!listEl) return;
-  var people = (room && room.meetup && room.meetup.people) ? room.meetup.people : [];
+  var people = (room && room.meetup && room.meetup.people) ? room.meetup.people.slice() : [];
+  var byUid = new Map(people.filter(function(person){ return person && person.uid; }).map(function(person){ return [String(person.uid), person]; }));
+  (room && room.members || []).forEach(function(member){
+    if (!member || !member.uid) return;
+    var uid = String(member.uid);
+    if (!byUid.has(uid)) byUid.set(uid, { uid: uid, name: member.name || '成员', address: '', lat: null, lng: null });
+    else if (!byUid.get(uid).name && member.name) byUid.get(uid).name = member.name;
+  });
+  people = Array.from(byUid.values());
   var ready = people.filter(function(p){ return p.lat != null && p.lng != null; }).length;
+  var headerTitle = document.getElementById('mpRoomCardTitle');
+  if (headerTitle) headerTitle.textContent = '碰面房间 · ' + people.length + ' 位成员';
   if (countEl) countEl.textContent = ready >= 2 ? ('· ' + ready + ' 人已放点，可算中点') : ('· ' + ready + ' 人已放点，至少 2 人');
+  var calcBtn = document.getElementById('btnCalc');
+  if (calcBtn && mpRoomMode) calcBtn.disabled = ready < 2;
   listEl.innerHTML = '';
   if (people.length === 0){
     listEl.innerHTML = '<div class="mp-room-empty">还没有人放点，你可以第一个放下自己的出发点 ↓</div>';
@@ -1831,21 +1902,22 @@ function mpRenderRoomPanel(room){
     var row = document.createElement('div');
     row.className = 'mp-room-item' + (mine ? ' mine' : '');
     var initial = (p.name || '?').slice(0, 1);
+    var ownAvatar = '';
+    if (mine) { try { var savedAvatar = localStorage.getItem('pintu_visitor_avatar_v1') || ''; if (/^data:image\/(?:jpeg|png|webp);base64,/.test(savedAvatar)) ownAvatar = savedAvatar; } catch (_) {} }
     row.innerHTML =
-      '<div class="mp-room-avatar" style="background:' + appSafeColor(p.color || '#3E6E8E') + ';">' + appEscapeHtml(initial) + '</div>' +
+      (ownAvatar ? '<img class="mp-room-avatar" src="' + appEscapeHtml(ownAvatar) + '" alt="" style="object-fit:cover;">' : '<div class="mp-room-avatar" style="background:' + appSafeColor(p.color || '#3E6E8E') + ';">' + appEscapeHtml(initial) + '</div>') +
       '<div class="mp-room-info">' +
         '<div class="mp-room-name">' + appEscapeHtml(p.name || '某人') + (mine ? '（我）' : '') + '</div>' +
-        '<div class="mp-room-addr' + (p.address ? '' : ' pending') + '">' + (p.address ? appEscapeHtml(p.address) : '尚未填写地址') + '</div>' +
       '</div>' +
-      (mine ? '<div class="mp-room-actions">' +
-        '<button class="mp-room-edit" type="button" title="修改我的名字和地点">修改</button>' +
-        '<button class="mp-room-del" type="button" title="移除我的点">×</button>' +
-      '</div>' : '');
+      (mine ? '<div class="mp-room-actions"><button class="mp-room-editor-toggle" type="button" aria-expanded="' + String(mpMineEditorOpen) + '">' + (mpMineEditorOpen ? '收起' : (p.address ? '修改' : '填写')) + '</button></div>' : '') +
+      '<div class="mp-room-address-card' + (p.address ? '' : ' pending') + '"><div class="mp-room-address-label">' + (p.address ? '当前地点' : '出发点') + '</div><div class="mp-room-addr">' + (p.address ? appEscapeHtml(p.address) : '等待填写出发点') + '</div></div>';
     if (mine){
-      var edit = row.querySelector('.mp-room-edit');
-      var del = row.querySelector('.mp-room-del');
-      if (edit) edit.addEventListener('click', function(){ mpBeginEditMyPoint(p); });
-      if (del) del.addEventListener('click', function(){ mpRemoveMyPoint(room); });
+      var edit = row.querySelector('.mp-room-editor-toggle');
+      if (edit) edit.addEventListener('click', function(){
+        if (mpMineEditorOpen) mpSetMineEditorOpen(false);
+        else { mpSetMineEditorOpen(true); if (p.address || p.lat != null) mpBeginEditMyPoint(p); }
+        mpRenderRoomPanel(mpRoomRef || room);
+      });
     }
     listEl.appendChild(row);
   });
@@ -1875,6 +1947,8 @@ function mpLoadMineEditor(room){
     addressInput.dataset.lat = mine.lat;
     addressInput.dataset.lng = mine.lng;
   }
+  var clearButton = document.getElementById('mpMineClear');
+  if (clearButton) clearButton.hidden = !(mine && mine.lat != null && mine.lng != null);
   if (suggest) suggest.style.display = 'none';
   mpSetMineEditing(false);
 }
@@ -1884,9 +1958,17 @@ function mpSetMineEditing(editing){
   var label = document.getElementById('mpMineLabel');
   var setBtn = document.getElementById('mpMineSet');
   if (editor) editor.classList.toggle('editing', !!editing);
-  if (label) label.textContent = editing ? '修改我的名字和出发点' : '我的名字和出发点';
-  if (setBtn) setBtn.textContent = editing ? '保存修改' : '保存 / 更新名字和地点';
+  if (label) label.textContent = editing ? '修改我的出发点' : '搜索或修改地点';
+  if (setBtn) setBtn.textContent = editing ? '保存我的地点' : '保存我的地点';
 }
+
+function mpSetMineEditorOpen(open){
+  mpMineEditorOpen = !!open;
+  var editor = document.getElementById('mpMineEditor');
+  if (editor) { editor.hidden = !mpMineEditorOpen; editor.classList.toggle('collapsed', !mpMineEditorOpen); }
+}
+
+function mpToggleMineEditor(){ mpSetMineEditorOpen(!mpMineEditorOpen); }
 
 function mpBeginEditMyPoint(person){
   mpPointSaveGeneration++;
@@ -1904,6 +1986,7 @@ function mpBeginEditMyPoint(person){
     addressInput.dataset.lng = person.lng;
   }
   mpSetMineEditing(true);
+  mpSetMineEditorOpen(true);
   if (editor && editor.scrollIntoView){ editor.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
   setTimeout(function(){ nameInput.focus(); nameInput.select(); }, 260);
 }
@@ -1957,7 +2040,7 @@ function mpSetMyPoint(){
     var setBtn = document.getElementById('mpMineSet');
     if (setBtn){
       setBtn.textContent = '已保存 ✓';
-      setTimeout(function(){ if (!document.getElementById('mpMineEditor').classList.contains('editing')) setBtn.textContent = '保存 / 更新名字和地点'; }, 1200);
+      setTimeout(function(){ if (!document.getElementById('mpMineEditor').classList.contains('editing')) setBtn.textContent = '保存我的地点'; }, 1200);
     }
   }
 
@@ -1975,10 +2058,13 @@ function mpSetMyPoint(){
   }
 }
 
-function mpRemoveMyPoint(room){
+function mpClearMyPoint(){
+  var room = mpRoomRef;
+  if (!room || !confirm('清除后不会再参与中点计算。确认清除我的出发点？')) return;
   var people = ((room.meetup && room.meetup.people) ? room.meetup.people : []).filter(function(p){ return p.uid !== window.rmMyUid; });
   mpRoomWrite(room, people);
   mpLoadMineEditor(room);
+  mpSetMineEditorOpen(true);
 }
 
 /* 从共享的出发点算中点 */
@@ -2186,15 +2272,17 @@ function mpRecordSwipeDecision(poi, dir){
   var geo = document.getElementById('mpMineGeo');
   var setBtn = document.getElementById('mpMineSet');
   var cancelBtn = document.getElementById('mpMineCancel');
+  var clearBtn = document.getElementById('mpMineClear');
   var nameInput = document.getElementById('mpMineName');
   if (nameInput){
     try { nameInput.value = localStorage.getItem('pintu_nickname') || ''; } catch(e){}
   }
-  if (geo && typeof getIconHtml === 'function') geo.innerHTML = getIconHtml('current-location') + '<span class="loc-action-label">定位</span>';
+  if (geo && typeof getIconHtml === 'function') geo.innerHTML = getIconHtml('current-location') + '<span class="loc-action-label">定位我的位置</span>';
   if (input && box) bindAddressAutocompleteUI(input, box);
   if (geo && input) geo.addEventListener('click', function(){ geolocateMe(input); });
   if (setBtn) setBtn.addEventListener('click', mpSetMyPoint);
   if (cancelBtn) cancelBtn.addEventListener('click', mpCancelMineEdit);
+  if (clearBtn) clearBtn.addEventListener('click', mpClearMyPoint);
 })();
 
 /* ============================================================
@@ -2260,11 +2348,25 @@ function getCurrentSearchCityName() {
 
 
 function relabelLocRows(){
-  document.querySelectorAll('#locList .loc-item').forEach((row, i) => {
+  const rows = Array.from(document.querySelectorAll('#locList .loc-item'));
+  rows.forEach((row, i) => {
     const ava = row.querySelector('.loc-avatar');
-    ava.textContent = String.fromCharCode(65 + i);
+    const name = row.querySelector('.loc-person-name');
+    const del = row.querySelector('.loc-del');
+    const personName = i === 0 ? '我' : '朋友 ' + String.fromCharCode(65 + i);
+    ava.textContent = i === 0 ? '我' : String.fromCharCode(65 + i);
+    if (name) name.textContent = personName;
+    if (del) del.hidden = i === 0 || rows.length <= 2;
     ava.style.background = LOC_COLORS[i % LOC_COLORS.length];
   });
+  updateStandaloneCalcButton();
+}
+
+function updateStandaloneCalcButton(){
+  const button = document.getElementById('btnCalc');
+  if (!button || mpRoomMode) return;
+  const rows = Array.from(document.querySelectorAll('#locList .loc-item'));
+  button.disabled = rows.length < 2 || rows.some(row => !row.querySelector('.loc-input').value.trim());
 }
 
 function addLocRow(preset){
@@ -2275,10 +2377,11 @@ function addLocRow(preset){
   row.className = 'loc-item';
   row.innerHTML = `
     <div class="loc-avatar"></div>
+    <div class="loc-person-name"></div>
     <div class="loc-field">
       <div class="loc-input-wrap">
-        <input type="text" class="loc-input" placeholder="输入地址，或点右侧定位" autocomplete="off">
-        <button class="loc-action-btn" type="button" aria-label="获取当前位置" title="获取我的当前位置">${getIconHtml('current-location')}<span class="loc-action-label">定位</span></button>
+      <input type="text" class="loc-input" placeholder="输入地址，或点右侧定位" autocomplete="off">
+        <button class="loc-action-btn" type="button" aria-label="定位我的位置" title="定位我的位置">${getIconHtml('current-location')}<span class="loc-action-label">定位</span></button>
       </div>
       <div class="loc-suggest"></div>
     </div>
@@ -2299,6 +2402,7 @@ function addLocRow(preset){
   list.appendChild(row);
   relabelLocRows();
   bindAddressAutocompleteUI(input, suggestBox);
+  input.addEventListener('input', updateStandaloneCalcButton);
 }
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -2509,7 +2613,9 @@ function geolocateMe(inputEl) {
   var previous = {value:inputEl.value,lat:inputEl.dataset.lat,lng:inputEl.dataset.lng,selectedSearchName:inputEl.dataset.selectedSearchName};
   var wrap = inputEl.closest('.loc-input-wrap');
   var button = wrap && wrap.querySelector('.loc-action-btn');
+  if (!button && inputEl.id === 'mpMineInput') button = document.getElementById('mpMineGeo');
   var label = button && button.querySelector('.loc-action-label');
+  var idleLabel = label ? label.textContent : '定位';
   var pending = true;
   var timer = setTimeout(function(){ fail({message:'timeout'}); }, 12000);
   inputEl.dataset.locating = 'true';
@@ -2524,7 +2630,7 @@ function geolocateMe(inputEl) {
     delete inputEl.dataset.locating;
     inputEl.removeEventListener('input', release);
     if (button) { button.disabled = false; button.removeAttribute('aria-busy'); }
-    if (label) label.textContent = '定位';
+    if (label) label.textContent = idleLabel;
   }
   function fail(result) {
     if (!pending) return;
@@ -4341,16 +4447,19 @@ function glRenderHomeTripList(){
   });
   var label = document.getElementById('glHomeTripsLabel');
   var list = document.getElementById('glHomeTripsList');
+  var empty = document.getElementById('glHomeTripsEmpty');
   if (!label || !list) return;
   if (visibleTrips.length === 0){
     list.innerHTML = '';
-    label.style.display = 'none';
+    label.style.display = 'block';
     list.style.display = 'none';
+    if (empty) empty.hidden = false;
     if (typeof rmUpdateTripsEmptyState === 'function') rmUpdateTripsEmptyState();
     return;
   }
   label.style.display = 'block';
   list.style.display = 'block';
+  if (empty) empty.hidden = true;
   list.innerHTML = '';
   visibleTrips.forEach(function(trip){
     var totalCents = trip.expenses.reduce(function(s, e){ return s + e.amountCents; }, 0);
@@ -4984,12 +5093,7 @@ function rmIsRoomOwner(room){
 
 function rmUpdateTripsEmptyState(){
   var empty = document.getElementById('tripsEmptyState');
-  var roomList = document.getElementById('rmHomeRoomsList');
-  var tripList = document.getElementById('glHomeTripsList');
-  if (!empty || !roomList || !tripList) return;
-  var roomsHidden = roomList.style.display === 'none';
-  var tripsHidden = tripList.style.display === 'none';
-  empty.style.display = roomsHidden && tripsHidden ? 'block' : 'none';
+  if (empty) empty.hidden = true;
 }
 
 /* 房间结束或本人退出后，把有支出的共享账本留成一份本机历史快照；
@@ -5141,14 +5245,17 @@ function rmRenderHomeRoomList(){
   if (!label || !list) return;
 
   function paint(){
+    var empty = document.getElementById('rmHomeRoomsEmpty');
     if (ROOMS.length === 0){
-      label.style.display = 'none';
+      label.style.display = 'block';
       list.style.display = 'none';
+      if (empty) empty.hidden = false;
       rmUpdateTripsEmptyState();
       return;
     }
     label.style.display = 'block';
     list.style.display = 'block';
+    if (empty) empty.hidden = true;
     list.innerHTML = '';
     ROOMS.forEach(function(room){
       /* 优先用云端共享账本；没有再退回本地镜像行程 */
@@ -6032,12 +6139,12 @@ function spinnerSpin(){
     midpoint: {
       nameId: 'mpEntryName', codeId: 'mpJoinCode', createId: 'mpCreateRoomBtn', joinId: 'mpJoinRoomBtn',
       entryId: 'mpCollabEntry', activeId: 'mpCollabActive', activeCodeId: 'mpActiveCode', errorId: 'mpRoomError',
-      copyId: 'mpCopyCodeBtn', leaveId: 'mpLeaveRoomBtn', label: '碰面', createText: '创建碰面码', joinText: '加入'
+      copyId: 'mpCopyCodeBtn', shareId: 'mpShareRoomBtn', leaveId: 'mpLeaveRoomBtn', label: '碰面', createText: '＋ 创建房间', joinText: '加入房间'
     },
     ledger: {
       nameId: 'glEntryName', codeId: 'glJoinCode', createId: 'glCreateRoomBtn', joinId: 'glJoinRoomBtn',
       entryId: 'glCollabEntry', activeId: 'glCollabActive', activeCodeId: 'glActiveCode', errorId: 'glRoomError',
-      copyId: 'glCopyCodeBtn', leaveId: 'glLeaveRoomBtn', label: '账本', createText: '创建账本码', joinText: '加入'
+      copyId: 'glCopyCodeBtn', shareId: 'glShareRoomBtn', leaveId: 'glLeaveRoomBtn', label: '账本', createText: '＋ 创建账本房间', joinText: '加入房间'
     }
   };
   var typedPollTimer = null;
@@ -6065,6 +6172,32 @@ function spinnerSpin(){
   }
   function savedNickname(){
     try { return localStorage.getItem('pintu_nickname') || ''; } catch(e){ return ''; }
+  }
+  function inviteUrl(room){
+    var url = new URL(window.location.href);
+    url.search = '';
+    url.hash = '';
+    url.searchParams.set('code', room.code);
+    url.searchParams.set('type', room.toolType);
+    return url.href;
+  }
+  function shareTypedRoom(type){
+    var room = typedRoom(type);
+    if (!room) return;
+    var url = inviteUrl(room);
+    var title = type === 'midpoint' ? '邀请你加入公平碰面' : '邀请你加入行程账本';
+    var text = title + '，房间码：' + room.code;
+    if (navigator.share) {
+      navigator.share({ title: title, text: text, url: url }).then(function(){
+        if (typeof showAppToast === 'function') showAppToast('邀请链接已打开分享面板');
+      }).catch(function(error){ if (!error || error.name !== 'AbortError') copyText(url, '邀请链接已复制'); });
+    } else copyText(url, '邀请链接已复制');
+  }
+  function copyText(value, message){
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(value).then(function(){ if (typeof showAppToast === 'function') showAppToast(message); })
+        .catch(function(){ window.prompt('复制以下内容后发送给朋友', value); });
+    } else window.prompt('复制以下内容后发送给朋友', value);
   }
   function setError(type, message){
     var el = document.getElementById(CFG[type].errorId);
@@ -6094,9 +6227,16 @@ function spinnerSpin(){
     var leaveBtn = document.getElementById(c.leaveId);
     if (nameInput && !nameInput.value) nameInput.value = savedNickname();
     if (entry) entry.style.display = room ? 'none' : 'flex';
-    if (active) active.style.display = room ? 'flex' : 'none';
+    if (active) active.style.display = room ? (type === 'ledger' ? 'grid' : 'flex') : 'none';
     if (code) code.textContent = room ? room.code : '------';
-    if (leaveBtn) leaveBtn.textContent = room && rmIsRoomOwner(room) ? '取消房间' : '退出房间';
+    if (leaveBtn) leaveBtn.textContent = room && rmIsRoomOwner(room) ? '解散房间' : '退出房间';
+    if (type === 'midpoint') {
+      var transfer = document.getElementById('mpTransferRoomBtn');
+      if (transfer) transfer.hidden = !room || !rmIsRoomOwner(room);
+    } else {
+      var ledgerTransfer = document.getElementById('glTransferRoomBtn');
+      if (ledgerTransfer) ledgerTransfer.hidden = !room || !rmIsRoomOwner(room);
+    }
   };
 
   function applyTypedRoomDoc(docId, type, doc){
@@ -6381,6 +6521,8 @@ function spinnerSpin(){
       copyRoomCode(copyBtn, room.code);
     });
     if (leaveBtn) leaveBtn.addEventListener('click', function(){ leaveTyped(type); });
+    var shareBtn = document.getElementById(c.shareId);
+    if (shareBtn) shareBtn.addEventListener('click', function(){ shareTypedRoom(type); });
     rmRefreshTypedRoomUI(type);
   });
 
@@ -6388,6 +6530,13 @@ function spinnerSpin(){
   var homeJoinCode = document.getElementById('homeJoinCode');
   var homeJoinButton = document.getElementById('homeJoinRoomBtn');
   if (homeJoinName && !homeJoinName.value) homeJoinName.value = savedNickname();
+  if (homeJoinCode) {
+    try {
+      var inviteParams = new URLSearchParams(window.location.search);
+      var inviteCode = String(inviteParams.get('code') || '').toUpperCase().replace(/[^A-HJ-NP-Z2-9]/g, '').slice(0, 8);
+      if (inviteCode) homeJoinCode.value = inviteCode;
+    } catch (_) {}
+  }
   if (homeJoinCode){
     homeJoinCode.addEventListener('input', function(){ this.value = this.value.toUpperCase().replace(/[^A-HJ-NP-Z2-9]/g, '').slice(0, 8); });
     homeJoinCode.addEventListener('keydown', function(e){ if (e.key === 'Enter') joinAnyRoom(); });
@@ -6434,5 +6583,71 @@ function spinnerSpin(){
 </script>
 
 <script src="/midpoint-ui.js"></script>
+<script>
+(function initVisitorProfile(){
+  var nicknameKey = 'pintu_nickname';
+  var avatarKey = 'pintu_visitor_avatar_v1';
+  var name = document.getElementById('visitorProfileName');
+  var avatar = document.getElementById('visitorProfileAvatar');
+  var edit = document.getElementById('visitorProfileEdit');
+  var editor = document.getElementById('visitorProfileEditor');
+  var field = document.getElementById('visitorProfileNameInput');
+  var input = document.getElementById('visitorAvatarInput');
+  if (!name || !editor || !field) return;
+  function storedName(){ try { return String(localStorage.getItem(nicknameKey) || '').trim(); } catch (_) { return ''; } }
+  function updateName(value){
+    var next = String(value || '').trim().slice(0,24);
+    if (!next) { if (typeof showAppToast === 'function') showAppToast('请输入访客名称'); return false; }
+    try { localStorage.setItem(nicknameKey, next); } catch (_) { if (typeof showAppToast === 'function') showAppToast('浏览器存储不可用，名称未保存'); return false; }
+    name.textContent = next;
+    field.value = next;
+    ['homeJoinName','mpEntryName','glEntryName'].forEach(function(id){ var element=document.getElementById(id); if(element) element.value=next; });
+    editor.hidden = true;
+    if (typeof showAppToast === 'function') showAppToast('访客名称已保存在当前浏览器');
+    return true;
+  }
+  function storeAvatar(dataUrl){
+    try { localStorage.setItem(avatarKey, dataUrl); avatar.src=dataUrl; return true; }
+    catch (_) { if (typeof showAppToast === 'function') showAppToast('浏览器存储空间不足，头像未保存'); return false; }
+  }
+  var nickname = storedName();
+  name.textContent = nickname || '当前浏览器访客';
+  field.value = nickname;
+  var joinName = document.getElementById('homeJoinName');
+  if (joinName && !joinName.value) joinName.value = nickname;
+  ['mpEntryName','glEntryName'].forEach(function(id){ var element=document.getElementById(id); if(element && !element.value) element.value=nickname; });
+  try {
+    var savedAvatar = localStorage.getItem(avatarKey);
+    if (savedAvatar && /^data:image\/(?:jpeg|png|webp);base64,/.test(savedAvatar)) avatar.src=savedAvatar;
+  } catch (_) {}
+  edit.addEventListener('click', function(){ editor.hidden = !editor.hidden; if (!editor.hidden) { field.value=storedName(); field.focus(); } });
+  document.getElementById('visitorProfileCancel').addEventListener('click', function(){ editor.hidden=true; });
+  document.getElementById('visitorProfileSave').addEventListener('click', function(){ updateName(field.value); });
+  field.addEventListener('keydown', function(event){ if(event.key==='Enter'){event.preventDefault();updateName(field.value);} if(event.key==='Escape')editor.hidden=true; });
+  if (input) input.addEventListener('change', function(){
+    var file = input.files && input.files[0];
+    if (!file) return;
+    if (!/^image\//.test(file.type) || file.size > 8*1024*1024) { if(typeof showAppToast==='function')showAppToast('请选择小于 8MB 的图片'); input.value=''; return; }
+    var reader = new FileReader();
+    reader.onload = function(){
+      var image = new Image();
+      image.onload = function(){
+        var canvas=document.createElement('canvas'), edge=192, scale=Math.min(1,edge/Math.max(image.naturalWidth,image.naturalHeight));
+        canvas.width=Math.max(1,Math.round(image.naturalWidth*scale));canvas.height=Math.max(1,Math.round(image.naturalHeight*scale));
+        var context=canvas.getContext('2d'); if(!context){if(typeof showAppToast==='function')showAppToast('无法读取这张图片');return;}
+        context.drawImage(image,0,0,canvas.width,canvas.height);
+        var data=canvas.toDataURL('image/jpeg',.78);
+        if(storeAvatar(data)&&typeof showAppToast==='function')showAppToast('访客头像已保存在当前浏览器');
+        canvas.width=canvas.height=1;
+      };
+      image.onerror=function(){if(typeof showAppToast==='function')showAppToast('无法读取这张图片');};
+      image.src=String(reader.result||'');
+    };
+    reader.onerror=function(){if(typeof showAppToast==='function')showAppToast('读取图片失败');};
+    reader.readAsDataURL(file);
+    input.value='';
+  });
+})();
+</script>
 </body>
 </html>

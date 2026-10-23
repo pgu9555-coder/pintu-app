@@ -4,6 +4,7 @@ const path = require("node:path");
 
 const htmlPath = path.join(__dirname, "..", "index.html");
 const source = fs.readFileSync(htmlPath, "utf8");
+const parityCss = fs.readFileSync(path.join(__dirname, "..", "web-parity.css"), "utf8");
 
 assert.doesNotMatch(source, /^(<<<<<<<|=======|>>>>>>>)/m, "index.html contains unresolved merge markers");
 
@@ -147,5 +148,17 @@ assert.match(source, /rmTcbError\s*=\s*null;[\s\S]*?rmBackendStatus\s*=\s*\{\s*s
 assert.match(source, /function\s+createTyped\s*\([\s\S]*?rmEnsureTcbReady\(\)\.then/, "typed room creation must use retryable bounded backend initialization");
 assert.match(source, /function\s+findAnyTypedRoom\s*\([\s\S]*?rmEnsureTcbReady\(\)\.then/, "universal room join must use retryable bounded backend initialization");
 assert.doesNotMatch(source, /a\.amap\.com\/jsapi_demos/, "map markers must not depend on the unreliable AMap demo-assets host");
+
+assert.match(source, /if\s*\(sharedRoom\)\s*mpMineEditorOpen\s*=\s*true/, "entering a midpoint room must open the saved-point editor by default");
+assert.match(source, /editor\.hidden\s*=\s*!mpMineEditorOpen/, "manual collapse must hide the room editor in the browser DOM");
+const roomSyncStart = source.indexOf('function mpOnRoomSync(room){');
+const roomSyncEnd = source.indexOf('/* Shared decision is entirely room-backed.', roomSyncStart);
+assert.ok(roomSyncStart >= 0 && roomSyncEnd > roomSyncStart, "could not isolate midpoint sync handler");
+assert.doesNotMatch(source.slice(roomSyncStart, roomSyncEnd), /mpSetMineEditorOpen\s*\(\s*true\s*\)/, "poll refresh must not reopen a manually collapsed editor");
+assert.match(source, /appEscapeHtml\(p\.address\)/, "saved room addresses must be escaped while rendering");
+assert.match(parityCss, /#viewMidpoint \.mp-room-addr\s*\{[^}]*overflow-wrap:\s*anywhere[^}]*font-size:\s*16px/s, "long room addresses must wrap in native-sized text");
+assert.match(source, /if\s*\(standaloneIntro\)\s*standaloneIntro\.hidden\s*=\s*!!mpRoomMode/, "room entry must not show standalone city/address controls");
+assert.match(source, /if\s*\(ia\)\s*ia\.style\.display\s*=\s*'none'/, "non-room entry must not show the legacy standalone address card");
+assert.match(source, /访客资料仅保存在当前浏览器，不代表微信账号/, "browser visitor profile must not claim WeChat identity");
 
 console.log(`index.html checks passed (${inlineScripts.length} inline scripts).`);

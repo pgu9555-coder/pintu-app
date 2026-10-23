@@ -21,7 +21,9 @@ function prepare(env = process.env, projectRoot = root) {
   fs.writeFileSync(path.join(root,'app-config.js'),'// Generated public configuration. Never put secrets here.\nwindow.PINTU_CONFIG = Object.freeze('+JSON.stringify({cloudbaseEnvId:envId,amapServiceHost:proxy+'/_AMapService',collaborationOrigin,supportEmail:'pgu9555@gmail.com'},null,2)+');\n');
   fs.writeFileSync(path.join(root,'miniprogram-shell/environment.js'),"// Public environment identifier shared with the web deployment.\nmodule.exports = "+JSON.stringify({cloudbaseEnvId:envId})+'\n');
   const destination=path.join(root,'cloudbase-site');fs.mkdirSync(destination,{recursive:true});
-  for(const name of ['index.html','app-config.js','launch-support.js','privacy.html','terms.html','legal.css','midpoint.css','midpoint-ui.js'])fs.copyFileSync(path.join(root,name),path.join(destination,name));
+  for(const name of ['index.html','app-config.js','launch-support.js','privacy.html','terms.html','legal.css','midpoint.css','midpoint-ui.js','web-parity.css'])fs.copyFileSync(path.join(root,name),path.join(destination,name));
+  const icons=path.join(root,'assets','icons');
+  if(fs.existsSync(icons))fs.cpSync(icons,path.join(destination,'assets','icons'),{recursive:true});
   if(mapKey){
     const html=fs.readFileSync(path.join(destination,'index.html'),'utf8');
     fs.writeFileSync(path.join(destination,'index.html'),html.replace(/(https:\/\/webapi\.amap\.com\/maps\?v=2\.0&key=)[a-f0-9]+/i,'$1'+mapKey));

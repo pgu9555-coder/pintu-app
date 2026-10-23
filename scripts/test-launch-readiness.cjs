@@ -145,11 +145,14 @@ async function main(){
   const parent=path.resolve(root,'..'), temp=fs.mkdtempSync(path.join(parent,'pintu-release-test-'));
   try{
     fs.mkdirSync(path.join(temp,'miniprogram-shell'));
-    for(const name of ['cloudbaserc.json','index.html','launch-support.js','privacy.html','terms.html','legal.css'])fs.copyFileSync(path.join(root,name),path.join(temp,name));
+    for(const name of ['cloudbaserc.json','index.html','launch-support.js','privacy.html','terms.html','legal.css','web-parity.css'])fs.copyFileSync(path.join(root,name),path.join(temp,name));
     fs.writeFileSync(path.join(temp,'midpoint.css'),'/* midpoint style fixture */');
     fs.writeFileSync(path.join(temp,'midpoint-ui.js'),'// midpoint interaction fixture');
+    fs.mkdirSync(path.join(temp,'assets','icons'),{recursive:true});
+    for(const name of ['person.svg','trip-notebook.svg','cloud-members.svg'])fs.copyFileSync(path.join(root,'assets','icons',name),path.join(temp,'assets','icons',name));
     require('./prepare-release.cjs').prepare({CLOUDBASE_ENV_ID:'pintu-test-env',PINTU_MAP_PROXY_ORIGIN:'https://proxy.example',AMAP_JS_API_KEY:'c'.repeat(32)},temp);
-    for(const name of ['midpoint.css','midpoint-ui.js'])assert.equal(fs.readFileSync(path.join(temp,'cloudbase-site',name),'utf8'),fs.readFileSync(path.join(temp,name),'utf8'));
+    for(const name of ['midpoint.css','midpoint-ui.js','web-parity.css'])assert.equal(fs.readFileSync(path.join(temp,'cloudbase-site',name),'utf8'),fs.readFileSync(path.join(temp,name),'utf8'));
+    for(const name of ['person.svg','trip-notebook.svg','cloud-members.svg'])assert.equal(fs.readFileSync(path.join(temp,'cloudbase-site','assets','icons',name),'utf8'),fs.readFileSync(path.join(temp,'assets','icons',name),'utf8'));
     const generated=fs.readFileSync(path.join(temp,'app-config.js'),'utf8');
     assert.match(generated,/pintu-test-env/);assert.match(generated,/https:\/\/proxy.example\/_AMapService/);
     assert.doesNotMatch(generated,/securityJsCode|AMAP_SECURITY_JS_CODE/);
