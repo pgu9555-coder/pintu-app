@@ -168,15 +168,21 @@ assert.ok(!/profile\.nickname\s*\|\|\s*storage\.getName\(\)/.test(homePageSource
 assert.ok(!/wx\.getUserProfile/.test(homePageSource + homeMarkup), "the deprecated getUserProfile API must not be used");
 assert.ok(!/wx\.login\s*\(/.test(homePageSource), "trusted CloudBase OpenID must not be replaced by a client login identifier");
 assert.match(homePageSource, /wechatLoginVisible:\s*false/, "home must render before showing any WeChat login prompt");
-assert.match(homeMarkup, /登录后使用多人协作[\s\S]*?暂不登录/, "deferred WeChat login must be optional and cancellable");
+assert.match(homeMarkup, /登录后，继续相聚[\s\S]*?登录后即可使用\{\{loginPurpose\}\}[\s\S]*?微信登录[\s\S]*?暂不登录/, "feature login must be explicit, optional, cancellable, and retain its requested destination");
 assert.match(homeMarkup, /privacyConsentChecked[\s\S]*?《用户服务协议》[\s\S]*?《隐私保护指引》/, "login must expose an unchecked agreement choice and readable policy links");
 assert.match(homePageSource, /confirmWechatLogin\(\)[\s\S]*?!this\.data\.privacyConsentChecked[\s\S]*?ensurePrivacyAuthorized\(\)[\s\S]*?grantAccountConsent\(\)[\s\S]*?ensureAccountScope\(\)[\s\S]*?loadProfile\(\)/, "WeChat login must require active consent and native privacy authorization before binding the trusted account");
 assert.match(homePageSource, /togglePrivacyConsent\(\)[\s\S]*?!this\.data\.serviceAgreementOpened\s*\|\|\s*!this\.data\.privacyContractOpened[\s\S]*?privacyConsentChecked/, "the agreement checkbox must remain unavailable until both documents are opened");
 assert.match(homePageSource, /openServiceAgreement\(\)[\s\S]*?serviceAgreementOpened:\s*true[\s\S]*?openPrivacy\(\)[\s\S]*?privacyContractOpened:\s*true/, "the login flow must record explicit opening of both documents");
 assert.ok(!/wechatProfileConfirming/.test(homePageSource + homeMarkup), "login must not force avatar or nickname confirmation");
-assert.match(homeMarkup, /不会获取手机号[\s\S]*?不会自动读取头像或昵称/, "login must accurately explain that phone and profile fields are not read automatically");
+assert.match(homeMarkup, /不会自动读取头像或昵称/, "login must accurately explain that profile fields are not read automatically");
+assert.ok(!/class="account-trigger"/.test(homeMarkup), "the home page must not show a separate account entry");
+assert.match(homeMarkup, /person\.svg/, "the centered login dialog must use a person icon");
+assert.match(fs.readFileSync(path.join(root, "pages", "home", "index.wxss"), "utf8"), /\.service-links\s*\{[^}]*flex-wrap:\s*nowrap/, "the four service links must remain in one horizontal row");
+assert.match(homePageSource, /openMidpoint\(\)[\s\S]*?requestWechatLogin\(\(\) => this\.openMidpoint\(\), '公平碰面'\)/, "fair meetup must require explicit login and resume the requested entry");
+assert.match(homePageSource, /openLedger\(\)[\s\S]*?requestWechatLogin\(\(\) => this\.openLedger\(\), '行程账本'\)/, "ledger entry must require explicit login and resume the requested entry");
+assert.match(homePageSource, /requestWechatLogin\(afterLogin, purpose, afterCancel\)[\s\S]*?afterWechatLoginCancel/, "login cancellation must support returning to the originating tab");
 assert.ok(!/getPhoneNumber|open-type="getPhoneNumber"/.test(homePageSource + homeMarkup), "home must never request a phone number");
-assert.match(homePageSource, /openProfilePanel\(\)[\s\S]*?requestWechatLogin\([\s\S]*?profilePanelOpen:\s*true/, "profile editing must only appear after the user explicitly opens the account entry");
+assert.match(homePageSource, /openProfilePanel\(afterClose\)[\s\S]*?requestWechatLogin\([\s\S]*?profilePanelOpen:\s*true/, "profile editing must only appear after the user explicitly opens the account entry");
 assert.match(appSource, /applyAccountProfile\(profile\)[\s\S]*?storage\.setAccountScope\(nextProfile\)[\s\S]*?globalData\.accountProfile = nextProfile/, "saved profile changes must refresh the global trusted-account cache");
 assert.match(appSource, /accountConsentGranted:\s*false[\s\S]*?ensureAccountScope\(\)[\s\S]*?!this\.hasAccountConsent\(\)[\s\S]*?Promise\.reject/, "CloudBase identity must not initialize before active login consent");
 assert.match(homePageSource, /loadProfile\(\)[\s\S]*?!app\.hasAccountConsent\(\)[\s\S]*?请先阅读协议并主动登录/, "profile loading must reject attempts that bypass the login consent flow");
@@ -187,11 +193,14 @@ assert.match(homePageSource, /cleanupUploadedOnFailure\s*\?[\s\S]*?deleteUnsaved
 assert.match(homePageSource, /ensurePrivacyAuthorized\(\)[\s\S]*?wx\.getPrivacySetting[\s\S]*?wx\.requirePrivacyAuthorize/, "explicit account entry must use WeChat's current privacy authorization flow when required");
 
 const appConfig = JSON.parse(fs.readFileSync(path.join(root, "app.json"), "utf8"));
+assert.equal(appConfig.tabBar.list.find((item) => item.pagePath === "pages/trips/index").text, "我的行程", "the Trips tab must be renamed");
 assert.ok(appConfig.pages.includes("pages/agreement/index"), "the readable user service agreement must be registered as a page");
 const agreementMarkup = fs.readFileSync(path.join(root, "pages", "agreement", "index.wxml"), "utf8");
 const agreementSource = fs.readFileSync(path.join(root, "pages", "agreement", "index.js"), "utf8");
 for (const topic of ['用户服务协议', '登录与权限', '共同使用', '隐私', '账号', '账目']) assert.ok(agreementSource.includes(topic), `the service agreement must explain ${topic}`);
 assert.match(agreementMarkup, /wx:for="\{\{sections\}\}"/, "agreement page must render the readable policy sections");
+assert.match(fs.readFileSync(path.join(root, "pages", "midpoint", "index.js"), "utf8"), /async onLoad\(options\)[\s\S]*?storage\.isAccountScoped\(\)[\s\S]*?requestWechatLogin/, "direct midpoint routes must enforce the login gate");
+assert.match(fs.readFileSync(path.join(root, "pages", "ledger", "index.js"), "utf8"), /async onLoad\(options\)[\s\S]*?storage\.isAccountScoped\(\)[\s\S]*?requestWechatLogin/, "direct ledger routes must enforce the login gate");
 
 const tripsPageSource = fs.readFileSync(path.join(root, "pages", "trips", "index.js"), "utf8");
 const tripsMarkup = fs.readFileSync(path.join(root, "pages", "trips", "index.wxml"), "utf8");
@@ -202,9 +211,12 @@ assert.match(tripsPageSource, /myRoomsRequestId/, "trips must ignore stale room-
 assert.ok(!/storage\.all\(/.test(tripsPageSource), "trips must not display shared-device room caches");
 assert.match(tripsPageSource, /storage\.getLocal\(LOCAL_LEDGER_TRIPS_KEY/, "trips must read the current guest/account local namespace");
 assert.match(tripsPageSource, /storage\.setLocal\(LOCAL_LEDGER_TRIPS_KEY/, "deleting a local trip must use the current guest/account local namespace");
+assert.match(tripsPageSource, /async newLocal\(\)[\s\S]*?!app\.hasAccountConsent\(\)[\s\S]*?home\.requestWechatLogin/, "creating a new ledger from Trips must use the same explicit login gate");
+assert.match(tripsPageSource, /async openLocal\(event\)[\s\S]*?storage\.isAccountScoped\(\)[\s\S]*?先备份访客账本[\s\S]*?this\.backupGuestTrips\(\)/, "opening a guest ledger must gate login and never reuse its id in an account scope");
+assert.match(tripsPageSource, /profileCardTap\(\)[\s\S]*?home\.openProfilePanel\(\(\) => wx\.switchTab/, "the signed-in Trips account card must open existing profile editing controls and return to Trips");
 assert.match(tripsPageSource, /ensureAccountScope/, "trips must wait for the authenticated account scope before cloud data");
 assert.match(tripsPageSource, /onShow\(\)[\s\S]*?hasAccountConsent\(\)[\s\S]*?!consentGranted\s*\|\|\s*!storage\.isAccountScoped\(\)[\s\S]*?loginRequired:\s*true[\s\S]*?return[\s\S]*?this\.refresh\(\)/, "opening the trips tab must not silently establish a cloud identity before consent");
-assert.match(tripsMarkup, /登录后同步云端房间[\s\S]*?首次进入不会自动登录[\s\S]*?本机账本无需登录[\s\S]*?返回首页登录/, "the signed-out trips state must defer cloud login while retaining device ledgers");
+assert.match(tripsMarkup, /我的行程[\s\S]*?trips-account-card[\s\S]*?登录[\s\S]*?先备份访客账本[\s\S]*?登录后同步云端房间/, "trips must show account controls, keep guest migration reachable, and defer cloud rooms until login");
 assert.match(tripsPageSource, /storage\.save\(\{ docId: entry\.docId, room: entry\.room \}\)/, "opening a trusted cloud room may refresh its local cache");
 assert.match(tripsPageSource, /cloudError/, "trips must retain a clear cloud-load error state");
 assert.match(tripsMarkup, /正在同步你的云端房间/, "trips must render a cloud loading state");

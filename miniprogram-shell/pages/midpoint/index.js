@@ -479,6 +479,22 @@ Page({
   },
 
   async onLoad(options) {
+    this.entryBlocked = false
+    const entryApp = typeof getApp === 'function' ? getApp() : null
+    if (!entryApp || typeof entryApp.hasAccountConsent !== 'function' || !entryApp.hasAccountConsent() || !storage.isAccountScoped()) {
+      this.entryBlocked = true
+      const query = Object.keys(options || {}).map((key) => `${encodeURIComponent(key)}=${encodeURIComponent(options[key])}`).join('&')
+      const destination = `/pages/midpoint/index${query ? `?${query}` : ''}`
+      wx.switchTab({
+        url: '/pages/home/index',
+        success: () => {
+          const pages = typeof getCurrentPages === 'function' ? getCurrentPages() : []
+          const home = pages.find((page) => page && typeof page.requestWechatLogin === 'function')
+          if (home) home.requestWechatLogin(() => wx.navigateTo({ url: destination }), '公平碰面')
+        }
+      })
+      return
+    }
     this.closed = false
     const generation = this.pageGeneration || 0
     this.docId = (options && options.docId) || ''
@@ -543,6 +559,7 @@ Page({
   },
 
   onShow() {
+    if (this.entryBlocked) return
     if (this.localScope !== undefined && typeof storage.localScopeToken === 'function' && !this.localScopeMatches()) this.reloadLocalScope()
     if (this.docId && this.scopeReady) {
       this.startPolling()
@@ -551,6 +568,7 @@ Page({
   },
 
   onHide() {
+    if (this.entryBlocked) return
     this.invalidateLocalAddressSearch()
     this.present({ localAddressSuggestions: [], localAddressSearchLoading: false })
     this.stopPolling()
@@ -558,6 +576,7 @@ Page({
 
   onUnload() {
     this.closed = true
+    if (this.entryBlocked) return
     this.invalidateLocalAddressSearch()
     this.pageGeneration = (this.pageGeneration || 0) + 1
     this.stopPolling()

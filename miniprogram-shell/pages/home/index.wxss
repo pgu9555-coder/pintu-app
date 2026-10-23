@@ -4,13 +4,7 @@
 .brand-mark { width:26px; height:26px; border-radius:7px; background:#0F3D36; display:flex; align-items:center; justify-content:center; }
 .brand-glyph { width:14px; height:14px; }
 .brand-name { color:#0F3D36; font-size:17px; font-weight:700; letter-spacing:0.5px; }
-.account-trigger { position:relative; display:flex; align-items:center; justify-content:center; width:29px; height:29px; min-width:29px; margin:0; padding:0; border:0.5px solid #DED8C6; border-radius:50%; background:#FFFDF6; }
-.account-trigger-active { transform:scale(.96); background:#F2EDE1; }
 .avatar-action::after, .profile-save::after, .profile-text-action::after, .privacy-link::after, .wechat-login-button::after, .wechat-login-cancel::after { border:0; }
-.trigger-avatar { width:24px; height:24px; border-radius:50%; background:#DCE7EC; }
-.trigger-avatar-placeholder { display:flex; align-items:center; justify-content:center; color:#3E6E8E; font-size:11px; font-weight:700; }
-.account-state { position:absolute; right:-0.5px; bottom:-0.5px; width:6.5px; height:6.5px; border:1.5px solid #F6F3EA; border-radius:50%; background:#B8842A; }
-.account-state-ready { background:#0F3D36; }
 .join-card { margin-bottom:22px; padding:14px; border:1px solid #DED8C6; border-radius:16px; background:#FFFDF6; box-shadow:0 5px 16px rgba(15,61,54,.06); }
 .join-heading { display:flex; align-items:center; gap:9px; margin-bottom:11px; }
 .ticket-icon { width:34px; height:34px; flex:0 0 auto; border-radius:10px; background:#F5E8C9; display:flex; align-items:center; justify-content:center; }
@@ -43,7 +37,8 @@
 .wechat-login-overlay { position:fixed; z-index:200; inset:0; display:flex; align-items:center; justify-content:center; box-sizing:border-box; padding:20px; padding-top:calc(20px + env(safe-area-inset-top)); padding-bottom:calc(20px + env(safe-area-inset-bottom)); background:rgba(15,35,32,.58); }
 .wechat-login-dialog { position:relative; width:100%; max-width:315px; box-sizing:border-box; padding:21px 18px 15px; border:1px solid #DED8C6; border-radius:17px; background:#FFFDF6; box-shadow:0 15px 45px rgba(15,35,32,.2); text-align:center; }
 .wechat-login-close { position:absolute; top:9px; right:10px; display:flex; align-items:center; justify-content:center; width:28px; height:28px; border-radius:50%; background:#F6F3EA; color:#4C5C5B; font-size:20px; line-height:1; }
-.wechat-login-mark { display:flex; align-items:center; justify-content:center; width:44px; height:44px; margin:0 auto 11px; border-radius:13px; background:#DDECE7; color:#0F3D36; font-size:17px; font-weight:800; }
+.wechat-login-mark { display:flex; align-items:center; justify-content:center; width:44px; height:44px; margin:0 auto 11px; border-radius:13px; background:#DDECE7; }
+.wechat-login-mark image { width:23px; height:23px; }
 .wechat-login-title { color:#1B2A2E; font-size:18px; font-weight:800; line-height:1.3; }
 .wechat-login-subtitle { margin:6px auto 12px; color:#4C5C5B; font-size:11.5px; line-height:1.55; }
 .wechat-login-points { padding:10px; border-radius:10px; background:#F6F3EA; text-align:left; }
@@ -60,8 +55,8 @@
 .wechat-login-cancel { min-width:0; margin:5px auto 0; padding:0 10px; background:transparent; color:#4C5C5B; font-size:11px; line-height:27px; }
 
 .brand-row { margin-bottom:12px; }
-.service-links { display:flex;flex-wrap:wrap;gap:12px;margin:0 0 16px; }
-.service-links button { margin:0;padding:0;border:0;background:transparent;color:#0F3D36;font-size:12px;line-height:1.6;text-decoration:underline; }
+.service-links { display:flex;flex-wrap:nowrap;align-items:center;justify-content:space-between;gap:6px;margin:0 0 16px;white-space:nowrap; }
+.service-links button { flex:0 1 auto;min-width:0;margin:0;padding:0;border:0;background:transparent;color:#0F3D36;font-size:10.5px;line-height:1.6;text-decoration:underline;white-space:nowrap; }
 .join-card { padding:14px;border-radius:16px;margin-bottom:22px; }
 .join-input { font-size:14px;border-width:1px; }
 .tool-card { min-height:90px;border-radius:16px;padding:14px;gap:14px; }

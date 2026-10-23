@@ -10,13 +10,13 @@ function event(data){return {currentTarget:{dataset:data}}}
 function fixture(overrides={}){
   let definition
   const calls={local:[],scoped:[],toast:[],map:[],modal:[]}
-  const storage={localScopeToken:()=> 'guest',getLocal:()=>null,setLocal:(key,value)=>{calls.local.push({key,value});return true},getScoped:()=>null,setScoped:(key,value)=>{calls.scoped.push({key,value});return true},removeScoped(){},getName:()=>'',saveName(){},isAccountScoped:()=>false}
+  const storage={localScopeToken:()=> 'guest',getLocal:()=>null,setLocal:(key,value)=>{calls.local.push({key,value});return true},getScoped:()=>null,setScoped:(key,value)=>{calls.scoped.push({key,value});return true},removeScoped(){},getName:()=>'',saveName(){},isAccountScoped:()=>true}
   const amap={configuredKey:()=>true,inputTips:async()=>[],nearby:async()=>[],detail:async poi=>({...poi,address:'真实地址'}),categories:async()=>[],categoryPage:async()=>({pois:[],page:2,total:0})}
   Object.assign(amap,overrides.amap||{})
   const wx={showToast:data=>calls.toast.push(data),showModal:data=>calls.modal.push(data),createMapContext:()=>({includePoints:values=>calls.map.push(values)}),pageScrollTo(){},onNetworkStatusChange(){},offNetworkStatusChange(){},navigateBack(){},switchTab(){}}
   Object.assign(wx,overrides.wx||{})
   const modules={'../../utils/ownership':async()=>{},'../../services/roomGateway':{},'../../utils/storage':storage,'../../utils/midpoint':math,'../../utils/layout':{headerTopPx:()=>72},'../../utils/amap':amap,'../../utils/invite':{}}
-  const context={Page:value=>definition=value,require:key=>modules[key],getApp:()=>({hasAccountConsent:()=>false}),wx,console,setTimeout,clearTimeout,setInterval,clearInterval,Set,Map,Date}
+  const context={Page:value=>definition=value,require:key=>modules[key],getApp:()=>({hasAccountConsent:()=>true,ensureAccountScope:async()=>({})}),wx,console,setTimeout,clearTimeout,setInterval,clearInterval,Set,Map,Date}
   vm.runInNewContext(fs.readFileSync(file,'utf8'),context,{filename:file})
   const page=Object.assign({},definition,{data:JSON.parse(JSON.stringify(definition.data)),setData(patch,callback){Object.assign(this.data,patch);if(callback)callback()}})
   return {page,calls,storage,amap,wx,gateway:modules['../../services/roomGateway']}
@@ -27,9 +27,9 @@ async function run(){
     const {page,calls}=fixture()
     await page.onLoad({})
     assert.equal(page.localStorageReady,true)
-    assert.equal(page.scopeReady,false)
+    assert.equal(page.scopeReady,true,'feature parity is checked after login has initialized the account scope')
     assert.equal(page.data.localPoints.length,2,'same two blank departure slots as web')
-    assert.match(page.data.localStorageMessage,/本机/)
+    assert.ok(!page.entryBlocked,'the manual-place parity scenario must enter after the account scope is active')
     page.data.localPoints=[{id:'a',lat:22,lng:114},{id:'b',lat:24,lng:116}]
     page.searchLocalCandidates=()=>{}
     page.calculateLocalMidpoint()

@@ -203,6 +203,25 @@ Page({
   },
 
   async onLoad(options) {
+    this.entryBlocked = false
+    const entryApp = typeof getApp === 'function' ? getApp() : null
+    if (!entryApp || typeof entryApp.hasAccountConsent !== 'function' || !entryApp.hasAccountConsent() || !storage.isAccountScoped()) {
+      this.entryBlocked = true
+      const query = Object.keys(options || {}).map((key) => `${encodeURIComponent(key)}=${encodeURIComponent(options[key])}`).join('&')
+      const destination = `/pages/ledger/index${query ? `?${query}` : ''}`
+      const resume = options && options.tripId && !options.docId
+        ? () => wx.switchTab({ url: '/pages/trips/index', success: () => wx.showToast({ title: '访客账本未删除；登录后请从备份导入', icon: 'none', duration: 3200 }) })
+        : () => wx.navigateTo({ url: destination })
+      wx.switchTab({
+        url: '/pages/home/index',
+        success: () => {
+          const pages = typeof getCurrentPages === 'function' ? getCurrentPages() : []
+          const home = pages.find((page) => page && typeof page.requestWechatLogin === 'function')
+          if (home) home.requestWechatLogin(resume, '行程账本')
+        }
+      })
+      return
+    }
     this.scopeGeneration = 0
     this.closed = false
     this.localScope = storage.localScopeToken()
@@ -237,6 +256,7 @@ Page({
   },
 
   onShow() {
+    if (this.entryBlocked) return
     if (this.localScope !== storage.localScopeToken()) {
       const wasShared = Boolean(this.docId)
       this.stopPolling()

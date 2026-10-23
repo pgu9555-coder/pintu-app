@@ -1,9 +1,16 @@
 <view class="page trips-page" style="padding-top: {{headerTopPx}}px;">
   <view class="trips-header">
     <view class="trips-mark"><image src="/assets/icons/brand-plane.svg" mode="aspectFit" /></view>
-    <view class="page-title">行程</view>
+    <view class="page-title">我的行程</view>
+  </view>
+  <view class="trips-account-card" bindtap="profileCardTap" role="button" hover-class="trips-account-card-active">
+    <image wx:if="{{accountSignedIn && accountAvatar}}" class="trips-account-avatar" src="{{accountAvatar}}" mode="aspectFill" />
+    <view wx:else class="trips-account-avatar trips-account-avatar-placeholder"><image src="/assets/icons/person.svg" mode="aspectFit" /></view>
+    <button wx:if="{{!accountSignedIn}}" class="trips-login-button" catchtap="profileCardTap">登录</button>
+    <text wx:else class="trips-account-name">{{accountNickname}}</text>
   </view>
   <view class="section-label trips-label">本地行程</view>
+  <view wx:if="{{loginRequired && localTrips.length}}" class="trips-guest-note">登录后查看账号行程；原有本机账本可通过首页“备份与迁移”保留和导入。<button class="trips-backup-link" bindtap="backupGuestTrips">先备份访客账本</button></view>
   <button class="btn secondary" style="margin:0 0 9px;" bindtap="newLocal">＋ 新建行程账本</button>
   <view wx:if="{{!localTrips.length}}" class="state-card empty-state">
     <view class="empty-icon">⌁</view><view class="empty-title">还没有本地行程</view><view class="muted">新建一趟行程后，成员和支出保存在这台设备，可从首页导出备份。</view>
@@ -29,8 +36,7 @@
   <view wx:if="{{loginRequired}}" class="state-card empty-state">
     <view class="empty-icon">微</view>
     <view class="empty-title">登录后同步云端房间</view>
-    <view class="muted">首次进入不会自动登录。本机账本无需登录；登录后可按微信身份安全找回有权限的云端房间。</view>
-    <button class="btn primary" style="margin-top:10px;" bindtap="goLogin">返回首页登录</button>
+    <view class="muted">登录后可打开账号下的行程账本，并按微信身份找回有权限的云端房间。访客账本需先备份，再登录后导入。</view>
   </view>
 
   <block wx:if="{{!loginRequired}}">

@@ -10,7 +10,7 @@
     "borderStyle":"black",
     "list":[
       {"pagePath":"pages/home/index", "text":"\u9996\u9875", "iconPath":"assets/tabbar/home.png", "selectedIconPath":"assets/tabbar/home-active.png"},
-      {"pagePath":"pages/trips/index", "text":"\u884c\u7a0b", "iconPath":"assets/tabbar/trips.png", "selectedIconPath":"assets/tabbar/trips-active.png"}
+      {"pagePath":"pages/trips/index", "text":"\u6211\u7684\u884c\u7a0b", "iconPath":"assets/tabbar/trips.png", "selectedIconPath":"assets/tabbar/trips-active.png"}
     ]
   },
   "style": "v2", "sitemapLocation": "sitemap.json"

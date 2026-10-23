@@ -147,6 +147,9 @@ Page({
     hasMore: false,
     nextCursor: null,
     loginRequired: false,
+    accountSignedIn: false,
+    accountNickname: '',
+    accountAvatar: '',
     headerTopPx: 72
   },
 
@@ -165,6 +168,13 @@ Page({
     }
     const app = typeof getApp === 'function' ? getApp() : null
     const consentGranted = Boolean(app && typeof app.hasAccountConsent === 'function' && app.hasAccountConsent())
+    const accountSignedIn = consentGranted && storage.isAccountScoped()
+    const profile = accountSignedIn && app.globalData ? app.globalData.accountProfile : null
+    this.setData({
+      accountSignedIn,
+      accountNickname: String(profile && profile.nickname || storage.getName() || '微信用户'),
+      accountAvatar: String(profile && profile.avatarFileId || '')
+    })
     if (!consentGranted || !storage.isAccountScoped()) {
       this.myRoomsRequestId = (this.myRoomsRequestId || 0) + 1
       this.scopeReady = false
@@ -196,7 +206,44 @@ Page({
   goLogin() {
     wx.switchTab({
       url: '/pages/home/index',
-      success: () => wx.showToast({ title: '请点击账号或协作功能登录', icon: 'none' })
+      success: () => {
+        const pages = typeof getCurrentPages === 'function' ? getCurrentPages() : []
+        const home = pages.find((page) => page && typeof page.requestWechatLogin === 'function')
+        if (home) home.requestWechatLogin(
+          () => wx.switchTab({ url: '/pages/trips/index' }),
+          '行程账本',
+          () => wx.switchTab({ url: '/pages/trips/index' })
+        )
+      }
+    })
+  },
+
+  profileCardTap() {
+    const signedIn = Boolean(this.data.accountSignedIn && storage.isAccountScoped())
+    wx.switchTab({
+      url: '/pages/home/index',
+      success: () => {
+        const pages = typeof getCurrentPages === 'function' ? getCurrentPages() : []
+        const home = pages.find((page) => page && typeof page.openProfilePanel === 'function')
+        if (!home) return
+        if (signedIn) {
+          home.openProfilePanel(() => wx.switchTab({ url: '/pages/trips/index' }))
+          return
+        }
+        home.requestWechatLogin(
+          () => wx.switchTab({ url: '/pages/trips/index' }),
+          '账号资料',
+          () => wx.switchTab({ url: '/pages/trips/index' })
+        )
+      }
+    })
+  },
+
+  backupGuestTrips() {
+    wx.switchTab({
+      url: '/pages/home/index',
+      success: () => wx.navigateTo({ url: '/pages/data-tools/index' }),
+      fail: () => wx.showToast({ title: '暂时无法打开备份页面', icon: 'none' })
     })
   },
 
@@ -432,6 +479,23 @@ Page({
   },
 
   async newLocal() {
+    const app = typeof getApp === 'function' ? getApp() : null
+    if (!app || typeof app.hasAccountConsent !== 'function' || !app.hasAccountConsent() || !storage.isAccountScoped()) {
+      wx.switchTab({
+        url: '/pages/home/index',
+        success: () => {
+          const pages = typeof getCurrentPages === 'function' ? getCurrentPages() : []
+          const home = pages.find((page) => page && typeof page.requestWechatLogin === 'function')
+          if (home) home.requestWechatLogin(
+            () => wx.switchTab({ url: '/pages/trips/index', success: () => wx.navigateTo({ url: '/pages/ledger/index' }) }),
+            '行程账本',
+            () => wx.switchTab({ url: '/pages/trips/index' })
+          )
+        },
+        fail: () => wx.showToast({ title: '请从首页登录后新建账本', icon: 'none' })
+      })
+      return
+    }
     wx.navigateTo({
       url: '/pages/ledger/index',
       fail: () => wx.showToast({ title: '暂时无法新建行程', icon: 'none' })
@@ -443,6 +507,34 @@ Page({
     if (!tripId || !localTripEntries().some((entry) => entry.tripId === tripId)) {
       wx.showToast({ title: '本地行程已不存在', icon: 'none' })
       this.refreshLocalTrips()
+      return
+    }
+    const app = typeof getApp === 'function' ? getApp() : null
+    if (!app || typeof app.hasAccountConsent !== 'function' || !app.hasAccountConsent() || !storage.isAccountScoped()) {
+      wx.showModal({
+        title: '先备份访客账本',
+        content: '登录后会显示微信账号下的行程。访客账本不会自动合并；需要迁移时，请先导出备份，再登录并导入。',
+        confirmText: '登录',
+        cancelText: '去备份',
+        success: (choice) => {
+          if (!choice.confirm) { this.backupGuestTrips(); return }
+          wx.switchTab({
+            url: '/pages/home/index',
+            success: () => {
+              const pages = typeof getCurrentPages === 'function' ? getCurrentPages() : []
+              const home = pages.find((page) => page && typeof page.requestWechatLogin === 'function')
+              if (home) home.requestWechatLogin(
+                () => wx.switchTab({
+                  url: '/pages/trips/index',
+                  success: () => wx.showToast({ title: '访客账本未删除；登录后可导入备份', icon: 'none', duration: 3200 })
+                }),
+                '行程账本',
+                () => wx.switchTab({ url: '/pages/trips/index' })
+              )
+            }
+          })
+        }
+      })
       return
     }
     wx.navigateTo({

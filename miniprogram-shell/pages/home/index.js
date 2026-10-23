@@ -95,6 +95,7 @@ Page({
     canChooseAvatar: false,
     profilePanelOpen: false,
     wechatLoginVisible: false,
+    loginPurpose: '',
     wechatLoginBusy: false,
     privacyConsentChecked: false,
     serviceAgreementOpened: false,
@@ -209,11 +210,13 @@ Page({
     }
   },
 
-  requestWechatLogin(afterLogin) {
+  requestWechatLogin(afterLogin, purpose, afterCancel) {
     this.loginRequest = (this.loginRequest || 0) + 1
     this.afterWechatLogin = typeof afterLogin === 'function' ? afterLogin : null
+    this.afterWechatLoginCancel = typeof afterCancel === 'function' ? afterCancel : null
     this.setData({
       wechatLoginVisible: true,
+      loginPurpose: purpose || '多人协作',
       privacyConsentChecked: false,
       serviceAgreementOpened: false,
       privacyContractOpened: false,
@@ -224,12 +227,15 @@ Page({
   cancelWechatLogin() {
     if (this.data.wechatLoginBusy) return
     this.afterWechatLogin = null
+    const afterCancel = this.afterWechatLoginCancel
+    this.afterWechatLoginCancel = null
     this.setData({
       wechatLoginVisible: false,
       privacyConsentChecked: false,
       serviceAgreementOpened: false,
       privacyContractOpened: false
     })
+    if (typeof afterCancel === 'function') afterCancel()
   },
 
   togglePrivacyConsent() {
@@ -262,18 +268,22 @@ Page({
     } })
   },
 
-  openProfilePanel() {
+  openProfilePanel(afterClose) {
     if (!this.accountReady(false)) {
       this.requestWechatLogin(() => this.openProfilePanel())
       return
     }
+    this.profilePanelAfterClose = typeof afterClose === 'function' ? afterClose : null
     if (wx.hideTabBar) wx.hideTabBar({ animation: false, fail() {} })
     this.setData({ profilePanelOpen: true })
   },
 
   closeProfilePanel() {
+    const afterClose = this.profilePanelAfterClose
+    this.profilePanelAfterClose = null
     if (wx.showTabBar) wx.showTabBar({ animation: false, fail() {} })
     this.setData({ profilePanelOpen: false })
+    if (typeof afterClose === 'function') afterClose()
   },
 
   onUnload() {
@@ -585,11 +595,21 @@ Page({
   },
 
   openMidpoint() {
+    const app = getApp()
+    if (!app || !app.hasAccountConsent || !app.hasAccountConsent() || !storage.isAccountScoped()) {
+      this.requestWechatLogin(() => this.openMidpoint(), '公平碰面')
+      return
+    }
     this.rememberName()
     wx.navigateTo({ url: '/pages/midpoint/index' })
   },
 
   openLedger() {
+    const app = getApp()
+    if (!app || !app.hasAccountConsent || !app.hasAccountConsent() || !storage.isAccountScoped()) {
+      this.requestWechatLogin(() => this.openLedger(), '行程账本')
+      return
+    }
     this.rememberName()
     wx.navigateTo({ url: '/pages/ledger/index' })
   },
