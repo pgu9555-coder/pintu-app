@@ -37,6 +37,24 @@ const home = loadPage('../miniprogram-shell/pages/home/index.js')
 const trips = loadPage('../miniprogram-shell/pages/trips/index.js')
 pages = [home, trips]
 
+assert.equal(home.data.privacyConsentChecked, false)
+let uncheckedAuthorizationCalls = 0
+const originalPrivacyAuthorization = home.ensurePrivacyAuthorized
+home.ensurePrivacyAuthorized = () => { uncheckedAuthorizationCalls++; return Promise.resolve() }
+home.confirmWechatLogin()
+assert.equal(uncheckedAuthorizationCalls, 0, 'unchecked login cannot reach native privacy authorization or account binding')
+assert.equal(home.data.wechatLoginBusy, false, 'unchecked login stays idle')
+assert.ok(calls.some(([kind, value]) => kind === 'toast' && /勾选/.test(value.title)), 'unchecked login explains the required checkbox')
+home.ensurePrivacyAuthorized = originalPrivacyAuthorization
+home.togglePrivacyConsent()
+assert.equal(home.data.privacyConsentChecked, true, 'consent can be selected without opening either document')
+home.togglePrivacyConsent()
+assert.equal(home.data.privacyConsentChecked, false, 'consent can be deselected')
+home.data.wechatLoginBusy = true
+home.togglePrivacyConsent()
+assert.equal(home.data.privacyConsentChecked, false, 'consent stays stable during login')
+home.data.wechatLoginBusy = false
+
 home.openMidpoint()
 assert.equal(home.data.wechatLoginVisible, true, 'a signed-out fair-meetup tap must open the login dialog')
 assert.equal(home.data.loginPurpose, '公平碰面')

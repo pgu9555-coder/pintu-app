@@ -25,6 +25,25 @@ const pois=[{id:'mall',name:'商业广场',lat:22.5,lng:114.1,isMall:true,isDrin
 async function run(){
   {
     const {page,calls}=fixture()
+    page.viewer={uid:'self',isOwner:true};page.accountProfile={nickname:'已存昵称',avatarFileId:'saved-avatar'};page.candidateDetails={}
+    const room={docId:'waiting-room',members:[{uid:'self',name:'旧名称'},{uid:'friend',name:'朋友'}],meetup:{people:[]}}
+    page.renderRoom(room,page.viewer)
+    assert.equal(page.data.people.length,2,'members without saved points remain visible')
+    assert.equal(page.data.people[0].name,'已存昵称')
+    assert.equal(page.data.people[0].ownAvatar,'saved-avatar')
+    assert.equal(page.data.mineHasSavedLocation,false,'a waiting roster entry is not a saved location')
+    assert.equal(page.data.mineLocation,null)
+    assert.equal(page.data.center,null)
+    page.showRoomResults();assert.equal(page.data.resultMode,false);assert.equal(calls.toast.length,1)
+    page.toggleMineEditor();assert.equal(page.data.mineEditorOpen,true)
+    page.toggleMineEditor();assert.equal(page.data.mineEditorOpen,false)
+    room.meetup.people=[{uid:'self',name:'旧名称',address:'我的地址',lat:22,lng:114}]
+    page.renderRoom(room,page.viewer);assert.equal(page.data.mineHasSavedLocation,true);assert.equal(page.data.center,null)
+    room.meetup.people.push({uid:'friend',name:'朋友',address:'朋友地址',lat:24,lng:116})
+    page.renderRoom(room,page.viewer);assert.equal(page.data.center.latitude,23)
+  }
+  {
+    const {page,calls}=fixture()
     await page.onLoad({})
     assert.equal(page.localStorageReady,true)
     assert.equal(page.scopeReady,true,'feature parity is checked after login has initialized the account scope')

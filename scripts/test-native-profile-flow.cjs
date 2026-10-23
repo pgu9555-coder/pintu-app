@@ -153,6 +153,16 @@ async function logoutBehavior() {
 
 async function main() {
   {
+    const f = fixture()
+    f.app.globalData.accountProfile = profile('已保存的昵称', 'saved-avatar')
+    f.page.onLoad({})
+    assert.equal(f.page.data.nickname, '已保存的昵称', 'editing prefills the saved nickname')
+    assert.equal(f.page.data.avatar, 'saved-avatar', 'editing prefills the saved avatar')
+    assert.equal(f.events.uploads.length, 0, 'opening the editor does not collect or upload a new avatar')
+    f.page.nicknameInput({ detail: { value: '新昵称' } })
+    assert.equal(f.page.data.nickname, '新昵称', 'prefilled nickname remains editable')
+  }
+  {
     const f = fixture(); let continued = 0; f.home.pendingProfileContinuation = () => continued++
     f.page.setData({ nickname: '林', pendingAvatar: '/tmp/a.png', avatar: '/tmp/a.png' })
     await f.page.saveAndContinue()

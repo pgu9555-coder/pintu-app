@@ -80,28 +80,27 @@
       </view>
       <block wx:if="{{room}}">
         <view class="active-room">
-          <view class="active-room-main"><view class="active-room-label">正在协作 · 房间码</view><view class="active-room-code">{{room.code}}</view></view>
+          <view class="active-room-main"><view class="active-room-label">房间码</view><view class="active-room-code">{{room.code}}</view></view>
           <view class="active-room-actions">
-            <button class="text-action" bindtap="copyCode" disabled="{{busy}}">复制</button>
-            <button class="text-action" open-type="share" disabled="{{busy}}">邀请</button>
-            <button wx:if="{{isOwner}}" class="text-action" bindtap="transferOwner" disabled="{{busy}}">转交房主</button>
-          <button class="text-action" bindtap="exitRoom" disabled="{{busy}}">{{isOwner ? '解散' : '退出'}}</button>
+            <button class="room-action" bindtap="copyCode" disabled="{{busy}}">复制房间码</button>
+            <button class="room-action" open-type="share" disabled="{{busy}}">转发到群聊</button>
+            <button wx:if="{{isOwner}}" class="room-action" bindtap="transferOwner" disabled="{{busy}}">转交房主</button>
+            <button wx:if="{{isOwner}}" class="room-action danger" bindtap="exitRoom" disabled="{{busy}}">解散房间</button>
+            <button wx:else class="room-action" bindtap="exitRoom" disabled="{{busy}}">退出房间</button>
           </view>
         </view>
       </block>
       <block wx:else>
-        <view class="local-note">不建房间也能在本机填写多个地址；建房后每个人可在自己的手机上更新位置。</view>
-        <view wx:if="{{localStorageMessage}}" class="map-config-note">{{localStorageMessage}}</view>
         <view class="account-identity"><image wx:if="{{accountAvatar}}" class="identity-avatar" src="{{accountAvatar}}" mode="aspectFill" /><view wx:else class="identity-avatar identity-placeholder"><image src="/assets/icons/person.svg" mode="aspectFit" /></view><text class="identity-name">{{name}}</text><text class="identity-me">我</text></view>
+        <button class="room-create-button" bindtap="create" loading="{{busy}}" disabled="{{busy}}">＋ 创建房间</button>
         <view class="room-entry-row">
-          <button class="room-small-button" bindtap="create" loading="{{busy}}" disabled="{{busy}}">创建碰面码</button>
-          <input class="input code-input" placeholder="输入 8 位碰面码" value="{{code}}" maxlength="8" bindinput="codeInput" />
-          <button class="room-small-button outline" bindtap="join" loading="{{busy}}" disabled="{{busy}}">加入</button>
+          <input class="input code-input" placeholder="输入 8 位房间码" value="{{code}}" maxlength="8" bindinput="codeInput" />
+          <button class="room-small-button outline" bindtap="join" loading="{{busy}}" disabled="{{busy}}">加入房间</button>
         </view>
       </block>
     </view>
 
-    <view class="card point-card">
+    <view wx:if="{{room}}" class="card point-card">
       <view class="section-heading">
         <view><view class="section-title">{{room ? '大家的出发点' : '大家的出发地址'}}</view><view class="muted">{{room ? people.length : localPoints.length}} 位出发的人</view></view>
       </view>
@@ -109,9 +108,10 @@
       <block wx:if="{{room}}">
         <view wx:for="{{people}}" wx:key="uid" class="point-row">
           <image wx:if="{{item.ownAvatar}}" class="point-avatar" src="{{item.ownAvatar}}" mode="aspectFill" /><view wx:else class="point-avatar">{{item.name[0]}}</view>
-          <view class="point-copy"><view class="point-name">{{item.name}}<text wx:if="{{item.isSelf}}" class="identity-me">我</text></view><view class="point-address">{{item.address || '尚未选择地点'}}</view></view>
+          <view class="point-copy"><view class="point-name"><text class="point-nickname">{{item.name}}</text><text wx:if="{{item.isSelf}}" class="identity-me">我</text></view><view class="point-address">{{item.address || '等待填写出发点'}}</view></view>
         </view>
-        <view class="mine-editor">
+        <button class="edit-my-point" bindtap="toggleMineEditor" disabled="{{busy}}">{{mineEditorOpen ? '收起编辑' : (mineHasSavedLocation ? '修改我的出发点' : '填写我的出发点')}}</button>
+        <view wx:if="{{mineEditorOpen}}" class="mine-editor">
           <view class="editor-label">我的出发点</view>
           <view class="account-identity"><image wx:if="{{accountAvatar}}" class="identity-avatar" src="{{accountAvatar}}" mode="aspectFill" /><view wx:else class="identity-avatar identity-placeholder"><image src="/assets/icons/person.svg" mode="aspectFit" /></view><text class="identity-name">{{name}}</text><text class="identity-me">我</text></view>
           <input class="input" placeholder="输入地点后，从下方列表选择" value="{{mineAddress}}" maxlength="120" bindinput="mineAddressInput" bindfocus="mineAddressFocus" />
@@ -131,7 +131,7 @@
           <view wx:if="{{pointSyncPending || pointSyncText}}" class="point-sync-state {{pointSyncPending ? 'pending' : ''}}">{{pointSyncText}}</view>
           <button wx:if="{{mineHasSavedLocation}}" class="text-action clear-location" bindtap="clearMeetupLocation" disabled="{{busy}}">清除已保存的出发点</button>
         </view>
-        <button class="btn calculate-button" bindtap="showRoomResults">寻找碰面点</button>
+        <button class="btn calculate-button" bindtap="showRoomResults" disabled="{{!center || busy}}">寻找碰面点</button>
       </block>
 
       <block wx:else>

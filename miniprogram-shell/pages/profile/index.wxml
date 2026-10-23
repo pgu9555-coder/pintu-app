@@ -4,7 +4,7 @@
     <view class="profile-avatar-wrap">
       <image wx:if="{{avatar}}" class="profile-avatar" src="{{avatar}}" mode="aspectFill" />
       <view wx:else class="profile-avatar profile-placeholder"><image src="/assets/icons/person.svg" mode="aspectFit" /></view>
-      <button wx:if="{{canChooseAvatar}}" class="avatar-badge" open-type="chooseAvatar" bindchooseavatar="chooseAvatar" disabled="{{busy}}" aria-label="选择头像"><image src="/assets/icons/camera.svg" mode="aspectFit" /></button>
+      <button wx:if="{{canChooseAvatar}}" class="avatar-badge" size="mini" open-type="chooseAvatar" bindchooseavatar="chooseAvatar" disabled="{{busy}}" aria-label="选择头像"><image src="/assets/icons/camera.svg" mode="aspectFit" /></button>
     </view>
     <button wx:if="{{canChooseAvatar}}" class="avatar-select" open-type="chooseAvatar" bindchooseavatar="chooseAvatar" disabled="{{busy}}">选择头像</button>
     <view wx:else class="avatar-unavailable">当前微信版本暂不支持选择头像</view>

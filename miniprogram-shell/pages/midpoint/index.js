@@ -286,6 +286,7 @@ Page({
     mapSearchMessage: '',
     mineName: '',
     mineAddress: '',
+    mineEditorOpen: false,
     mineLocation: null,
     mineHasSavedLocation: false,
     pointSyncPending: false,
@@ -911,7 +912,7 @@ Page({
         this.serverRoom = null
         this.stopPolling()
         storage.remove(removedId)
-        this.present({ room: null, syncText: '房间已结束' })
+        this.present({ room: null, people: [], center: null, resultMode: false, mineEditorOpen: false, screen: 'main', syncText: '房间已结束' })
         wx.showToast({ title: pending ? '房间已结束，原地点已保留' : '房间已解散或你已退出', icon: 'none' })
         return
       }
@@ -948,12 +949,22 @@ Page({
     const decision = currentDecision(room)
     const candidates = decisionCandidates(decision, viewer, room, this.candidateDetails)
     const participation = decisionParticipation(decision, room)
-    const people = ((room.meetup && room.meetup.people) || []).map((person) => Object.assign({}, person, {
+    const locationPeople = (room.meetup && room.meetup.people) || []
+    const byUid = new Map(locationPeople.map((person) => [String(person && person.uid || ''), person]))
+    ;(room.members || []).filter((member) => member && member.uid).forEach((member) => {
+      const uid = String(member.uid)
+      if (!byUid.has(uid)) byUid.set(uid, { uid, name: member.name || '成员', address: '' })
+    })
+    if (viewer && viewer.uid && !byUid.has(String(viewer.uid))) {
+      byUid.set(String(viewer.uid), { uid: String(viewer.uid), name: this.accountProfile && this.accountProfile.nickname || viewer.name || '我', address: '' })
+    }
+    const people = Array.from(byUid.values()).map((person) => Object.assign({}, person, {
       isSelf: Boolean(viewer && person && person.uid === viewer.uid),
-      name: viewer && person && person.uid === viewer.uid && this.accountProfile && this.accountProfile.nickname ? this.accountProfile.nickname : person.name,
+      name: viewer && person && person.uid === viewer.uid && this.accountProfile && this.accountProfile.nickname ? this.accountProfile.nickname : (person.name || '成员'),
       ownAvatar: Boolean(viewer && person && person.uid === viewer.uid && this.accountProfile && this.accountProfile.avatarFileId) ? this.accountProfile.avatarFileId : ''
     }))
     const mine = people.find((person) => viewer && person && person.uid === viewer.uid) || null
+    const mineHasLocation = Boolean(mine && Number.isFinite(mine.lat) && Number.isFinite(mine.lng))
     const next = {
       room,
       people,
@@ -971,8 +982,8 @@ Page({
     if (!this.mineDraftDirty) {
       next.mineName = (this.accountProfile && this.accountProfile.nickname) || (mine && mine.name) || (viewer && viewer.name) || '微信用户'
       next.mineAddress = (mine && mine.address) || ''
-      next.mineLocation = mine ? { lat: Number(mine.lat), lng: Number(mine.lng), address: mine.address } : null
-      next.mineHasSavedLocation = Boolean(mine)
+      next.mineLocation = mineHasLocation ? { lat: mine.lat, lng: mine.lng, address: mine.address } : null
+      next.mineHasSavedLocation = mineHasLocation
       next.addressSuggestions = []
       next.addressSuggestionsVisible = false
     }
@@ -1360,6 +1371,8 @@ Page({
       }
     }
   },
+
+  toggleMineEditor() { if (this.data.room && !this.data.busy) this.present({ mineEditorOpen: !this.data.mineEditorOpen }) },
 
   mineNameInput(event) {
     this.mineDraftDirty = true

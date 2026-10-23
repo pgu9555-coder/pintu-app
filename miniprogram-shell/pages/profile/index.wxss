@@ -1,8 +1,8 @@
 .profile-page{min-height:100vh;box-sizing:border-box;padding:22px 24px 32px;padding-bottom:calc(32px + env(safe-area-inset-bottom));background:#F6F3EA;color:#0F3D36}
 .profile-intro{text-align:center;color:#4C5C5B;font-size:14px;line-height:1.6}
-.profile-card{width:100%;max-width:420px;margin:34px auto 0}
-.profile-avatar-wrap{position:relative;width:144px;height:144px;margin:0 auto}
-.profile-avatar{display:block;width:144px;height:144px;box-sizing:border-box;border:3px solid #FFFDF6;border-radius:50%;background:#E4ECE1}
+.profile-card{width:100%;max-width:420px;margin:24px auto 0}
+.profile-avatar-wrap{position:relative;width:112px;height:112px;margin:0 auto}
+.profile-avatar{display:block;width:112px;height:112px;box-sizing:border-box;border:3px solid #FFFDF6;border-radius:50%;background:#E4ECE1}
 .profile-placeholder{display:flex;align-items:center;justify-content:center}
 .profile-placeholder image{width:66px;height:66px;opacity:.7}
 .avatar-badge{position:absolute;right:0;bottom:2px;display:flex;align-items:center;justify-content:center;box-sizing:border-box;width:38px;height:38px;margin:0;padding:0;border:3px solid #F6F3EA;border-radius:12px;background:#0F3D36}
@@ -26,6 +26,7 @@
 .more-actions .danger{color:#A04435}
 .cleanup-note{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:12px;padding:9px 10px;border:1px solid #E5D8B8;border-radius:8px;background:#FFF8E9;color:#855B17;font-size:11px;line-height:1.5}
 .cleanup-note button{flex-shrink:0;margin:0;padding:0 4px;background:transparent;color:#855B17;font-size:11px;line-height:24px}
+.profile-page button.avatar-badge{width:38px!important;min-width:38px!important;max-width:38px!important;height:38px!important;min-height:38px!important;max-height:38px!important;flex:0 0 38px!important;padding:0!important;line-height:32px!important;box-sizing:border-box!important;border-radius:50%!important}
 button::after{border:0}
 button[disabled]{opacity:.5}
-@media(max-width:340px){.profile-page{padding-left:20px;padding-right:20px}.profile-card{margin-top:26px}.profile-avatar-wrap,.profile-avatar{width:128px;height:128px}.name-field{margin-top:23px}.primary{margin-top:26px}}
+@media(max-width:340px){.profile-page{padding-left:20px;padding-right:20px}.profile-card{margin-top:20px}.profile-avatar-wrap,.profile-avatar{width:104px;height:104px}.name-field{margin-top:23px}.primary{margin-top:26px}}

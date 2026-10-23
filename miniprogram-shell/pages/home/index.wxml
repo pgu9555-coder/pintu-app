@@ -101,14 +101,14 @@
       <view class="wechat-login-mark"><image src="/assets/icons/person.svg" mode="aspectFit" /></view>
       <view class="wechat-login-title">登录后，继续相聚</view>
       <view class="wechat-login-subtitle">登录后即可使用{{loginPurpose}}。</view>
-      <view class="agreement-hint">不会自动读取头像或昵称。请先分别打开并阅读两份文件，再主动勾选同意。</view>
+      <view class="agreement-hint">不会自动读取头像或昵称。请勾选同意以下协议后登录。</view>
       <view class="agreement-row" bindtap="togglePrivacyConsent" role="checkbox" aria-checked="{{privacyConsentChecked}}">
         <view class="agreement-checkbox {{privacyConsentChecked ? 'agreement-checkbox-checked' : ''}}">{{privacyConsentChecked ? '✓' : ''}}</view>
         <view class="agreement-copy">
           <text>我已阅读并同意</text>
-          <text class="agreement-link" catchtap="openServiceAgreement">《用户服务协议》{{serviceAgreementOpened ? '（已打开）' : ''}}</text>
+          <text class="agreement-link" catchtap="openServiceAgreement">《用户服务协议》</text>
           <text>和</text>
-          <text class="agreement-link" catchtap="openPrivacy">《隐私保护指引》{{privacyContractOpened ? '（已打开）' : ''}}</text>
+          <text class="agreement-link" catchtap="openPrivacy">《隐私保护指引》</text>
         </view>
       </view>
       <button class="wechat-login-button {{privacyConsentChecked ? '' : 'wechat-login-button-disabled'}}" bindtap="confirmWechatLogin" loading="{{wechatLoginBusy}}" disabled="{{wechatLoginBusy || !privacyConsentChecked}}">微信登录</button>

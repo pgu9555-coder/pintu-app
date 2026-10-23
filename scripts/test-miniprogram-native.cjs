@@ -171,7 +171,7 @@ assert.match(homePageSource, /wechatLoginVisible:\s*false/, "home must render be
 assert.match(homeMarkup, /登录后，继续相聚[\s\S]*?登录后即可使用\{\{loginPurpose\}\}[\s\S]*?微信登录[\s\S]*?暂不登录/, "feature login must be explicit, optional, cancellable, and retain its requested destination");
 assert.match(homeMarkup, /privacyConsentChecked[\s\S]*?《用户服务协议》[\s\S]*?《隐私保护指引》/, "login must expose an unchecked agreement choice and readable policy links");
 assert.match(homePageSource, /confirmWechatLogin\(\)[\s\S]*?!this\.data\.privacyConsentChecked[\s\S]*?ensurePrivacyAuthorized\(\)[\s\S]*?grantAccountConsent\(\)[\s\S]*?ensureAccountScope\(\)[\s\S]*?loadProfile\(\)/, "WeChat login must require active consent and native privacy authorization before binding the trusted account");
-assert.match(homePageSource, /togglePrivacyConsent\(\)[\s\S]*?!this\.data\.serviceAgreementOpened\s*\|\|\s*!this\.data\.privacyContractOpened[\s\S]*?privacyConsentChecked/, "the agreement checkbox must remain unavailable until both documents are opened");
+assert.ok(!homePageSource.slice(homePageSource.indexOf('togglePrivacyConsent()'), homePageSource.indexOf('openServiceAgreement()')).includes('serviceAgreementOpened'), "agreement selection must not require opening documents first");
 assert.match(homePageSource, /openServiceAgreement\(\)[\s\S]*?serviceAgreementOpened:\s*true[\s\S]*?openPrivacy\(\)[\s\S]*?privacyContractOpened:\s*true/, "the login flow must record explicit opening of both documents");
 assert.ok(!/wechatProfileConfirming/.test(homePageSource + homeMarkup), "login must not force avatar or nickname confirmation");
 assert.match(homeMarkup, /不会自动读取头像或昵称/, "login must accurately explain that profile fields are not read automatically");

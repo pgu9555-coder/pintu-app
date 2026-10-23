@@ -170,8 +170,8 @@ Page({
     let operation = accountOperation(this)
     this.setData({ wechatLoginBusy: true })
     try {
-      // This native privacy authorization happens only after the user opened
-      // both documents, checked the choice, and tapped Continue. It authorizes
+      // This native privacy authorization happens only after the user selected
+      // the agreement checkbox and tapped Continue. It authorizes
       // the declared account/room data processing; location remains separately
       // requested only after the later "从地图选点" action.
       await this.ensurePrivacyAuthorized()
@@ -249,10 +249,6 @@ Page({
 
   togglePrivacyConsent() {
     if (this.data.wechatLoginBusy) return
-    if (!this.data.serviceAgreementOpened || !this.data.privacyContractOpened) {
-      wx.showToast({ title: '请先分别打开并阅读两份文件', icon: 'none' })
-      return
-    }
     this.setData({ privacyConsentChecked: !this.data.privacyConsentChecked })
   },
 
