@@ -77,6 +77,8 @@ assert.doesNotMatch(amapSource, /wx\.request|restapi\.amap\.com|amapMiniKey|\.ke
 let mapClientCall = null;
 const mapClientSandbox = {
   module: { exports: {} },
+  setTimeout,
+  clearTimeout,
   wx: { cloud: { callFunction(options) {
     mapClientCall = options;
     return Promise.resolve({ result: { ok: true, data: [{ id: "safe-result" }] } });
@@ -187,7 +189,9 @@ assert.match(homePageSource, /ensurePrivacyAuthorized\(\)[\s\S]*?wx\.getPrivacyS
 const appConfig = JSON.parse(fs.readFileSync(path.join(root, "app.json"), "utf8"));
 assert.ok(appConfig.pages.includes("pages/agreement/index"), "the readable user service agreement must be registered as a page");
 const agreementMarkup = fs.readFileSync(path.join(root, "pages", "agreement", "index.wxml"), "utf8");
-assert.match(agreementMarkup, /用户服务协议[\s\S]*?登录与资料[\s\S]*?房间与内容[\s\S]*?权限与隐私/, "the user service agreement must explain identity, room content and privacy behavior");
+const agreementSource = fs.readFileSync(path.join(root, "pages", "agreement", "index.js"), "utf8");
+for (const topic of ['用户服务协议', '登录与权限', '共同使用', '隐私', '账号', '账目']) assert.ok(agreementSource.includes(topic), `the service agreement must explain ${topic}`);
+assert.match(agreementMarkup, /wx:for="\{\{sections\}\}"/, "agreement page must render the readable policy sections");
 
 const tripsPageSource = fs.readFileSync(path.join(root, "pages", "trips", "index.js"), "utf8");
 const tripsMarkup = fs.readFileSync(path.join(root, "pages", "trips", "index.wxml"), "utf8");
@@ -196,11 +200,11 @@ assert.match(tripsPageSource, /gateway\.listMyRooms\(cursor, 50\)/, "trips must 
 assert.match(tripsPageSource, /cursor\.createdAt/, "trips must validate immutable creation-time cursors");
 assert.match(tripsPageSource, /myRoomsRequestId/, "trips must ignore stale room-list responses");
 assert.ok(!/storage\.all\(/.test(tripsPageSource), "trips must not display shared-device room caches");
-assert.match(tripsPageSource, /storage\.getScoped\(LOCAL_LEDGER_TRIPS_KEY/, "trips must read local ledgers only from account-scoped storage");
-assert.match(tripsPageSource, /storage\.setScoped\(LOCAL_LEDGER_TRIPS_KEY/, "deleting a local trip must remain account-scoped");
-assert.match(tripsPageSource, /ensureAccountScope/, "trips must wait for the authenticated account scope before reading local or cloud data");
+assert.match(tripsPageSource, /storage\.getLocal\(LOCAL_LEDGER_TRIPS_KEY/, "trips must read the current guest/account local namespace");
+assert.match(tripsPageSource, /storage\.setLocal\(LOCAL_LEDGER_TRIPS_KEY/, "deleting a local trip must use the current guest/account local namespace");
+assert.match(tripsPageSource, /ensureAccountScope/, "trips must wait for the authenticated account scope before cloud data");
 assert.match(tripsPageSource, /onShow\(\)[\s\S]*?hasAccountConsent\(\)[\s\S]*?!consentGranted\s*\|\|\s*!storage\.isAccountScoped\(\)[\s\S]*?loginRequired:\s*true[\s\S]*?return[\s\S]*?this\.refresh\(\)/, "opening the trips tab must not silently establish a cloud identity before consent");
-assert.match(tripsMarkup, /登录后查看你的行程[\s\S]*?首次进入不会自动登录[\s\S]*?返回首页登录/, "the signed-out trips state must explain and defer login");
+assert.match(tripsMarkup, /登录后同步云端房间[\s\S]*?首次进入不会自动登录[\s\S]*?本机账本无需登录[\s\S]*?返回首页登录/, "the signed-out trips state must defer cloud login while retaining device ledgers");
 assert.match(tripsPageSource, /storage\.save\(\{ docId: entry\.docId, room: entry\.room \}\)/, "opening a trusted cloud room may refresh its local cache");
 assert.match(tripsPageSource, /cloudError/, "trips must retain a clear cloud-load error state");
 assert.match(tripsMarkup, /正在同步你的云端房间/, "trips must render a cloud loading state");
@@ -218,7 +222,7 @@ assert.ok(!/restoreRoomSnapshot\(docId, previousSnapshot\)/.test(tripsPageSource
 
 const midpointPageSource = fs.readFileSync(path.join(root, "pages", "midpoint", "index.js"), "utf8");
 const midpointMarkup = fs.readFileSync(path.join(root, "pages", "midpoint", "index.wxml"), "utf8");
-assert.match(midpointPageSource, /consentGranted[\s\S]*?游客模式：可以计算中点[\s\S]*?else\s*\{[\s\S]*?ensureAccountScope\(\)/, "midpoint must remain usable in guest mode without silently creating a cloud identity");
+assert.match(midpointPageSource, /consentGranted[\s\S]*?出发点草稿仅保存在本机[\s\S]*?else\s*\{[\s\S]*?ensureAccountScope\(\)/, "midpoint must remain usable with guest local drafts without silently creating a cloud identity");
 assert.match(midpointPageSource, /create\(\)[\s\S]*?!this\.scopeReady[\s\S]*?创建房间前请返回首页登录/, "guest midpoint creation must explicitly defer login");
 assert.match(midpointPageSource, /function currentDecision\(/, "midpoint must normalize decision state before rendering");
 assert.match(midpointPageSource, /membershipEpoch:\s*viewer\.membershipEpoch/, "decision writes must carry membershipEpoch");
@@ -227,15 +231,15 @@ assert.match(midpointPageSource, /if \(!result\.room\)[\s\S]*?recoverPendingPoin
 assert.match(midpointPageSource, /roundId:\s*decision\.roundId/, "decision writes must carry the current roundId");
 assert.match(midpointPageSource, /\['STALE_MEMBERSHIP', 'STALE_DECISION', 'DECISION_CONFIRMED', 'CANDIDATE_NOT_FOUND'\]/, "stale or confirmed decision writes must refresh room state");
 assert.match(midpointPageSource, /wx\.openLocation\([\s\S]*?共同候选地点/, "decision candidates must be openable in the map");
-assert.match(midpointMarkup, /从地图添加候选地点/, "midpoint must let members add a map-selected candidate");
+assert.match(midpointMarkup, /从微信地图添加/, "midpoint must let members add a map-selected candidate");
 assert.match(midpointMarkup, /data-value="want"[\s\S]*?data-value="ok"[\s\S]*?data-value="no"/, "midpoint must expose all vote choices");
 assert.match(midpointMarkup, /重新选择共同去处/, "owners must be able to reopen a confirmed decision");
-assert.match(midpointMarkup, /按坐标平均估算，最终请结合实际交通/, "the fair-midpoint title must be paired with an accuracy disclaimer");
+assert.match(midpointMarkup, /几何参考点，实际路程可能不同/, "the fair-midpoint result must be paired with an accuracy disclaimer");
 assert.match(midpointPageSource, /LOCAL_MIDPOINT_KEY/, "midpoint must preserve standalone multi-address work locally");
 assert.match(midpointPageSource, /chooseLocalPoint\(event\)/, "standalone midpoint must let each address be selected from the native map");
 assert.match(midpointPageSource, /if \(!amap\.configuredKey\(\)\)[\s\S]*?this\.addDecisionCandidate\(\)/, "room candidate search must fall back to native map selection when AMap is unavailable");
 assert.match(midpointPageSource, /startSwipe\(\)[\s\S]*?swipeAction\(event\)/, "midpoint must expose the same candidate blind-box flow as Web");
-assert.match(midpointPageSource, /const MAX_LOCAL_POINTS = 4/, "standalone midpoint must cap the compact people list at four");
+assert.match(midpointPageSource, /const MAX_LOCAL_POINTS = 6/, "standalone midpoint must cap the people list at six like Web");
 assert.match(midpointMarkup, /item\.isSelf && item\.avatarFileId[\s\S]*?point-avatar-image[\s\S]*?item\.initial/, "the first local person must show the saved WeChat avatar with a 我 fallback");
 assert.ok(!/point-avatar local-avatar[^>]*>\{\{index \+ 1\}\}/.test(midpointMarkup), "standalone midpoint must not show numbered placeholder avatars");
 assert.match(midpointMarkup, /添加一位出发的朋友/, "standalone midpoint must add friends on demand");
@@ -247,7 +251,8 @@ let midpointPageDefinition = null;
 const midpointStorageWrites = [];
 const midpointToasts = [];
 const midpointStorageStub = {
-  setScoped(key, value) {
+  localScopeToken() { return 'test-scope'; },
+  setLocal(key, value) {
     midpointStorageWrites.push({ key, value });
     return true;
   }
@@ -285,7 +290,7 @@ vm.runInNewContext(
 assert.ok(midpointPageDefinition, "midpoint page definition must load in the test sandbox");
 const localPointTest = midpointSandbox.__localPointTest;
 const defaultLocalPoints = localPointTest.emptyLocalPoints();
-assert.equal(defaultLocalPoints.length, 1, "standalone midpoint must start with only the current user");
+assert.equal(defaultLocalPoints.length, 2, "standalone midpoint must start with two departure rows like Web");
 assert.equal(defaultLocalPoints[0].initial, "我", "the default current-user avatar fallback must be 我");
 assert.equal(defaultLocalPoints[0].isSelf, true, "the default row must be marked as the current user");
 assert.equal(localPointTest.hasLocalCoordinates({ lat: null, lng: null }), false, "null coordinates must never be treated as zero coordinates");
@@ -297,7 +302,7 @@ const migratedLegacy = localPointTest.validLocalState({ points: [
   { id: "local-1", name: "地点 1", address: "", lat: null, lng: null },
   { id: "local-2", name: "地点 2", address: "", lat: null, lng: null }
 ] }, { nickname: "测试用户", avatarFileId: "cloud://avatar" });
-assert.equal(migratedLegacy.points.length, 1, "untouched legacy two-row drafts must migrate to the new one-person default");
+assert.equal(migratedLegacy.points.length, 2, "untouched legacy two-row drafts must retain the two-person Web default");
 assert.equal(migratedLegacy.points[0].avatarFileId, "cloud://avatar", "the current user's saved avatar must decorate the first row");
 const deliberateBlankFriend = localPointTest.validLocalState({ points: [
   { id: "local-self", isSelf: true, label: "我", address: "", lat: null, lng: null },
@@ -308,14 +313,15 @@ assert.equal(deliberateBlankFriend.points[1].initial, "B", "the first added frie
 
 function createMidpointContext(points) {
   const context = Object.assign({}, midpointPageDefinition);
-  context.data = {
+  context.data = Object.assign({}, midpointPageDefinition.data, {
     localPoints: points,
     localCandidates: [],
     localCalculated: false,
     center: null,
     markers: [],
     mapSearchMessage: ''
-  };
+  });
+  context.localScope = 'test-scope';
   context.accountProfile = { nickname: "测试用户", avatarFileId: "cloud://avatar" };
   context.localStorageReady = true;
   context.localSearchVersion = 0;
@@ -330,14 +336,14 @@ function createMidpointContext(points) {
 midpointStorageWrites.length = 0;
 const midpointBehavior = createMidpointContext(defaultLocalPoints);
 midpointBehavior.addLocalPoint();
-assert.equal(Array.from(midpointBehavior.data.localPoints, (point) => point.initial).join(','), "我,B", "the first add action must create friend B");
+assert.equal(Array.from(midpointBehavior.data.localPoints, (point) => point.initial).join(','), "我,B,C", "the first add action must append C after the two default rows");
 midpointBehavior.addLocalPoint();
 midpointBehavior.addLocalPoint();
-assert.equal(Array.from(midpointBehavior.data.localPoints, (point) => point.initial).join(','), "我,B,C,D", "friend additions must remain sequential through D");
+assert.equal(Array.from(midpointBehavior.data.localPoints, (point) => point.initial).join(','), "我,B,C,D,E", "friend additions must remain sequential through E");
 midpointBehavior.removeLocalPoint({ currentTarget: { dataset: { id: midpointBehavior.data.localPoints[1].id } } });
-assert.equal(Array.from(midpointBehavior.data.localPoints, (point) => point.initial).join(','), "我,B,C", "deleting a middle friend must renumber the remaining friends");
+assert.equal(Array.from(midpointBehavior.data.localPoints, (point) => point.initial).join(','), "我,B,C,D", "deleting a middle friend must renumber the remaining friends");
 const latestMidpointWrite = midpointStorageWrites[midpointStorageWrites.length - 1];
-assert.ok(latestMidpointWrite && latestMidpointWrite.key === "pintu-local-midpoint-v2", "local people changes must use account-scoped storage");
+assert.ok(latestMidpointWrite && latestMidpointWrite.key === "pintu-local-midpoint-v2", "local people changes must use the guest/account local namespace");
 assert.ok(!Object.hasOwn(latestMidpointWrite.value.points[0], "avatarFileId"), "the profile avatar must never be persisted in the midpoint draft");
 
 const midpointCalculation = createMidpointContext(localPointTest.normalizeLocalPoints([
@@ -351,7 +357,7 @@ midpointCalculation.calculateLocalMidpoint();
 assert.equal(midpointCalculation.data.localCalculated, true, "all displayed people with locations must calculate");
 assert.equal(midpointCalculation.data.center.latitude, 22.6, "behavioral midpoint latitude must be averaged");
 assert.equal(midpointCalculation.data.center.longitude, 114.1, "behavioral midpoint longitude must be averaged");
-assert.match(midpointMarkup, /不知道选哪个？盲盒帮你挑/, "midpoint must render the destination blind-box entry");
+assert.match(midpointMarkup, /让盲盒替你选/, "midpoint must render the destination blind-box entry");
 
 const ledger = require(path.join(root, "utils", "ledger.js"));
 const ledgerFixture = {
@@ -394,19 +400,21 @@ assert.equal(ledger.settlementPlan(largeLedgerFixture).exact, false, "large ledg
 
 const ledgerPageSource = fs.readFileSync(path.join(root, "pages", "ledger", "index.js"), "utf8");
 const ledgerMarkup = fs.readFileSync(path.join(root, "pages", "ledger", "index.wxml"), "utf8");
-assert.match(ledgerPageSource, /consentGranted[\s\S]*?this\.guestMode = true[\s\S]*?emptyLocalLedger\(\)[\s\S]*?syncText:\s*['"]游客体验['"]/, "ledger must initialize a real in-memory guest experience before login");
-assert.match(ledgerPageSource, /syncLedger\(next\)[\s\S]*?!this\.docId\s*&&\s*this\.guestMode[\s\S]*?applyStandaloneLedger\(next, true\)/, "guest ledger edits must work without cloud or persistent account storage");
-assert.match(ledgerMarkup, /游客模式：可以体验添加同行人、记支出和计算转账/, "ledger must clearly explain guest data is not saved");
+assert.match(ledgerPageSource, /consentGranted[\s\S]*?if \(!this\.docId\)[\s\S]*?this\.guestMode = !consentGranted[\s\S]*?emptyLocalLedger\(\)/, "ledger must initialize a guest/account device book before cloud login");
+assert.match(ledgerPageSource, /syncLedger\(next\)[\s\S]*?!this\.docId[\s\S]*?saveLocalLedger\(this\.tripId, next\)/, "guest and account local edits must save without creating a cloud identity");
+assert.match(ledgerMarkup, /保存在这台设备/, "ledger must explain device-local persistence");
 assert.match(ledgerPageSource, /LOCAL_LEDGER_TRIPS_KEY/, "ledger must support persistent standalone trips");
 assert.match(ledgerPageSource, /newTripId\(/, "new standalone ledgers must receive a distinct trip ID");
 assert.match(ledgerPageSource, /options && options\.tripId/, "a standalone trip must be reopenable by tripId");
-assert.match(ledgerPageSource, /storage\.getScoped\(LOCAL_LEDGER_TRIPS_KEY/, "standalone ledger reads must remain account-scoped");
-assert.match(ledgerPageSource, /storage\.setScoped\(LOCAL_LEDGER_TRIPS_KEY/, "standalone ledger writes must remain account-scoped");
+assert.match(ledgerPageSource, /storage\.getLocal\(LOCAL_LEDGER_TRIPS_KEY/, "standalone ledger reads must use the isolated local namespace");
+assert.match(ledgerPageSource, /storage\.setLocal\(LOCAL_LEDGER_TRIPS_KEY/, "standalone ledger writes must use the isolated local namespace");
 assert.match(ledgerPageSource, /hasLocalTripContent/, "blank standalone ledger shells must not be retained in the trip list");
 assert.match(ledgerPageSource, /if \(!saveLocalLedger\(this\.tripId, next\)\)/, "local ledger storage failures must not be reported as saved");
-assert.match(ledgerPageSource, /ensureAccountScope/, "ledger must wait for the authenticated account scope before local storage access");
+assert.match(ledgerPageSource, /syncLedger\(next\)[\s\S]*?if \(!this\.docId\)[\s\S]*?saveLocalLedger[\s\S]*?ensureAccountScope\(\)[\s\S]*?viewerMembershipEpoch\(\)/, "ledger must require authenticated account scope for cloud writes after handling local edits");
+assert.match(ledgerPageSource, /localScope !== storage\.localScopeToken\(\)/, "stale device drafts must not be written into a changed account namespace");
 assert.ok(!/pintu-local-ledger-v3/.test(ledgerPageSource), "ledger must not migrate or expose the legacy shared-device local key");
-assert.match(ledgerPageSource, /gateway\.syncLedger\(this\.docId, next, this\.viewerMembershipEpoch\(\)\)/, "shared ledger writes must still use the guarded cloud gateway");
+assert.match(ledgerPageSource, /gateway\.syncLedger\(snapshot\.docId, next, this\.viewerMembershipEpoch\(\)\)/, "direct shared ledger writes must bind their original room and membership epoch");
+assert.match(ledgerPageSource, /gateway\.syncLedger\(docId, entry\.ledger, membershipEpoch\)/, "outbox writes must bind their original room, payload and membership epoch");
 assert.match(ledgerPageSource, /fromRemote && this\.data\.editingId && !\(source\.expenses \|\| \[\]\)\.some/, "a remotely deleted expense must exit the mini-program edit form");
 assert.match(ledgerPageSource, /editingId && !editing[\s\S]*?重新添加/, "saving a stale mini-program edit must not recreate a removed expense");
 assert.match(ledgerPageSource, /if \(this\.docId && member\.uid\)/, "only real shared-room members, not local history members, are protected from rename/delete");
@@ -419,7 +427,7 @@ assert.match(ledgerMarkup, /最少转账方案/, "ledger must render final settl
 assert.match(ledgerMarkup, /active-room-actions[\s\S]*?copyCode[\s\S]*?open-type="share"[\s\S]*?exitRoom/, "ledger room actions must stay in a dedicated compact row");
 assert.match(appStyles, /\.active-room-main\s*\{[^}]*width\s*:\s*0[^}]*flex\s*:\s*1 1 auto/, "room copy must retain usable width on iPhone");
 assert.match(appStyles, /\.active-room-label\s*\{[^}]*text-overflow\s*:\s*ellipsis[^}]*white-space\s*:\s*nowrap/, "room label must not wrap one character per line");
-assert.match(appStyles, /\.active-room-actions \.text-action\s*\{[^}]*width\s*:\s*68rpx[^}]*flex\s*:\s*0 0 68rpx/, "room action buttons must use compact fixed widths");
+assert.match(appStyles, /\.active-room-actions \.text-action\s*\{[^}]*min-width\s*:\s*34px/, "room action buttons must retain a compact minimum width");
 
 const spinnerPageSource = fs.readFileSync(path.join(root, "pages", "spinner", "index.js"), "utf8");
 const spinnerMarkup = fs.readFileSync(path.join(root, "pages", "spinner", "index.wxml"), "utf8");
@@ -439,8 +447,8 @@ assert.match(spinnerPageSource, /wx\.createAnimation\([\s\S]*?transformOrigin:\s
 assert.ok(!/getStorageSync|setStorageSync|pintu-spinner-v3/.test(spinnerPageSource), "spinner must stay session-only like Web and never leak a prior account's list");
 assert.match(spinnerMarkup, /wheel-pointer[\s\S]*?wheel-rotor[\s\S]*?wheel-center/, "spinner must render a pointer, animated rotor, and center control");
 assert.match(spinnerMarkup, /width="\{\{canvasSize\}\}" height="\{\{canvasSize\}\}"/, "native canvas markup must bind the viewport-matched buffer");
-assert.match(spinnerMarkup, /wheel-render-canvas[\s\S]*?wheel-rotor" animation="\{\{wheelAnimation\}\}"[\s\S]*?<image/, "the visible wheel must be an image animated separately from the offscreen canvas");
-assert.ok(!/wheel-rotor" style=/.test(spinnerMarkup), "the visible wheel must not rely on an inline CSS transition that diverges on iOS");
+assert.match(spinnerMarkup, /wheel-render-canvas[\s\S]*?wheel-rotor"[^>]*animation="\{\{wheelAnimation\}\}"[\s\S]*?<image/, "the visible wheel must be an image animated separately from the offscreen canvas");
+assert.doesNotMatch(spinnerMarkup, /wheel-rotor"[^>]*style="[^"]*(?:transition|transform)/, "the visible wheel must use native animation rather than inline CSS transitions");
 
 assert.match(midpointPageSource, /typeof wx\.chooseLocation !== ['"]function['"]/, "midpoint must guard unsupported native map APIs");
 assert.match(midpointPageSource, /translateX\(\$\{delta\}px\)/, "blind-box drag distance must use the same pixel unit as touch coordinates");

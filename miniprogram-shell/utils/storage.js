@@ -1,5 +1,8 @@
 const KEY = 'pintu-native-rooms'
 const SUPPORTED_TYPES = new Set(['midpoint', 'ledger'])
+const LOCAL_KEYS = new Set(['pintu-local-ledger-trips-v1', 'pintu-local-midpoint-v2'])
+const LEDGER_CACHE_KEY = 'pintu-ledger-backup-cache-v1'
+const backup = require('./ledger-backup')
 
 // Mini-program storage belongs to the device, not to the currently signed-in
 // WeChat account. Keep the active account scope in memory only, and prefix
@@ -69,6 +72,52 @@ function removeScoped(key) {
   }
 }
 
+// Only explicitly local drafts may exist before login. Guest storage is a
+// separate device space; logging in never merges it into an account.
+function localScopeToken() {
+  return accountScope || 'guest'
+}
+
+function getLocal(key, fallback) {
+  if (!LOCAL_KEYS.has(key)) return fallback
+  if (accountScope) return getScoped(key, fallback)
+  try {
+    const value = wx.getStorageSync(`pintu-guest:${key}`)
+    return value === undefined || value === null || value === '' ? fallback : value
+  } catch (_) { return fallback }
+}
+
+function setLocal(key, value) {
+  if (!LOCAL_KEYS.has(key)) return false
+  if (accountScope) return setScoped(key, value)
+  try { wx.setStorageSync(`pintu-guest:${key}`, value); return true } catch (_) { return false }
+}
+
+function getLedgerBackupCache() {
+  const value = getScoped(LEDGER_CACHE_KEY, [])
+  if (!Array.isArray(value)) return []
+  return value.slice(0, 20).map((entry) => {
+    try {
+      if (!entry || !/^[A-Za-z0-9_-]{1,128}$/.test(entry.docId || '')) return null
+      return { docId: entry.docId, ledger: backup.portableTrip(entry.ledger), updatedAt: Number(entry.updatedAt) || 0 }
+    } catch (_) { return null }
+  }).filter(Boolean)
+}
+
+function cacheLedgerSnapshot(docId, ledger) {
+  if (!accountScope || !/^[A-Za-z0-9_-]{1,128}$/.test(docId || '')) return false
+  try {
+    const portable = backup.portableTrip(ledger)
+    const previous = getLedgerBackupCache()
+    const existing = previous.find((entry) => entry.docId === docId)
+    if (existing && JSON.stringify(existing.ledger) === JSON.stringify(portable)) return true
+    let next = [{ docId, ledger: portable, updatedAt: Date.now() }].concat(previous.filter((entry) => entry.docId !== docId)).slice(0, 20)
+    while (next.length && backup.byteLength(JSON.stringify(next)) > backup.MAX_BYTES) next.pop()
+    if (!next.length) return false
+    return setScoped(LEDGER_CACHE_KEY, next)
+  } catch (_) { return false }
+}
+
 function isValidEntry(entry) {
   return Boolean(
     entry &&
@@ -131,5 +180,10 @@ module.exports = {
   isAccountScoped,
   getScoped,
   setScoped,
-  removeScoped
+  removeScoped,
+  getLocal,
+  setLocal,
+  localScopeToken,
+  cacheLedgerSnapshot,
+  getLedgerBackupCache
 }

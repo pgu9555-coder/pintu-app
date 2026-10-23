@@ -1,0 +1,22 @@
+<view class="page data-tools">
+  <view class="backup-intro">
+    <view class="eyebrow">把账本，安心带走</view>
+    <view class="backup-title">备份与迁移</view>
+    <view class="muted">网页和小程序使用同一种 JSON 备份格式。</view>
+  </view>
+  <view class="card">
+    <view class="section-title">{{scopeLabel}}</view>
+    <view class="backup-counts"><view><text class="count">{{localCount}}</text><text>本机账本</text></view><view><text class="count">{{cachedCount}}</text><text>共享账本缓存</text></view></view>
+    <view class="muted">备份本机现有账本和最近缓存的最多 20 份共享快照（总缓存不超过 5MB）。尚未下载的云端记录不在备份中，未同步的共享修改请先同步完成。</view>
+    <button class="btn" bindtap="exportBackup" disabled="{{busy}}" loading="{{busy}}">导出并分享备份</button>
+  </view>
+  <view class="card">
+    <view class="section-title">把已有账本带进来</view>
+    <view class="muted">先把 JSON 备份发送到微信聊天，再从聊天文件中选择。导入会新增独立本机账本，不会覆盖现有记录，也不会恢复房主身份或云端访问权限。</view>
+    <button class="btn secondary" bindtap="importBackup" disabled="{{busy}}">选择备份并导入</button>
+    <view class="small muted">支持不超过 5MB、最多 100 个账本的拼途备份。</view>
+  </view>
+  <view class="backup-note">备份含成员名字和账目，请只发送给你信任的人。游客与微信账号使用各自的本机空间，登录不会自动合并草稿。</view>
+  <view wx:if="{{status}}" class="backup-status" aria-role="status">{{status}}</view>
+  <button class="text-button" bindtap="openTrips">去行程查看账本 →</button>
+</view>

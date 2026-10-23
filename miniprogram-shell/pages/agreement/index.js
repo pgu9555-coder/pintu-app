@@ -1,4 +1,33 @@
+const layout = require('../../utils/layout')
+
+const TERMS = [
+  { title: '1. 服务内容', text: '拼途提供多人公平碰面、地点建议、盲盒、转盘和行程账本。参考中点按坐标估算，不保证实际交通时间相等。出行前请核实地点、营业信息和路线。' },
+  { title: '2. 共同使用', text: '请只提交你有权使用的内容。房间码是邀请凭据，应仅分享给可信成员；成员可以查看同一房间的名字、位置、候选地点、投票和账目。请勿传播违法、侵权或骚扰内容。' },
+  { title: '3. 账本与结算', text: '结算依赖录入的金额、付款人与分摊人。每笔支出分别均摊到分，余下的分按参与人顺序分配。转账前请共同核对。拼途只提供计算和记录，不处理实际付款。' },
+  { title: '4. 登录与权限', text: '本机账本和转盘无需登录。创建或加入云端房间、查看云端行程和账号资料需主动登录。不会要求手机号或自动读取头像昵称；头像和昵称只在你主动选择、填写并保存时上传。微信原生隐私保护指引及授权仍单独适用。' },
+  { title: '5. 数据与保管', text: '本机账本保存在这台设备，可从首页导出备份。卸载小程序、清理微信存储或更换设备可能使本机数据丢失。云端房间由房主解散，其他成员可以退出；房主可先转交权限。备份不能恢复云端身份或成员权限。' },
+  { title: '6. 服务变化与反馈', text: '网络、地图、微信或云服务异常可能影响使用。重要账目请保存备份，出现同步失败时核对状态后再重试。开发者邮箱：pgu9555@gmail.com。' }
+]
+const PRIVACY = [
+  { title: '1. 本机使用', text: '打开小程序不自动登录。本机账本、填写的成员名和账目保存在当前设备；转盘名单和结果仅用于本次使用。只有你主动使用云端协作或账号功能并完成同意流程后，才建立微信账号范围。' },
+  { title: '2. 云端协作与资料', text: '使用微信提供的 OpenID 识别成员、校验房主权限并同步有权访问的房间。房间名、成员名、位置、账目、候选地点和投票向同一房间成员展示。头像和昵称由你主动提供，可在首页右上角修改、移除或删除云端资料。上传头像保存在账号专属私有路径。' },
+  { title: '3. 位置与地图', text: '只有主动选择出发地或候选地点时才调用微信地图选点接口 wx.chooseLocation；拒绝后可手动输入。地址关键词和主动提交的坐标会用于地图搜索、参考中点计算和地点推荐，相关请求由腾讯云及高德地图服务处理。加入房间后，你保存的位置会展示给同房间成员。' },
+  { title: '4. 剪贴板与文件', text: '只有点击复制房间码、地点或开发者邮箱时写入剪贴板，不读取已有剪贴板。备份导入由你主动选择文件，导出后文件含成员名及账目，请妥善保管。备份可以包含已缓存的共享账本快照，不主动下载尚未查看的云端记录。' },
+  { title: '5. 保存与删除', text: '本机账本可在行程中删除。退出房间会取消当前成员访问权限，历史账目可能为其他成员核对而保留；房主解散后房间失效。删除账号资料不等于删除房间、历史账目或你已导出的备份。云端房间当前不设置自动过期。' },
+  { title: '6. 微信隐私授权与联系', text: '本页说明产品的数据处理方式，微信原生《隐私保护指引》仍需单独查看和授权。你可以拒绝非必要权限并使用不依赖它们的功能。如需更正、删除或反馈数据问题，请联系 pgu9555@gmail.com。' }
+]
+
 Page({
+  data: { privacy: false, title: '用户服务协议', sections: TERMS, headerTopPx: 72 },
+  onLoad(options) {
+    const privacy = Boolean(options && options.type === 'privacy')
+    this.setData({ privacy, title: privacy ? '隐私说明' : '用户服务协议', sections: privacy ? PRIVACY : TERMS, headerTopPx: layout.headerTopPx() })
+    if (wx.setNavigationBarTitle) wx.setNavigationBarTitle({ title: this.data.title })
+  },
+  openNativePrivacy() {
+    if (typeof wx.openPrivacyContract !== 'function') { wx.showToast({ title: '请更新微信后查看隐私保护指引', icon: 'none' }); return }
+    wx.openPrivacyContract({ fail: () => wx.showToast({ title: '暂时无法打开隐私保护指引', icon: 'none' }) })
+  },
   goBack() {
     wx.navigateBack({ fail: () => wx.switchTab({ url: '/pages/home/index' }) })
   }
