@@ -6,7 +6,8 @@ App({
   globalData: {
     accountProfile: null,
     accountPromise: null,
-    accountConsentGranted: false
+    accountConsentGranted: false,
+    accountGeneration: 0
   },
 
   onLaunch() {
@@ -19,6 +20,7 @@ App({
   },
 
   resetAccountScope() {
+    this.globalData.accountGeneration = (this.globalData.accountGeneration || 0) + 1
     storage.clearAccountScope()
     this.globalData.accountProfile = null
     this.globalData.accountPromise = null
@@ -33,15 +35,21 @@ App({
     return this.globalData.accountConsentGranted === true
   },
 
+  accountGenerationToken() {
+    return this.globalData.accountGeneration || 0
+  },
+
   // Keep the trusted profile returned by CloudBase in one place. Pages that
   // have just saved a profile use this too, so room pages do not retain an
   // out-of-date avatar or nickname in memory.
   applyAccountProfile(profile) {
+    const previousScope = storage.localScopeToken()
     const nextProfile = Object.assign({}, this.globalData.accountProfile || {}, profile || {})
     if (!storage.setAccountScope(nextProfile)) {
       throw new Error('微信账号识别凭据无效，请重新打开小程序')
     }
     this.globalData.accountProfile = nextProfile
+    if (previousScope !== storage.localScopeToken()) this.globalData.accountGeneration = this.accountGenerationToken() + 1
     this.globalData.accountPromise = null
     return nextProfile
   },
@@ -55,14 +63,27 @@ App({
     }
     if (this.globalData.accountPromise) return this.globalData.accountPromise
 
-    this.globalData.accountPromise = gateway.getProfile()
-      .then((profile) => this.applyAccountProfile(profile))
+    const generation = this.accountGenerationToken()
+    const scope = storage.localScopeToken()
+    const current = () => generation === this.accountGenerationToken() && scope === storage.localScopeToken() && this.hasAccountConsent()
+    const pending = gateway.getProfile()
+      .then((profile) => {
+        if (!current()) {
+          const error = new Error('账号空间已切换，请重新登录')
+          error.code = 'ACCOUNT_SCOPE_CHANGED'
+          throw error
+        }
+        return this.applyAccountProfile(profile)
+      })
       .catch((error) => {
-        storage.clearAccountScope()
-        this.globalData.accountProfile = null
-        this.globalData.accountPromise = null
+        if (current()) {
+          storage.clearAccountScope()
+          this.globalData.accountProfile = null
+          this.globalData.accountPromise = null
+        }
         throw error
       })
-    return this.globalData.accountPromise
+    this.globalData.accountPromise = pending
+    return pending
   }
 })

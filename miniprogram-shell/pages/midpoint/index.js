@@ -8,7 +8,7 @@ const invite = require('../../utils/invite')
 const LOCAL_MIDPOINT_KEY = 'pintu-local-midpoint-v2'
 const PENDING_CREATE_KEY = 'pintu-midpoint-pending-create-v1'
 const POINT_OUTBOX_PREFIX = 'pintu-midpoint-point-outbox-v1:'
-const MAX_LOCAL_POINTS = 4
+const MAX_LOCAL_POINTS = 6
 
 function localFriendLetter(index) {
   return String.fromCharCode(66 + index)
@@ -48,7 +48,8 @@ function localPointInitial(point, index) {
 function normalizeLocalPoints(points, profile) {
   const source = Array.isArray(points) ? points : []
   const rows = isUntouchedLegacyPoints(source) ? [] : source.slice(0, MAX_LOCAL_POINTS)
-  const base = rows.length ? rows : [{}]
+  const base = rows.length ? rows : [{}, {}]
+  if (base.length === 1) base.push({})
   return base.map((point, index) => {
     const isSelf = index === 0
     return {
@@ -242,6 +243,20 @@ function requirePrivacyAuthorization() {
   })
 }
 
+function presentationPoi(poi) {
+  const category = poi.isMall ? 'mall' : poi.isDrink ? 'drink' : 'food'
+  const photo = Array.isArray(poi.photos) && poi.photos.find(item => /^https:\/\//.test(String(item && item.url || item || '')))
+  return Object.assign({}, poi, { categoryKey: category, cover: photo ? String(photo.url || photo) : '/assets/categories/' + category + '.png', fallbackCover: '/assets/categories/' + category + '.png', dist: Number(poi.dist) || 0 })
+}
+function normalizeSearchPlaces(places, center) {
+  return places.slice(0, 12).map((place, i) => Object.assign({}, place, {
+    id: place.id || place.poiId || 'nearby-' + i,
+    dist: distanceMeters(center, place),
+    isMall: typeof place.isMall === 'boolean' ? place.isMall : /商场|购物/.test(place.typeStr || ''),
+    isDrink: typeof place.isDrink === 'boolean' ? place.isDrink : /咖啡|茶艺|冷饮|奶茶/.test((place.typeStr || '') + (place.name || ''))
+  }))
+}
+
 Page({
   data: {
     name: '',
@@ -273,6 +288,7 @@ Page({
     addressSearchLoading: false,
     amapConfigured: false,
     screen: 'main',
+    resultMode: false, filter: 'all', resultRows: [], resultCount: 0, polyline: [], mapFitPoints: [], mapScale: 12, expandedPoiId: '', mapLoading: false, mapError: '', swipeDetail: null,
     swipeDeck: [],
     swipeIndex: 0,
     swipeCurrent: null,
@@ -288,7 +304,175 @@ Page({
     syncText: '已同步'
   },
 
+  present(patch, callback) {
+    const next = Object.assign({}, this.data, patch)
+    const source = next.room ? next.decisionCandidates : next.localCandidates
+    const rows = (source || []).map(poi => {
+      const details = (this.poiDetails || {})[candidateDetailKey(poi)] || {}
+      const row = presentationPoi(Object.assign({},poi,{photos:details.loaded && details.info && details.info.photos || poi.photos}))
+      if (this.failedCovers && this.failedCovers.has(candidateDetailKey(poi))) row.cover = row.fallbackCover
+      return Object.assign(row, { expanded: String(poi.id) === String(next.expandedPoiId), details })
+    })
+    const resultRows = rows.filter(row => next.filter === 'all' || row.categoryKey === next.filter)
+    const polyline = next.center ? (next.markers || []).filter(marker => marker.id !== 9999).map((marker, i) => ({
+      points: [{latitude: marker.latitude, longitude: marker.longitude}, next.center], color: ['#ee9476aa','#638b68aa','#799ba4aa','#bd9b68aa'][i % 4], width: 2, dottedLine: true
+    })) : []
+    const derived = {resultRows,resultCount:rows.length,polyline}
+    if (Object.prototype.hasOwnProperty.call(patch,'markers')) derived.mapFitPoints = (next.markers || []).map(marker => ({latitude:marker.latitude,longitude:marker.longitude}))
+    this.setData(Object.assign({},patch,derived),callback)
+  },
+
+  adjustPlaces() {
+    this.adjustingPlaces = true
+    this.localSearchVersion += 1
+    this.present({ resultMode: false, mapLoading: false })
+    if (wx.pageScrollTo) wx.pageScrollTo({scrollTop:0,duration:0})
+  },
+
+  showRoomResults() {
+    if (!this.data.center) { wx.showToast({title:'至少两位成员保存出发点后才能寻找',icon:'none'}); return }
+    this.adjustingPlaces = false
+    this.present({resultMode:true})
+    this.fitMap()
+    if (!this.data.decisionCandidates.length) this.searchRoomCandidates()
+  },
+
+  setFilter(event) {
+    const filter = event.currentTarget.dataset.filter
+    if (['all','drink','food','mall'].includes(filter)) this.present({filter})
+  },
+
+  mapAction(event) {
+    const action = event.currentTarget.dataset.action
+    if (action === 'fit') { this.fitMap(); return }
+    this.present({mapScale: Math.max(3, Math.min(20, this.data.mapScale + (action === 'in' ? 1 : -1)))})
+  },
+
+  fitMap() {
+    if (!this.data.center || typeof wx.createMapContext !== 'function') return
+    this.mapContext = this.mapContext || wx.createMapContext('midpointMap', this)
+    if (this.mapContext && this.mapContext.includePoints) this.mapContext.includePoints({points:(this.data.markers || []).map(marker => ({latitude:marker.latitude,longitude:marker.longitude})),padding:[44,64,64,44]})
+  },
+
+  coverError(event) {
+    const id = String(event.currentTarget.dataset.id)
+    const poi = this.findCandidate(id)
+    if (!poi) return
+    this.failedCovers = this.failedCovers || new Set()
+    this.failedCovers.add(candidateDetailKey(poi))
+    const swipeCurrent = this.data.swipeCurrent && String(this.data.swipeCurrent.id) === id ? Object.assign({},this.data.swipeCurrent,{cover:presentationPoi(poi).fallbackCover}) : this.data.swipeCurrent
+    this.present({swipeCurrent})
+  },
+
+  async togglePoi(event) {
+    const id = String(event.currentTarget.dataset.id)
+    const expandedPoiId = String(this.data.expandedPoiId) === id ? '' : id
+    this.present({expandedPoiId})
+    if (expandedPoiId) await this.loadPoiDetails(id)
+  },
+
+  findCandidate(id) {
+    return this.activeSwipeCandidates().find(poi => String(poi.id) === String(id))
+  },
+
+  async loadPoiDetails(id, force) {
+    const poi = this.findCandidate(id)
+    if (!poi) return
+    this.poiDetails = this.poiDetails || Object.create(null)
+    const key = candidateDetailKey(poi), current = this.poiDetails[key]
+    if (!force && current && (current.loading || current.loaded)) return
+    const generation = this.detailGeneration || 0, scope = this.localScope
+    const context = this.captureViewContext()
+    this.poiDetails[key] = {loading:true,categories:[]}
+    this.present({})
+    try {
+      const results = await Promise.all([amap.detail(poi),amap.categories(poi)])
+      if (!this.viewContextMatches(context) || scope !== this.localScope || !this.localScopeMatches() || generation !== (this.detailGeneration || 0) || !this.findCandidate(id)) return
+      const info = results[0] || {}
+      const categories = (results[1] || []).map(category => Object.assign({}, category, {expanded:false,loading:false,error:'',pois:(category.pois || []).map(row => presentationPoi(Object.assign({},row,{dist:distanceMeters({latitude:poi.lat,longitude:poi.lng},row)})))}))
+      this.poiDetails[key] = {loaded:true,loading:false,info,categories}
+    } catch(error) {
+      if (scope !== this.localScope || !this.localScopeMatches() || generation !== (this.detailGeneration || 0)) return
+      this.poiDetails[key] = {loading:false,error:error.message || '地点详情加载失败，请重试',categories:[]}
+    }
+    this.present({swipeDetail:this.data.swipeCurrent && candidateDetailKey(this.data.swipeCurrent) === key ? this.poiDetails[key] : this.data.swipeDetail})
+  },
+
+  retryPoi(event) { return this.loadPoiDetails(String(event.currentTarget.dataset.id),true) },
+
+  toggleCategory(event) {
+    const data = event.currentTarget.dataset, poi = this.findCandidate(data.id)
+    if (!poi) return
+    const details = this.poiDetails[candidateDetailKey(poi)]
+    const category = details && details.categories.find(item => item.key === data.key)
+    if (!category) return
+    category.expanded = !category.expanded
+    this.present({})
+  },
+
+  async moreCategory(event) {
+    const context = this.captureViewContext()
+    const data = event.currentTarget.dataset, poi = this.findCandidate(data.id)
+    if (!poi) return
+    const details = this.poiDetails[candidateDetailKey(poi)]
+    const category = details && details.categories.find(item => item.key === data.key)
+    if (!category || category.loading || Number(category.page) >= 4 || category.pois.length >= Number(category.total)) return
+    category.loading = true; category.error = ''; this.present({})
+    try {
+      const result = await amap.categoryPage(poi, category.key, Number(category.page || 1) + 1)
+      if (!this.viewContextMatches(context) || this.poiDetails[candidateDetailKey(poi)] !== details) return
+      const seen = new Set(category.pois.map(candidateDetailKey))
+      ;(result.pois || []).forEach(row => {const key = candidateDetailKey(row); if (!seen.has(key)){seen.add(key);category.pois.push(presentationPoi(Object.assign({},row,{dist:distanceMeters({latitude:poi.lat,longitude:poi.lng},row)})))}})
+      category.page = Number(result.page || Number(category.page || 1) + 1)
+      category.capped = Boolean(result.capped)
+    } catch(error){ if (!this.viewContextMatches(context)) return; category.error = error.message || '加载失败，请重试' }
+    category.loading = false; this.present({})
+  },
+
+  showSwipeDetails(event) {
+    const id = String(event.currentTarget.dataset.id)
+    this.present({screen:'main',resultMode:true,expandedPoiId:id})
+    this.loadPoiDetails(id)
+  },
+
+  retryMapSearch() {
+    if (this.data.room) return this.searchRoomCandidates()
+    if (this.data.center) return this.searchLocalCandidates(this.data.center, ++this.localSearchVersion)
+  },
+
+  captureViewContext() { return {scope:this.localScope,docId:this.docId || '',generation:this.pageGeneration || 0} },
+  viewContextMatches(context) { return !this.closed && context.scope === this.localScope && this.localScopeMatches() && context.docId === (this.docId || '') && context.generation === (this.pageGeneration || 0) },
+  captureRoomContext() { return Object.assign(this.captureViewContext(),{epoch:this.viewer && this.viewer.membershipEpoch || ''}) },
+  roomContextMatches(context) { return this.viewContextMatches(context) && context.epoch === (this.viewer && this.viewer.membershipEpoch || '') },
+
+  localScopeMatches() {
+    return typeof storage.localScopeToken !== 'function' || this.localScope === storage.localScopeToken()
+  },
+
+  reloadLocalScope() {
+    this.pageGeneration = (this.pageGeneration || 0) + 1
+    this.decisionToken = (this.decisionToken || 0) + 1
+    this.pointFlushToken = (this.pointFlushToken || 0) + 1
+    this.roomSearchToken = (this.roomSearchToken || 0) + 1
+    this.pointFlushBusy = false; this.roomSearchBusy = false
+    this.stopPolling()
+    this.localScope = storage.localScopeToken()
+    this.localSearchVersion = (this.localSearchVersion || 0) + 1
+    this.detailGeneration = (this.detailGeneration || 0) + 1
+    this.addressSearchRequest = (this.addressSearchRequest || 0) + 1
+    this.docId = ''; this.viewer = null; this.serverRoom = null; this.pendingMeetupMutation = null
+    this.poiDetails = Object.create(null); this.candidateDetails = Object.create(null); this.mineDraftDirty = false
+    const app = typeof getApp === 'function' ? getApp() : null
+    this.accountProfile = app && app.globalData && app.globalData.accountProfile || null
+    this.scopeReady = Boolean(storage.isAccountScoped && storage.isAccountScoped())
+    const local = validLocalState(storage.getLocal(LOCAL_MIDPOINT_KEY,null),this.accountProfile)
+    this.localStorageReady = true
+    this.present({room:null,people:[],center:null,markers:[],resultMode:false,localPoints:local.points,localCandidates:local.candidates,decisionCandidates:[],screen:'main',swipeCurrent:null,swipeDeck:[],swipeLikes:[],swipeVoteBusy:false,busy:false,pointSyncBusy:false,mapLoading:false,mapError:'',expandedPoiId:'',mineName:'',mineAddress:'',mineLocation:null,mineHasSavedLocation:false,pointSyncPending:false,pointSyncText:'',name:storage.getName(),code:''})
+  },
+
   async onLoad(options) {
+    this.closed = false
+    const generation = this.pageGeneration || 0
     this.docId = (options && options.docId) || ''
     this.viewer = null
     this.mineDraftDirty = false
@@ -307,28 +491,33 @@ Page({
     const app = typeof getApp === 'function' ? getApp() : null
     const consentGranted = Boolean(app && typeof app.hasAccountConsent === 'function' && app.hasAccountConsent())
     if (!consentGranted) {
-      localStorageMessage = '游客模式：可以计算中点；本次草稿不会保存，创建或加入房间时再登录。'
+      localStorageMessage = '出发点草稿仅保存在本机，不会上传；创建或加入房间时再登录。'
     } else {
       try {
         if (!app || typeof app.ensureAccountScope !== 'function') throw new Error('账户存储初始化不可用')
         accountProfile = await app.ensureAccountScope()
+        if (this.closed || generation !== (this.pageGeneration || 0)) return
         this.accountProfile = accountProfile
         if (typeof storage.isAccountScoped === 'function' && !storage.isAccountScoped()) throw new Error('当前账户存储不可用')
         if (typeof storage.getScoped !== 'function' || typeof storage.setScoped !== 'function') throw new Error('账户存储版本不支持')
-        localState = validLocalState(storage.getScoped(LOCAL_MIDPOINT_KEY, null), accountProfile)
         const pendingCreateRaw = storage.getScoped(PENDING_CREATE_KEY, null)
         const pendingCreate = validPendingCreate(pendingCreateRaw)
         if (pendingCreateRaw && !pendingCreate && typeof storage.removeScoped === 'function') storage.removeScoped(PENDING_CREATE_KEY)
         this.pendingCreateId = pendingCreate && pendingCreate.requestId || ''
         if (this.docId) this.loadPointOutbox(this.docId)
-        this.localStorageReady = true
         this.scopeReady = true
       } catch (error) {
         localStorageMessage = '本机草稿未加载：账户存储尚未准备好。'
         wx.showToast({ title: localStorageMessage, icon: 'none' })
       }
     }
-    this.setData({
+    try {
+      if (typeof storage.getLocal !== 'function' || typeof storage.setLocal !== 'function') throw new Error('本机存储版本尚未就绪')
+      this.localScope = storage.localScopeToken()
+      localState = validLocalState(storage.getLocal(LOCAL_MIDPOINT_KEY, null), accountProfile)
+      this.localStorageReady = true
+    } catch(error) { localStorageMessage = '本机草稿无法读取，请勿在未备份时关闭页面'; wx.showToast({title:localStorageMessage,icon:'none'}) }
+    this.present({
       name: storage.getName(),
       headerTopPx: layout.headerTopPx(),
       amapConfigured: Boolean(amap.configuredKey()),
@@ -346,6 +535,7 @@ Page({
   },
 
   onShow() {
+    if (this.localScope !== undefined && typeof storage.localScopeToken === 'function' && !this.localScopeMatches()) this.reloadLocalScope()
     if (this.docId && this.scopeReady) {
       this.startPolling()
       this.flushPendingMeetupMutation(false, true)
@@ -357,7 +547,10 @@ Page({
   },
 
   onUnload() {
+    this.closed = true
+    this.pageGeneration = (this.pageGeneration || 0) + 1
     this.stopPolling()
+    this.detailGeneration = (this.detailGeneration || 0) + 1
     if (this.addressSearchTimer) clearTimeout(this.addressSearchTimer)
     if (this.networkStatusHandler && wx.offNetworkStatusChange) wx.offNetworkStatusChange(this.networkStatusHandler)
   },
@@ -378,6 +571,8 @@ Page({
   },
 
   stopPolling() {
+    this.fetchRequestToken = (this.fetchRequestToken || 0) + 1
+    this.fetchBusy = false
     if (this.timer) clearInterval(this.timer)
     this.timer = null
   },
@@ -392,7 +587,7 @@ Page({
     }
     this.pendingMeetupMutation = pending
     this.lastMeetupMutationAt = Math.max(this.lastMeetupMutationAt || 0, pending.mutationAt)
-    this.setData({ pointSyncPending: true, pointSyncText: '出发点等待同步' })
+    this.present({ pointSyncPending: true, pointSyncText: '出发点等待同步' })
     return pending
   },
 
@@ -409,7 +604,7 @@ Page({
     if (targetDocId && typeof storage.removeScoped === 'function') storage.removeScoped(pointOutboxKey(targetDocId))
     if (!this.pendingMeetupMutation || this.pendingMeetupMutation.docId === targetDocId) {
       this.pendingMeetupMutation = null
-      this.setData({ pointSyncPending: false, pointSyncBusy: false, pointSyncText: '' })
+      this.present({ pointSyncPending: false, pointSyncBusy: false, pointSyncText: '' })
     }
   },
 
@@ -420,7 +615,7 @@ Page({
       this.mineDraftDirty = true
       const lat = Number(person.lat)
       const lng = Number(person.lng)
-      this.setData({
+      this.present({
         mineName: String(person.name || this.data.mineName || '').slice(0, 24),
         mineAddress: String(person.address || '').slice(0, 120),
         mineLocation: Number.isFinite(lat) && Number.isFinite(lng)
@@ -431,7 +626,7 @@ Page({
       })
       return
     }
-    this.setData({ pointSyncPending: false, pointSyncText: text || '原操作已取消' })
+    this.present({ pointSyncPending: false, pointSyncText: text || '原操作已取消' })
   },
 
   optimisticRoom(room, viewer) {
@@ -465,7 +660,7 @@ Page({
       return false
     }
     this.mineDraftDirty = false
-    this.setData({
+    this.present({
       pointSyncPending: true,
       pointSyncText: '已保存到本机，正在同步…',
       syncText: '出发点待同步'
@@ -475,6 +670,7 @@ Page({
   },
 
   async flushPendingMeetupMutation(notifyFailure, force) {
+    const context = this.captureRoomContext()
     const pending = this.pendingMeetupMutation
     const viewer = this.viewer
     if (!pending || this.pointFlushBusy || !this.scopeReady || !this.docId || !viewer) return false
@@ -486,7 +682,8 @@ Page({
     if (!force && now - (this.lastPointRetryAt || 0) < 1500) return false
     this.lastPointRetryAt = now
     this.pointFlushBusy = true
-    this.setData({ pointSyncBusy: true, pointSyncPending: true, pointSyncText: '正在同步出发点…' })
+    const token = this.pointFlushToken = (this.pointFlushToken || 0) + 1
+    this.present({ pointSyncBusy: true, pointSyncPending: true, pointSyncText: '正在同步出发点…' })
     try {
       await gateway.setMeetupPoint({
         docId: pending.docId,
@@ -495,13 +692,15 @@ Page({
         mutationAt: pending.mutationAt,
         person: pending.person
       })
+      if (!this.roomContextMatches(context)) return false
       if (this.pendingMeetupMutation && this.pendingMeetupMutation.mutationAt === pending.mutationAt && this.pendingMeetupMutation.membershipEpoch === pending.membershipEpoch) {
         this.clearPointOutbox(pending.docId)
-        this.setData({ syncText: '已同步' })
+        this.present({ syncText: '已同步' })
       }
       await this.fetchRoom()
-      return true
+      return this.roomContextMatches(context)
     } catch (error) {
+      if (!this.roomContextMatches(context)) return false
       if (error.code === 'STALE_MEMBERSHIP' || error.code === 'ROOM_NOT_FOUND') {
         this.recoverPendingPointDraft(
           pending,
@@ -515,25 +714,25 @@ Page({
         this.renderRoom(this.serverRoom || this.data.room, viewer)
         if (notifyFailure) wx.showToast({ title: error.message || '请修改出发点后重试', icon: 'none' })
       } else {
-        this.setData({ pointSyncPending: true, pointSyncText: '网络恢复后会自动同步', syncText: '出发点待同步' })
+        this.present({ pointSyncPending: true, pointSyncText: '网络恢复后会自动同步', syncText: '出发点待同步' })
         if (notifyFailure) wx.showToast({ title: '已保存到本机，网络恢复后自动同步', icon: 'none' })
       }
       return false
     } finally {
-      this.pointFlushBusy = false
-      this.setData({ pointSyncBusy: false })
-      if (this.pendingMeetupMutation && this.pendingMeetupMutation.mutationAt !== pending.mutationAt) {
-        setTimeout(() => this.flushPendingMeetupMutation(false, true), 0)
+      if (token === this.pointFlushToken) this.pointFlushBusy = false
+      if (token === this.pointFlushToken && this.viewContextMatches(context)) {
+        this.present({ pointSyncBusy: false })
+        if (this.pendingMeetupMutation && this.pendingMeetupMutation.mutationAt !== pending.mutationAt) setTimeout(() => this.flushPendingMeetupMutation(false,true),0)
       }
     }
   },
 
   nameInput(event) {
-    this.setData({ name: event.detail.value })
+    this.present({ name: event.detail.value })
   },
 
   codeInput(event) {
-    this.setData({ code: cleanCode(event.detail.value) })
+    this.present({ code: cleanCode(event.detail.value) })
   },
 
   ensurePendingCreateId(name) {
@@ -559,7 +758,8 @@ Page({
   },
 
   async create() {
-    if (this.data.busy) return
+    if (this.data.busy || !this.localScopeMatches()) return
+    const scope = this.localScope
     if (!this.scopeReady) {
       wx.showToast({ title: '创建房间前请返回首页登录', icon: 'none' })
       return
@@ -574,25 +774,32 @@ Page({
       wx.showToast({ title: '无法保存创建请求，请返回首页重试', icon: 'none' })
       return
     }
-    this.setData({ busy: true })
+    this.present({ busy: true })
     try {
       const result = await gateway.create(roomInput(name), pendingCreateId)
+      if (scope !== this.localScope || !this.localScopeMatches()) return
       this.clearPendingCreateId(pendingCreateId)
       storage.saveName(name)
+      this.pendingMeetupMutation = null
+      this.pointFlushToken = (this.pointFlushToken || 0) + 1; this.pointFlushBusy = false
+      this.roomSearchToken = (this.roomSearchToken || 0) + 1; this.roomSearchBusy = false
+      this.detailGeneration = (this.detailGeneration || 0) + 1; this.poiDetails = Object.create(null)
       this.docId = result.docId
       this.loadPointOutbox(this.docId)
       storage.save({ docId: result.docId, room: result.room })
       this.applyRoom(result.room, result.viewer)
       this.startPolling()
     } catch (error) {
+      if (scope !== this.localScope || !this.localScopeMatches()) return
       wx.showToast({ title: error.message || '创建失败，请重试', icon: 'none' })
     } finally {
-      this.setData({ busy: false })
+      if (scope === this.localScope && this.localScopeMatches()) this.present({ busy: false })
     }
   },
 
   async join() {
-    if (this.data.busy) return
+    if (this.data.busy || !this.localScopeMatches()) return
+    const scope = this.localScope
     if (!this.scopeReady) {
       wx.showToast({ title: '加入房间前请返回首页登录', icon: 'none' })
       return
@@ -603,9 +810,10 @@ Page({
       wx.showToast({ title: '请填写名字和 8 位房间码', icon: 'none' })
       return
     }
-    this.setData({ busy: true })
+    this.present({ busy: true })
     try {
       const result = await gateway.join(code, 'midpoint', name)
+      if (scope !== this.localScope || !this.localScopeMatches()) return
       storage.saveName(name)
       this.docId = result.docId
       this.loadPointOutbox(this.docId)
@@ -613,17 +821,22 @@ Page({
       this.applyRoom(result.room, result.viewer)
       this.startPolling()
     } catch (error) {
+      if (scope !== this.localScope || !this.localScopeMatches()) return
       wx.showToast({ title: error.message || '加入失败，请重试', icon: 'none' })
     } finally {
-      this.setData({ busy: false })
+      if (scope === this.localScope && this.localScopeMatches()) this.present({ busy: false })
     }
   },
 
   async fetchRoom() {
     if (!this.scopeReady || !this.docId || this.fetchBusy) return
     this.fetchBusy = true
+    const context = this.captureViewContext()
+    const token = this.fetchRequestToken = (this.fetchRequestToken || 0) + 1
     try {
-      const result = await gateway.getRoom(this.docId)
+      const requestedId = this.docId, scope = this.localScope
+      const result = await gateway.getRoom(requestedId)
+      if (token !== this.fetchRequestToken || !this.viewContextMatches(context)) return
       this.lastFetchError = false
       if (!result.room) {
         const removedId = this.docId
@@ -637,22 +850,23 @@ Page({
         this.serverRoom = null
         this.stopPolling()
         storage.remove(removedId)
-        this.setData({ room: null, syncText: '房间已结束' })
+        this.present({ room: null, syncText: '房间已结束' })
         wx.showToast({ title: pending ? '房间已结束，原地点已保留' : '房间已解散或你已退出', icon: 'none' })
         return
       }
       storage.save({ docId: this.docId, room: result.room })
       this.applyRoom(result.room, result.viewer)
-      this.setData({ syncText: this.pendingMeetupMutation ? '出发点待同步' : '已同步' })
+      this.present({ syncText: this.pendingMeetupMutation ? '出发点待同步' : '已同步' })
     } catch (error) {
-      this.setData({ syncText: '同步重试中' })
+      if (token !== this.fetchRequestToken || !this.viewContextMatches(context)) return
+      this.present({ syncText: '同步重试中' })
       if (!this.lastFetchError) {
         wx.showToast({ title: error.message || '同步暂时中断', icon: 'none' })
       }
       this.lastFetchError = true
     } finally {
-      this.fetchBusy = false
-      if (this.pendingMeetupMutation) setTimeout(() => this.flushPendingMeetupMutation(false, false), 0)
+      if (token === this.fetchRequestToken) this.fetchBusy = false
+      if (this.viewContextMatches(context) && this.pendingMeetupMutation) setTimeout(() => this.flushPendingMeetupMutation(false, false), 0)
     }
   },
 
@@ -679,6 +893,7 @@ Page({
       people,
       center: midpoint.average(room),
       markers: midpoint.markers(room),
+      resultMode: Boolean(midpoint.average(room)) && !this.adjustingPlaces,
       decision,
       decisionCandidates: candidates,
       decisionConfirmed: decision.state === 'confirmed',
@@ -695,7 +910,7 @@ Page({
       next.addressSuggestions = []
       next.addressSuggestionsVisible = false
     }
-    this.setData(next, () => this.maybeAutoSearchRoomCandidates())
+    this.present(next, () => this.maybeAutoSearchRoomCandidates())
   },
 
   maybeAutoSearchRoomCandidates() {
@@ -721,13 +936,17 @@ Page({
         category: String(candidate.category || '').slice(0, 120),
         phone: String(candidate.phone || '').slice(0, 80),
         rating: String(candidate.rating || '').slice(0, 16),
-        averageCost: String(candidate.averageCost || '').slice(0, 16)
+        averageCost: String(candidate.averageCost || '').slice(0, 16),
+        photos: Array.isArray(candidate.photos) ? candidate.photos.slice(0,3) : [],
+        poiId: String(candidate.poiId || '').slice(0,80)
       }
     })
   },
 
   async requestLocation(onSuccess) {
-    if (this.data.busy) return
+    if (this.data.busy || !this.localScopeMatches()) return
+    const scope = this.localScope
+    const context = this.captureRoomContext()
     if (typeof wx.chooseLocation !== 'function') {
       wx.showToast({ title: '当前微信版本不支持地图选点，请更新微信后重试', icon: 'none' })
       return
@@ -735,6 +954,7 @@ Page({
     try {
       await requirePrivacyAuthorization()
     } catch (_) {
+      if (!this.roomContextMatches(context)) return
       wx.showModal({
         title: '需要隐私授权',
         content: '选择地图地点前，请先阅读并同意小程序隐私保护指引。',
@@ -745,9 +965,10 @@ Page({
       })
       return
     }
+    if (!this.roomContextMatches(context)) return
     wx.chooseLocation({
-      success: onSuccess,
-      fail: (error) => this.handleLocationFailure(error)
+      success: (value) => { if (this.roomContextMatches(context)) onSuccess(value) },
+      fail: (error) => { if (this.roomContextMatches(context)) this.handleLocationFailure(error) }
     })
   },
 
@@ -776,7 +997,7 @@ Page({
     this.requestLocation((location) => {
       const address = String(location.address || location.name || '').slice(0, 120)
       this.mineDraftDirty = true
-      this.setData({
+      this.present({
         mineAddress: address,
         mineLocation: { lat: Number(location.latitude), lng: Number(location.longitude), address },
         addressSuggestions: [],
@@ -786,7 +1007,7 @@ Page({
   },
 
   saveLocalState(points, candidates) {
-    if (!this.localStorageReady || typeof storage.setScoped !== 'function') return false
+    if (!this.localStorageReady || typeof storage.setLocal !== 'function' || !this.localScopeMatches()) return false
     // The avatar belongs to the account profile only.  Local midpoint drafts keep
     // locations, while shared rooms never receive profile/avatar fields.
     const savedPoints = (points || []).map((point) => ({
@@ -799,17 +1020,22 @@ Page({
       lat: point.lat,
       lng: point.lng
     }))
-    return storage.setScoped(LOCAL_MIDPOINT_KEY, { points: savedPoints, candidates })
+    const saved = storage.setLocal(LOCAL_MIDPOINT_KEY, { points: savedPoints, candidates })
+    if (!saved) wx.showToast({title:'未保存：本机存储不可用，请勿关闭页面',icon:'none'})
+    return saved
   },
 
   resetLocalCalculation(points) {
     const normalizedPoints = normalizeLocalPoints(points, this.accountProfile)
     this.localSearchVersion += 1
+    this.detailGeneration = (this.detailGeneration || 0) + 1
+    this.poiDetails = Object.create(null)
     this.saveLocalState(normalizedPoints, [])
-    this.setData({
+    this.present({
       localPoints: normalizedPoints,
       localCandidates: [],
       localCalculated: false,
+      resultMode: false,
       center: null,
       markers: [],
       mapSearchMessage: ''
@@ -818,7 +1044,7 @@ Page({
 
   addLocalPoint() {
     if (this.data.localPoints.length >= MAX_LOCAL_POINTS) {
-      wx.showToast({ title: '最多 4 位出发的人', icon: 'none' })
+      wx.showToast({ title: '最多 6 位出发的人', icon: 'none' })
       return
     }
     const index = this.data.localPoints.length
@@ -839,6 +1065,7 @@ Page({
     const id = String(event.currentTarget.dataset.id || '')
     const target = this.data.localPoints.find((point) => String(point.id) === id)
     if (!target || target.isSelf) return
+    if (this.data.localPoints.length <= 2) { wx.showToast({title:'至少保留 2 个出发点',icon:'none'}); return }
     const points = this.data.localPoints.filter((point) => String(point.id) !== id)
     this.resetLocalCalculation(points)
   },
@@ -869,46 +1096,48 @@ Page({
     }
     const room = { meetup: { people: points } }
     const center = midpoint.average(room)
-    this.setData({
+    this.present({
       center,
       markers: midpoint.markers(room),
       localCalculated: true,
+      resultMode: true,
       mapSearchMessage: ''
     })
     this.searchLocalCandidates(center, ++this.localSearchVersion)
   },
 
   async searchLocalCandidates(center, searchVersion) {
+    const scope = this.localScope
+    if (!this.localScopeMatches()) return
     if (!amap.configuredKey()) {
-      this.setData({
+      this.present({
         amapConfigured: false,
         mapSearchMessage: '未配置地图搜索；可继续用“从地图添加候选地点”手动选点。'
       })
       return
     }
-    this.setData({ amapConfigured: true, mapSearchMessage: '正在搜索中点附近的真实地点…' })
+    this.present({ amapConfigured: true, mapLoading:true,mapError:'',mapSearchMessage: '正在搜索中点附近的真实地点…' })
     try {
       const places = await amap.nearby(center)
-      const candidates = places.map((place) => Object.assign({}, place, {
-        dist: distanceMeters(center, place),
-        isMall: /商场|购物/.test(place.typeStr),
-        isDrink: /餐饮|咖啡|茶/.test(place.typeStr)
-      })).slice(0, 12)
-      if (searchVersion !== this.localSearchVersion) return
+      const candidates = normalizeSearchPlaces(places, center)
+      if (searchVersion !== this.localSearchVersion || scope !== this.localScope || !this.localScopeMatches()) return
       this.rememberCandidateDetails(candidates)
       this.saveLocalState(this.data.localPoints, candidates)
-      this.setData({
+      this.present({
         localCandidates: candidates,
+        mapLoading:false,
         mapSearchMessage: candidates.length ? `已找到 ${candidates.length} 个真实地点` : '附近没有可用结果；可改用地图手动选点。'
       })
     } catch (error) {
       if (searchVersion !== this.localSearchVersion) return
-      this.setData({ mapSearchMessage: `${error.message || '地图搜索暂时不可用'} 可改用地图手动选点。` })
+      this.present({mapLoading:false,mapError:error.message || '地图查询失败', mapSearchMessage: `${error.message || '地图搜索暂时不可用'} 可改用地图手动选点。` })
     }
   },
 
   async searchRoomCandidates() {
-    if (!this.data.room || !this.data.center || this.roomSearchBusy || this.data.busy) return
+    if (!this.data.room || !this.data.center || this.roomSearchBusy || this.data.busy || !this.localScopeMatches()) return
+    const scope = this.localScope
+    const context = this.captureRoomContext()
     if (this.pendingMeetupMutation) {
       wx.showToast({ title: '请先等待出发点同步', icon: 'none' })
       return
@@ -916,7 +1145,7 @@ Page({
     const decision = currentDecision(this.data.room)
     if (decision.state === 'confirmed') return
     if (!amap.configuredKey()) {
-      this.setData({ amapConfigured: false, mapSearchMessage: '请在微信地图中搜索并选择一个候选地点。' })
+      this.present({ amapConfigured: false, mapSearchMessage: '请在微信地图中搜索并选择一个候选地点。' })
       this.addDecisionCandidate()
       return
     }
@@ -927,7 +1156,8 @@ Page({
       longitude: Number(this.data.center.longitude)
     }
     this.roomSearchBusy = true
-    this.setData({ amapConfigured: true, mapSearchMessage: '正在搜索参考中点附近的真实地点…' })
+    const token = this.roomSearchToken = (this.roomSearchToken || 0) + 1
+    this.present({ amapConfigured: true, mapLoading:true,mapError:'',mapSearchMessage: '正在搜索参考中点附近的真实地点…' })
     try {
       const places = await amap.nearby(searchCenter)
       const latestCenter = this.data.center
@@ -935,14 +1165,11 @@ Page({
       const centerChanged = !latestCenter ||
         Math.abs(Number(latestCenter.latitude) - searchCenter.latitude) > 0.000001 ||
         Math.abs(Number(latestCenter.longitude) - searchCenter.longitude) > 0.000001
-      if (this.docId !== searchRoomId || (latestDecision.roundId || 'initial') !== searchRoundId || centerChanged) return
-      const candidates = places.map((place) => Object.assign({}, place, {
-        dist: distanceMeters(searchCenter, place),
-        isMall: /商场|购物/.test(place.typeStr),
-        isDrink: /餐饮|咖啡|茶/.test(place.typeStr)
-      })).slice(0, 12)
+      if (scope !== this.localScope || !this.localScopeMatches() || this.docId !== searchRoomId || (latestDecision.roundId || 'initial') !== searchRoundId || centerChanged) return
+      if (!this.roomContextMatches(context)) return
+      const candidates = normalizeSearchPlaces(places, searchCenter)
       if (!candidates.length) {
-        this.setData({ mapSearchMessage: '附近没有可用结果；可改用地图手动选点。' })
+        this.present({mapLoading:false, mapSearchMessage: '附近没有可用结果；可改用地图手动选点。' })
         return
       }
       this.rememberCandidateDetails(candidates)
@@ -951,24 +1178,30 @@ Page({
         { candidates },
         '发布附近候选地点失败'
       )
-      if (saved) this.setData({ mapSearchMessage: `已发布 ${candidates.length} 个真实地点，大家可以一起投票。` })
+      if (!this.roomContextMatches(context)) return
+      if (saved) this.present({ mapSearchMessage: `已发布 ${candidates.length} 个真实地点，大家可以一起投票。` })
+      else if (!this.data.decisionCandidates.length) this.present({mapError:'地点候选暂未发布，请重新加载或手动添加'})
     } catch (error) {
-      this.setData({ mapSearchMessage: `${error.message || '地图搜索暂时不可用'} 可改用地图手动选点。` })
+      if (!this.roomContextMatches(context)) return
+      this.present({mapError:error.message || '地图查询失败', mapSearchMessage: `${error.message || '地图搜索暂时不可用'} 可改用地图手动选点。` })
     } finally {
-      this.roomSearchBusy = false
-      this.maybeAutoSearchRoomCandidates()
+      if (token === this.roomSearchToken) this.roomSearchBusy = false
+      if (token === this.roomSearchToken && this.viewContextMatches(context)) {
+        this.present({mapLoading:false})
+        this.maybeAutoSearchRoomCandidates()
+      }
     }
   },
 
   mineNameInput(event) {
     this.mineDraftDirty = true
-    this.setData({ mineName: String(event.detail.value || '').slice(0, 24) })
+    this.present({ mineName: String(event.detail.value || '').slice(0, 24) })
   },
 
   mineAddressInput(event) {
     const mineAddress = String(event.detail.value || '').slice(0, 120)
     this.mineDraftDirty = true
-    this.setData({ mineAddress, mineLocation: null, addressSuggestionsVisible: false })
+    this.present({ mineAddress, mineLocation: null, addressSuggestionsVisible: false })
     if (this.addressSearchTimer) clearTimeout(this.addressSearchTimer)
     this.addressSearchTimer = setTimeout(() => {
       this.addressSearchTimer = null
@@ -978,35 +1211,36 @@ Page({
 
   mineAddressFocus() {
     if (this.data.addressSuggestions.length) {
-      this.setData({ addressSuggestionsVisible: true })
+      this.present({ addressSuggestionsVisible: true })
       return
     }
     this.searchAddressSuggestions(this.data.mineAddress)
   },
 
   async searchAddressSuggestions(query) {
+    const context = this.captureRoomContext()
     const value = String(query || '').trim()
     const request = ++this.addressSearchRequest
     if (value.length < 2) {
-      this.setData({ addressSuggestions: [], addressSuggestionsVisible: false, addressSearchLoading: false })
+      this.present({ addressSuggestions: [], addressSuggestionsVisible: false, addressSearchLoading: false })
       return
     }
     if (!amap.configuredKey()) {
-      this.setData({ amapConfigured: false, addressSuggestions: [], addressSuggestionsVisible: false })
+      this.present({ amapConfigured: false, addressSuggestions: [], addressSuggestionsVisible: false })
       return
     }
-    this.setData({ amapConfigured: true, addressSearchLoading: true })
+    this.present({ amapConfigured: true, addressSearchLoading: true })
     try {
       const suggestions = await amap.inputTips(value)
-      if (request !== this.addressSearchRequest || value !== String(this.data.mineAddress || '').trim()) return
-      this.setData({
+      if (!this.roomContextMatches(context) || request !== this.addressSearchRequest || value !== String(this.data.mineAddress || '').trim()) return
+      this.present({
         addressSuggestions: suggestions,
         addressSuggestionsVisible: true,
         addressSearchLoading: false
       })
     } catch (error) {
       if (request !== this.addressSearchRequest) return
-      this.setData({ addressSuggestions: [], addressSuggestionsVisible: false, addressSearchLoading: false })
+      this.present({ addressSuggestions: [], addressSuggestionsVisible: false, addressSearchLoading: false })
     }
   },
 
@@ -1019,7 +1253,7 @@ Page({
     this.mineDraftDirty = true
     this.addressSearchRequest += 1
     const selectedAddress = [suggestion.name, suggestion.address].filter(Boolean).join(' · ')
-    this.setData({
+    this.present({
       mineAddress: selectedAddress,
       mineLocation: { lat: suggestion.lat, lng: suggestion.lng, address: selectedAddress },
       addressSuggestionsVisible: false
@@ -1054,6 +1288,7 @@ Page({
   },
 
   async clearMeetupLocation() {
+    const context = this.captureRoomContext()
     const viewer = this.viewer
     if (!viewer || !viewer.uid || !viewer.membershipEpoch || this.data.busy) return
     const result = await new Promise((resolve) => wx.showModal({
@@ -1062,7 +1297,7 @@ Page({
       success: resolve,
       fail: () => resolve({ confirm: false })
     }))
-    if (!result.confirm) return
+    if (!result.confirm || !this.roomContextMatches(context)) return
     if (!this.enqueueMeetupMutation(null)) return
     await this.flushPendingMeetupMutation(true, true)
   },
@@ -1080,25 +1315,30 @@ Page({
   },
 
   async runDecisionMutation(action, extra, fallbackMessage) {
-    if (!this.data.room || this.data.busy) return false
+    if (!this.data.room || this.data.busy || !this.localScopeMatches()) return false
+    const context = this.captureRoomContext()
+    const token = this.decisionToken = (this.decisionToken || 0) + 1
     const base = this.decisionMutationBase()
     if (!base) {
       wx.showToast({ title: '成员身份尚未同步，请稍后重试', icon: 'none' })
       return false
     }
-    this.setData({ busy: true })
+    this.present({ busy: true })
     try {
       await gateway[action](Object.assign(base, extra || {}))
+      if (!this.roomContextMatches(context)) return false
       await this.fetchRoom()
-      return true
+      return this.roomContextMatches(context)
     } catch (error) {
+      if (!this.roomContextMatches(context)) return false
       if (['STALE_MEMBERSHIP', 'STALE_DECISION', 'DECISION_CONFIRMED', 'CANDIDATE_NOT_FOUND'].includes(error.code)) {
         await this.fetchRoom()
       }
+      if (!this.roomContextMatches(context)) return false
       wx.showToast({ title: error.message || fallbackMessage, icon: 'none' })
       return false
     } finally {
-      this.setData({ busy: false })
+      if (token === this.decisionToken && this.viewContextMatches(context)) this.present({ busy: false })
     }
   },
 
@@ -1138,7 +1378,7 @@ Page({
       this.localSearchVersion += 1
       const candidates = this.data.localCandidates.concat(candidate)
       this.saveLocalState(this.data.localPoints, candidates)
-      this.setData({ localCandidates: candidates })
+      this.present({ localCandidates: candidates })
     })
   },
 
@@ -1147,7 +1387,7 @@ Page({
     this.localSearchVersion += 1
     const candidates = this.data.localCandidates.filter((candidate) => String(candidate.id) !== id)
     this.saveLocalState(this.data.localPoints, candidates)
-    this.setData({ localCandidates: candidates })
+    this.present({ localCandidates: candidates })
   },
 
   activeSwipeCandidates() {
@@ -1156,13 +1396,14 @@ Page({
 
   startSwipe() {
     const deck = this.activeSwipeCandidates().map((candidate) => Object.assign({}, candidate, {
-      initial: String(candidate.name || '?').slice(0, 1)
+      initial: String(candidate.name || '?').slice(0, 1),
+      cover: presentationPoi(candidate).cover
     }))
     if (!deck.length) {
       wx.showToast({ title: '先添加几个候选去处', icon: 'none' })
       return
     }
-    this.setData({
+    this.present({
       screen: 'swipe',
       swipeDeck: deck,
       swipeIndex: 0,
@@ -1180,22 +1421,24 @@ Page({
   },
 
   async takeSwipeAction(action) {
+    const context = this.captureRoomContext()
     const current = this.data.swipeCurrent
     if (!current || this.data.swipeVoteBusy || !['like', 'pass'].includes(action)) return
     if (this.data.room && !this.data.decisionConfirmed) {
-      this.setData({ swipeVoteBusy: true })
+      this.present({ swipeVoteBusy: true })
       const saved = await this.runDecisionMutation(
         'setDecisionVote',
         { candidateId: current.id, value: action === 'like' ? 'want' : 'no' },
         '保存盲盒选择失败'
       )
-      this.setData({ swipeVoteBusy: false })
+      if (!this.roomContextMatches(context)) return
+      this.present({ swipeVoteBusy: false })
       if (!saved) return
     }
     const likes = action === 'like' ? this.data.swipeLikes.concat(current) : this.data.swipeLikes
     const nextIndex = this.data.swipeIndex + 1
     const finished = nextIndex >= this.data.swipeDeck.length
-    this.setData({
+    this.present({
       swipeLikes: likes,
       swipeIndex: nextIndex,
       swipeCurrent: finished ? null : this.data.swipeDeck[nextIndex],
@@ -1209,7 +1452,9 @@ Page({
 
   flipSwipeCard() {
     if (!this.data.swipeCurrent) return
-    this.setData({ swipeFlipped: !this.data.swipeFlipped })
+    const flipped = !this.data.swipeFlipped
+    this.present({swipeFlipped:flipped,swipeDetail:(this.poiDetails || {})[candidateDetailKey(this.data.swipeCurrent)] || null})
+    if (flipped) this.loadPoiDetails(this.data.swipeCurrent.id)
   },
 
   swipeTouchStart(event) {
@@ -1226,7 +1471,7 @@ Page({
     const touch = event.touches && event.touches[0]
     if (!Number.isFinite(this.swipeStartX) || !touch) return
     const delta = Math.max(-180, Math.min(180, Number(touch.clientX) - this.swipeStartX))
-    this.setData({ swipeDragX: delta, swipeCardStyle: `transform: translateX(${delta}px) rotate(${delta / 16}deg);` })
+    this.present({ swipeDragX: delta, swipeCardStyle: `transform: translateX(${delta}px) rotate(${delta / 16}deg);` })
   },
 
   swipeTouchEnd() {
@@ -1237,12 +1482,12 @@ Page({
       this.takeSwipeAction(delta > 0 ? 'like' : 'pass')
       return
     }
-    this.setData({ swipeDragX: 0, swipeCardStyle: '' })
+    this.present({ swipeDragX: 0, swipeCardStyle: '' })
   },
 
   restartSwipe() {
     const deck = this.data.swipeDeck
-    this.setData({
+    this.present({
       swipeIndex: 0,
       swipeCurrent: deck[0] || null,
       swipeLikes: [],
@@ -1254,7 +1499,7 @@ Page({
   },
 
   backFromSwipe() {
-    this.setData({ screen: 'main', swipeCurrent: null, swipeFinished: false })
+    this.present({ screen: 'main', swipeCurrent: null, swipeFinished: false })
   },
 
   async publishLocationCandidate(location) {
@@ -1360,6 +1605,7 @@ Page({
   transferOwner() { return transferOwnership(this) },
 
   exitRoom() {
+    const context = this.captureRoomContext()
     const room = this.data.room
     if (!room || this.data.busy) return
     const action = this.data.isOwner ? 'disband' : 'leave'
@@ -1368,18 +1614,20 @@ Page({
       title: this.data.isOwner ? '解散这个房间？' : '退出这个房间？',
       content: this.data.isOwner ? '解散后，所有成员都无法再进入。' : '退出后可凭房间码重新加入。',
       success: async (result) => {
-        if (!result.confirm) return
-        this.setData({ busy: true })
+        if (!result.confirm || !this.roomContextMatches(context)) return
+        this.present({ busy: true })
         try {
           await gateway[action](this.docId, membershipEpoch)
-          this.clearPointOutbox(this.docId)
+          if (!this.roomContextMatches(context)) return
+          this.clearPointOutbox(context.docId)
           storage.remove(this.docId)
           this.stopPolling()
           wx.navigateBack({ fail: () => wx.switchTab({ url: '/pages/home/index' }) })
         } catch (error) {
+          if (!this.roomContextMatches(context)) return
           wx.showToast({ title: error.message || '操作失败，请重试', icon: 'none' })
         } finally {
-          this.setData({ busy: false })
+          if (this.viewContextMatches(context)) this.present({ busy: false })
         }
       }
     })

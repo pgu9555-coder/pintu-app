@@ -20,6 +20,8 @@ function markers(room) {
     latitude: person.lat,
     longitude: person.lng,
     title: person.name,
+    iconPath: `/assets/map/departure-${String.fromCharCode(65 + index % 6)}.png`,
+    width: 31, height: 39, anchor: { x: .5, y: 1 },
     callout: { content: person.name, display: 'BYCLICK' }
   }))
   const center = average(room)
@@ -29,8 +31,9 @@ function markers(room) {
       latitude: center.latitude,
       longitude: center.longitude,
       title: '参考中点',
+      iconPath: '/assets/map/center.png', width: 90, height: 90, anchor: { x: .5, y: .5 },
       zIndex: 10,
-      callout: { content: '参考中点', display: 'ALWAYS', padding: 6, borderRadius: 6 }
+      callout: { content: '参考中点', display: 'ALWAYS', padding: 8, borderRadius: 14, color: '#17473f', bgColor: '#fffefa', fontSize: 12 }
     })
   }
   return result

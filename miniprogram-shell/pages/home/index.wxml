@@ -11,6 +11,10 @@
     </view>
   </view>
 
+  <view class="service-links" aria-label="服务与数据">
+    <button bindtap="openPrivacyNotice">隐私说明</button><button bindtap="openServiceAgreement">用户协议</button><button bindtap="contactDeveloper">联系开发者</button><button bindtap="openDataTools">备份与迁移</button>
+  </view>
+
   <view class="join-card">
     <view class="join-heading">
       <view class="ticket-icon"><image class="ticket-glyph" src="/assets/icons/ticket.svg" mode="aspectFit" /></view>
@@ -38,7 +42,7 @@
       <view class="tool-icon tool-icon-blue"><image class="tool-glyph" src="/assets/icons/midpoint.svg" mode="aspectFit" /></view>
       <view class="tool-copy">
         <view class="tool-title">公平碰面 · 盲盒吃喝</view>
-        <view class="tool-desc">测出最公平碰面点</view>
+        <view class="tool-desc">寻找合适的碰面点</view>
         <view class="tool-desc">顺手滑一滑选好去处</view>
       </view>
       <image class="tool-chevron" src="/assets/icons/arrow-right.svg" mode="aspectFit" />

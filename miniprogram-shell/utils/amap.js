@@ -16,10 +16,13 @@ function call(action, data) {
   if (typeof wx !== 'object' || !wx.cloud || typeof wx.cloud.callFunction !== 'function') {
     return Promise.reject(unavailable('MAP_UNAVAILABLE', '地图搜索暂时不可用，请使用地图选点。'))
   }
-  return wx.cloud.callFunction({
+  let timer
+  const request = wx.cloud.callFunction({
     name: 'mapGateway',
     data: Object.assign({ action }, data || {})
-  }).then((response) => {
+  })
+  const deadline = new Promise((_, reject) => { timer = setTimeout(() => reject(unavailable('MAP_TIMEOUT', '地图查询超时，请重试。')), 12000) })
+  return Promise.race([request, deadline]).then((response) => {
     const result = response && response.result
     if (result && result.ok) return result.data
     throw unavailable(
@@ -29,7 +32,7 @@ function call(action, data) {
   }).catch((error) => {
     if (error && error.code) throw error
     throw unavailable('MAP_UNAVAILABLE', '地图搜索暂时不可用，请使用地图选点。')
-  })
+  }).finally(() => clearTimeout(timer))
 }
 
 function inputTips(keywords) {
@@ -45,4 +48,13 @@ function nearby(center) {
   return call('nearby', { latitude, longitude }).then((data) => Array.isArray(data) ? data : [])
 }
 
-module.exports = { configuredKey, inputTips, nearby }
+function detail(poi) {
+  return call('detail', { poiId: poi.poiId || '', name: String(poi.name || '').slice(0,80), latitude: Number(poi.lat), longitude: Number(poi.lng) })
+}
+function categories(poi) {
+  return call('categories', { latitude: Number(poi.lat), longitude: Number(poi.lng), isMall: Boolean(poi.isMall), isDrink: Boolean(poi.isDrink) }).then(data => Array.isArray(data) ? data : [])
+}
+function categoryPage(poi, category, page) {
+  return call('categoryPage', { latitude: Number(poi.lat), longitude: Number(poi.lng), category, page })
+}
+module.exports = { configuredKey, inputTips, nearby, detail, categories, categoryPage }

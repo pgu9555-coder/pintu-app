@@ -36,9 +36,9 @@ Page({
     this.statusTickMs = Number(system.benchmarkLevel) > 0 && Number(system.benchmarkLevel) <= 5 ? 140 : 90
     const windowWidth = Number(system.windowWidth) || 375
     // Legacy WeChat canvas drawing coordinates use CSS pixels. Matching the
-    // actual 560rpx viewport size avoids iOS clipping while the compositor
-    // handles rotation; multiplying by DPR breaks the legacy canvas context.
-    const wheelCssPx = windowWidth * 560 / 750
+    // bounded 280px wheel avoids clipping on small screens and prevents tablet
+    // scaling; multiplying by DPR breaks the legacy canvas context.
+    const wheelCssPx = Math.min(280, Math.max(1, Math.min(windowWidth, 480) - 40))
     const canvasSize = Math.max(1, Math.round(wheelCssPx))
     this.setData({
       names: DEFAULT_NAMES.slice(),

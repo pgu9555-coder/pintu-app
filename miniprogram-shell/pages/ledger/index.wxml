@@ -4,15 +4,15 @@
     <view class="page-title">行程账本</view>
     <view class="page-status">● {{syncText}}</view>
   </view>
-  <view wx:if="{{guestMode}}" style="margin-bottom:18rpx;padding:16rpx 18rpx;border-radius:14rpx;background:#FFF4D9;color:#8B641F;font-size:22rpx;line-height:1.5;">游客模式：可以体验添加同行人、记支出和计算转账；本次数据不会保存，创建或加入共享账本时再登录。</view>
-  <view wx:if="{{syncPending}}" style="margin-bottom:18rpx;padding:16rpx 18rpx;border-radius:14rpx;background:#FFF4D9;color:#8B641F;font-size:22rpx;line-height:1.5;">修改已保存在本机，恢复网络后会自动同步。</view>
+  <view wx:if="{{guestMode}}" style="margin-bottom:9px;padding:8px 9px;border-radius:7px;background:#FFF4D9;color:#8B641F;font-size:11px;line-height:1.5;">本机账本可直接使用并保存在这台设备；创建或加入共享账本时再登录。可从首页备份与迁移导出。</view>
+  <view wx:if="{{syncPending}}" style="margin-bottom:9px;padding:8px 9px;border-radius:7px;background:#FFF4D9;color:#8B641F;font-size:11px;line-height:1.5;">修改已保存在本机，恢复网络后会自动同步。</view>
 
   <view class="card collaboration-card">
     <view class="room-card-head">
       <view class="room-card-icon ledger-room-icon">账</view>
       <view>
         <view class="room-card-title">多人共享账本</view>
-        <view class="room-card-sub">账本码与碰面码互不通用；加入后所有支出实时同步。</view>
+        <view class="room-card-sub">账本码与碰面码互不通用；每个人加入时只填写自己的名字。</view>
       </view>
     </view>
 
@@ -33,9 +33,9 @@
 
     <block wx:else>
       <view class="local-note">当前是本机账本；创建或加入房间后会切换为云端共享账本。</view>
-      <input class="input" placeholder="你的名字" value="{{name}}" maxlength="24" bindinput="nameInput" />
-      <button class="btn" bindtap="create" loading="{{busy}}" disabled="{{busy}}">创建共享账本</button>
+      <input class="input" placeholder="先填写你自己的名字" value="{{name}}" maxlength="24" bindinput="nameInput" />
       <view class="room-entry-row">
+        <button class="room-small-button create-ledger-code" bindtap="create" loading="{{busy}}" disabled="{{busy}}">创建账本码</button>
         <input class="input code-input" placeholder="输入 8 位账本码" value="{{code}}" maxlength="8" bindinput="codeInput" />
         <button class="room-small-button outline" bindtap="join" loading="{{busy}}" disabled="{{busy}}">加入</button>
       </view>
@@ -63,7 +63,7 @@
       <view class="section-label">同行的人</view>
       <view wx:if="{{!ledger.members.length}}" class="empty-copy">先把同行的人加进来，至少需要 2 人。</view>
       <view wx:for="{{ledger.members}}" wx:key="id" class="member-row">
-        <view class="avatar avatar-{{index % 2}}">{{item.initial}}</view>
+        <view class="avatar" style="background:{{item.color}};">{{item.initial}}</view>
         <view class="member-copy">
           <view class="member-name">{{item.name}}</view>
           <view class="member-kind">{{item.uid ? '房间成员' : '账本成员'}}</view>
@@ -81,7 +81,10 @@
   </block>
 
   <block wx:if="{{step === 2}}">
-    <view class="card expense-form-card">
+    <view wx:if="{{editingId}}" class="expense-editor-backdrop" bindtap="cancelEdit"></view>
+    <view class="card expense-form-card {{editingId ? 'expense-editor-sheet' : ''}}" catchtap="preventClose">
+      <view wx:if="{{editingId}}" class="editor-handle"></view>
+      <button wx:if="{{editingId}}" class="editor-close" bindtap="cancelEdit" aria-label="关闭支出编辑">×</button>
       <view class="section-title">{{editingId ? '修改这笔支出' : '加一笔支出'}}</view>
       <input class="input" placeholder="花在哪里了，如 酒店 / 机票 / 晚餐" value="{{desc}}" maxlength="20" bindinput="descInput" />
       <view class="money-row">
@@ -92,14 +95,14 @@
       <view class="section-label">谁付的钱</view>
       <view class="choice-list">
         <view wx:for="{{ledger.members}}" wx:key="id" class="person-chip {{item.payerSelected ? 'selected' : ''}}" bindtap="selectPayer" data-index="{{index}}">
-          <view class="chip-avatar">{{item.initial}}</view><text>{{item.name}}</text>
+          <view class="chip-avatar" style="background:{{item.color}};">{{item.initial}}</view><text>{{item.name}}</text>
         </view>
       </view>
 
       <view class="section-label">谁要平摊这笔（默认全选）</view>
       <view class="choice-list">
         <view wx:for="{{ledger.members}}" wx:key="id" class="person-chip {{item.checked ? 'selected' : ''}}" bindtap="toggleSplit" data-id="{{item.id}}">
-          <view class="chip-avatar">{{item.initial}}</view><text>{{item.name}}</text>
+          <view class="chip-avatar" style="background:{{item.color}};">{{item.initial}}</view><text>{{item.name}}</text>
         </view>
       </view>
 
@@ -110,7 +113,7 @@
     <view class="expense-list">
       <view wx:if="{{!ledger.expenses.length}}" class="empty-copy centered">还没有支出记录，从上面添加第一笔</view>
       <view wx:for="{{ledger.expenses}}" wx:key="id" class="expense-row">
-        <view class="avatar">{{item.payerInitial}}</view>
+        <view class="avatar" style="background:{{item.payerColor}};">{{item.payerInitial}}</view>
         <view class="expense-copy">
           <view class="expense-name">{{item.desc}}</view>
           <view class="expense-meta">{{item.payerName}} 付 · {{item.splitNames}} 平摊</view>
@@ -125,7 +128,7 @@
   </block>
 
   <block wx:if="{{step === 3}}">
-    <view wx:if="{{settlementUpdated}}" class="settlement-updated" style="margin-bottom:20rpx;padding:18rpx 20rpx;border-radius:16rpx;background:#EAF2F7;color:#3E6E8E;font-size:23rpx;line-height:1.5;">账本刚刚有更新，下面的结算结果已自动重新计算。</view>
+    <view wx:if="{{settlementUpdated}}" class="settlement-updated" style="margin-bottom:10px;padding:9px 10px;border-radius:8px;background:#EAF2F7;color:#3E6E8E;font-size:11.5px;line-height:1.5;">账本刚刚有更新，下面的结算结果已自动重新计算。</view>
     <view class="total-card">
       <view class="total-caption">本次总支出</view>
       <view class="total-number">¥{{totalYuan}}</view>
@@ -133,10 +136,10 @@
     </view>
 
     <view class="card">
-      <view style="margin-bottom:20rpx;color:#4C5C5B;font-size:22rpx;line-height:1.6;">每笔支出分别均摊到分，余下的分按参与人顺序分配，因此可能与总额直接均摊相差几分。</view>
+      <view style="margin-bottom:10px;color:#4C5C5B;font-size:11px;line-height:1.6;">每笔支出分别均摊到分，余下的分按参与人顺序分配，因此可能与总额直接均摊相差几分。</view>
       <view class="section-title">每个人的结果</view>
       <view wx:for="{{balanceRows}}" wx:key="id" class="balance-row">
-        <view class="avatar">{{item.initial}}</view>
+        <view class="avatar" style="background:{{item.color}};">{{item.initial}}</view>
         <view class="balance-name">{{item.name}}</view>
         <view class="balance-value balance-{{item.tone}}">{{item.status}}<text wx:if="{{item.yuan !== '0.00'}}"> ¥{{item.yuan}}</text></view>
       </view>
@@ -150,7 +153,7 @@
         <view class="transfer-amount">¥{{item.yuan}}</view>
       </view>
       <view wx:if="{{!settlements.length}}" class="settled-state">✓ 大家已经结清</view>
-      <view class="verify-strip" style="padding:18rpx 0 4rpx;color:#4C5C5B;text-align:center;font-size:22rpx;line-height:1.5;">✓ {{settlementVerifyText}}</view>
+      <view class="verify-strip" style="padding:9px 0 2px;color:#4C5C5B;text-align:center;font-size:11px;line-height:1.5;">✓ {{settlementVerifyText}}</view>
     </view>
   </block>
 

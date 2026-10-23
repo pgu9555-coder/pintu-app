@@ -3,17 +3,10 @@
     <view class="trips-mark"><image src="/assets/icons/brand-plane.svg" mode="aspectFit" /></view>
     <view class="page-title">行程</view>
   </view>
-  <view wx:if="{{loginRequired}}" class="state-card empty-state">
-    <view class="empty-icon">微</view>
-    <view class="empty-title">登录后查看你的行程</view>
-    <view class="muted">首次进入不会自动登录。登录后才能按微信身份安全找回云端房间和本地账号数据。</view>
-    <button class="btn primary" style="margin-top:20rpx;" bindtap="goLogin">返回首页登录</button>
-  </view>
-  <block wx:else>
   <view class="section-label trips-label">本地行程</view>
-  <button class="btn secondary" style="margin:0 0 18rpx;" bindtap="newLocal">＋ 新建行程账本</button>
+  <button class="btn secondary" style="margin:0 0 9px;" bindtap="newLocal">＋ 新建行程账本</button>
   <view wx:if="{{!localTrips.length}}" class="state-card empty-state">
-    <view class="empty-icon">⌁</view><view class="empty-title">还没有本地行程</view><view class="muted">新建一趟行程后，成员和支出会仅保存在当前账号的这台设备上。</view>
+    <view class="empty-icon">⌁</view><view class="empty-title">还没有本地行程</view><view class="muted">新建一趟行程后，成员和支出保存在这台设备，可从首页导出备份。</view>
   </view>
   <view
     wx:for="{{localTrips}}"
@@ -29,10 +22,18 @@
     </view>
     <view wx:if="{{item.showTotal}}" class="trip-total">¥{{item.totalYuan}}</view>
     <view wx:else class="trip-arrow">›</view>
-    <button catchtap="deleteLocal" data-id="{{item.tripId}}" style="flex:0 0 auto;margin:0 0 0 8rpx;padding:0 12rpx;border:1rpx solid #DFC0BA;border-radius:12rpx;background:#FFFDF6;color:#9C433A;font-size:21rpx;line-height:48rpx;">删除</button>
+    <button catchtap="deleteLocal" data-id="{{item.tripId}}" style="flex:0 0 auto;margin:0 0 0 4px;padding:0 6px;border:0.5px solid #DFC0BA;border-radius:6px;background:#FFFDF6;color:#9C433A;font-size:10.5px;line-height:24px;">删除</button>
   </view>
 
   <view class="section-label trips-label">进行中的房间</view>
+  <view wx:if="{{loginRequired}}" class="state-card empty-state">
+    <view class="empty-icon">微</view>
+    <view class="empty-title">登录后同步云端房间</view>
+    <view class="muted">首次进入不会自动登录。本机账本无需登录；登录后可按微信身份安全找回有权限的云端房间。</view>
+    <button class="btn primary" style="margin-top:10px;" bindtap="goLogin">返回首页登录</button>
+  </view>
+
+  <block wx:if="{{!loginRequired}}">
 
   <view wx:if="{{loading}}" class="state-card"><view class="state-spinner"></view><text>正在同步你的云端房间…</text></view>
   <view wx:if="{{cloudError}}" class="state-card error-state">{{cloudError}}；为保护账号隐私，未显示云端房间的本机缓存。</view>
@@ -54,7 +55,7 @@
     </view>
     <view wx:if="{{item.showTotal}}" class="trip-total">¥{{item.totalYuan}}</view>
     <view wx:else class="trip-arrow">›</view>
-    <button catchtap="roomAction" data-id="{{item.docId}}" loading="{{roomActionBusyId === item.docId}}" disabled="{{roomActionBusyId !== ''}}" style="flex:0 0 auto;margin:0 0 0 8rpx;padding:0 10rpx;border:1rpx solid #DFC0BA;border-radius:12rpx;background:#FFFDF6;color:#9C433A;font-size:19rpx;line-height:48rpx;">退出/解散</button>
+    <button catchtap="roomAction" data-id="{{item.docId}}" loading="{{roomActionBusyId === item.docId}}" disabled="{{roomActionBusyId !== ''}}" style="flex:0 0 auto;margin:0 0 0 4px;padding:0 5px;border:0.5px solid #DFC0BA;border-radius:6px;background:#FFFDF6;color:#9C433A;font-size:9.5px;line-height:24px;">退出/解散</button>
   </view>
 
   <button wx:if="{{hasMore}}" class="btn secondary load-more" bindtap="loadMore" loading="{{loadingMore}}" disabled="{{loadingMore}}">{{loadingMore ? '加载中…' : '加载更多房间'}}</button>

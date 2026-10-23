@@ -4,6 +4,7 @@ const storage = require('../../utils/storage')
 const math = require('../../utils/ledger')
 const layout = require('../../utils/layout')
 const invite = require('../../utils/invite')
+const AVATAR_COLORS = ['#0F3D36', '#B8842A', '#3E6E8E', '#A8506E', '#C05B3C', '#4C5C5B']
 const LOCAL_LEDGER_TRIPS_KEY = 'pintu-local-ledger-trips-v1'
 const LEDGER_OUTBOX_KEY = 'pintu-ledger-outbox-v1'
 const PENDING_CREATE_KEY = 'pintu-ledger-pending-create-v1'
@@ -57,7 +58,7 @@ function hasLocalTripContent(ledger) {
 }
 
 function localTripEntries() {
-  const container = storage.getScoped(LOCAL_LEDGER_TRIPS_KEY, { trips: [] })
+  const container = storage.getLocal(LOCAL_LEDGER_TRIPS_KEY, { trips: [] })
   return Array.isArray(container && container.trips)
     ? container.trips.filter((trip) => cleanTripId(trip && trip.tripId) && isLedger(trip.ledger))
     : []
@@ -80,7 +81,7 @@ function saveLocalLedger(tripId, ledger) {
       ledger
     }].concat(others)
     : others
-  return storage.setScoped(LOCAL_LEDGER_TRIPS_KEY, { trips })
+  return storage.setLocal(LOCAL_LEDGER_TRIPS_KEY, { trips })
 }
 
 function ledgerOutboxEntries() {
@@ -128,7 +129,7 @@ function roomSnapshotTripId(docId) {
 
 function restoreRoomSnapshot(docId, previous) {
   const trips = localTripEntries().filter((entry) => entry.tripId !== roomSnapshotTripId(docId) && entry.sourceRoomDocId !== docId)
-  return storage.setScoped(LOCAL_LEDGER_TRIPS_KEY, { trips: previous ? [previous].concat(trips) : trips })
+  return storage.setLocal(LOCAL_LEDGER_TRIPS_KEY, { trips: previous ? [previous].concat(trips) : trips })
 }
 
 function saveRoomSnapshot(docId, roomName, ledger, force) {
@@ -144,7 +145,7 @@ function saveRoomSnapshot(docId, roomName, ledger, force) {
   const snapshotLedger = Object.assign({}, ledger, {
     name: String(ledger.name || roomName || '').slice(0, 20)
   })
-  const saved = storage.setScoped(LOCAL_LEDGER_TRIPS_KEY, {
+  const saved = storage.setLocal(LOCAL_LEDGER_TRIPS_KEY, {
     trips: [{
       tripId,
       sourceRoomDocId: docId,
@@ -202,6 +203,9 @@ Page({
   },
 
   async onLoad(options) {
+    this.scopeGeneration = 0
+    this.closed = false
+    this.localScope = storage.localScopeToken()
     this.docId = (options && options.docId) || ''
     this.tripId = cleanTripId(options && options.tripId) || newTripId()
     this.formDirty = false
@@ -212,34 +216,51 @@ Page({
     this.setData({ headerTopPx: layout.headerTopPx() })
     const app = typeof getApp === 'function' ? getApp() : null
     const consentGranted = Boolean(app && typeof app.hasAccountConsent === 'function' && app.hasAccountConsent())
-    if (!consentGranted) {
-      this.guestMode = true
-      const ledger = emptyLocalLedger()
+    if (!this.docId) {
+      this.localScope = storage.localScopeToken()
+      this.guestMode = !consentGranted
+      const saved = localLedgerForTrip(this.tripId)
+      const ledger = isLedger(saved) ? saved : emptyLocalLedger()
       this.applyStandaloneLedger(ledger, false)
       this.resetExpenseForm(ledger)
-      this.setData({
-        name: '',
-        step: 1,
-        guestMode: true,
-        syncText: '游客体验'
-      })
+      this.setData({ name: '', step: saved ? 2 : 1, guestMode: this.guestMode, syncText: '本机保存' })
+      return
+    }
+    if (!consentGranted) {
+      wx.showToast({ title: '请返回首页登录后打开共享账本', icon: 'none' })
       return
     }
     if (!await this.ensureAccountScope()) return
     this.pendingCreateId = savedPendingCreateId()
     this.setData({ name: storage.getName() })
-    if (this.docId) {
-      this.startPolling()
-    } else {
-      const saved = localLedgerForTrip(this.tripId)
-      const ledger = isLedger(saved) ? saved : emptyLocalLedger()
-      this.applyStandaloneLedger(ledger, false)
-      this.resetExpenseForm(ledger)
-      this.setData({ step: saved ? 2 : 1 })
-    }
+    this.startPolling()
   },
 
   onShow() {
+    if (this.localScope !== storage.localScopeToken()) {
+      const wasShared = Boolean(this.docId)
+      this.stopPolling()
+      this.clearSettlementNotice()
+      this.scopeGeneration = (this.scopeGeneration || 0) + 1
+      this.localScope = storage.localScopeToken()
+      this.docId = ''
+      this.viewer = null
+      this.scopeReady = false
+      this.fetchBusy = false
+      this.outboxFlushPromise = null
+      this.pendingCreateId = ''
+      this.lastRemoteLedgerFingerprint = ''
+      this.formDirty = false
+      if (wasShared) this.tripId = newTripId()
+      const saved = localLedgerForTrip(this.tripId)
+      if (!saved) this.tripId = newTripId()
+      const ledger = isLedger(saved) ? saved : emptyLocalLedger()
+      const app = typeof getApp === 'function' ? getApp() : null
+      this.guestMode = !(app && app.hasAccountConsent && app.hasAccountConsent())
+      this.applyStandaloneLedger(ledger, false)
+      this.resetExpenseForm(ledger)
+      this.setData({ name: '', code: '', guestMode: this.guestMode, busy: false, isOwner: false, step: saved ? 2 : 1, syncPending: false, syncText: '本机保存' })
+    }
     if (this.docId && this.scopeReady) {
       this.flushLedgerOutbox(false)
       this.startPolling()
@@ -251,24 +272,40 @@ Page({
   },
 
   onUnload() {
+    this.closed = true
+    this.scopeGeneration = (this.scopeGeneration || 0) + 1
     this.stopPolling()
     this.clearSettlementNotice()
   },
 
   async ensureAccountScope() {
-    if (this.scopeReady) return true
+    if (this.scopeReady) return this.scopeMatches()
+    const generation = this.scopeGeneration || 0
     try {
       const app = getApp()
       if (!app || typeof app.ensureAccountScope !== 'function' || !await app.ensureAccountScope()) {
         throw new Error('账号身份未就绪')
       }
+      if (this.closed || generation !== (this.scopeGeneration || 0)) return false
+      this.localScope = storage.localScopeToken()
       this.scopeReady = true
       return true
     } catch (_) {
+      if (this.closed || generation !== (this.scopeGeneration || 0) || this.localScope !== storage.localScopeToken()) return false
       this.setData({ syncText: '账号身份未就绪' })
       wx.showToast({ title: '账号身份未就绪，请返回首页后重试', icon: 'none' })
       return false
     }
+  },
+
+  scopeSnapshot() {
+    return { scope: this.localScope, docId: this.docId, generation: this.scopeGeneration || 0 }
+  },
+
+  scopeMatches(snapshot) {
+    return !this.closed && this.localScope === storage.localScopeToken() && (!snapshot || (
+      snapshot.scope === this.localScope && snapshot.docId === this.docId && snapshot.generation === (this.scopeGeneration || 0)
+    ))
   },
 
   onShareAppMessage() {
@@ -282,6 +319,7 @@ Page({
 
   startPolling() {
     this.stopPolling()
+    if (!this.scopeMatches() || !this.scopeReady || !this.docId) return
     this.flushLedgerOutbox(false)
     this.fetchRoom()
     this.timer = setInterval(() => this.fetchRoom(), 2000)
@@ -404,13 +442,17 @@ Page({
       return
     }
     if (!await this.ensureAccountScope()) return
+    const snapshot = this.scopeSnapshot()
+    let operationDocId = snapshot.docId
+    const current = () => this.scopeMatches() && this.docId === operationDocId && snapshot.scope === this.localScope && snapshot.generation === (this.scopeGeneration || 0)
+    if (!current()) return
     const name = this.data.name.trim()
     if (!name) {
       wx.showToast({ title: '先填写名字', icon: 'none' })
       return
     }
 
-    this.pendingCreateId = this.pendingCreateId || requestId()
+    this.pendingCreateId = this.pendingCreateId || savedPendingCreateId() || requestId()
     if (!storage.setScoped(PENDING_CREATE_KEY, { requestId: this.pendingCreateId })) {
       wx.showToast({ title: '无法保存创建进度，请清理本机空间后重试', icon: 'none' })
       return
@@ -418,10 +460,12 @@ Page({
     this.setData({ busy: true, syncText: '创建中' })
     try {
       const result = await gateway.create(roomInput(name), this.pendingCreateId)
+      if (!current()) return
       this.pendingCreateId = ''
       if (!storage.removeScoped(PENDING_CREATE_KEY)) storage.setScoped(PENDING_CREATE_KEY, null)
       storage.saveName(name)
       this.docId = result.docId
+      operationDocId = this.docId
       storage.save({ docId: result.docId, room: result.room })
       this.applyRoom(result.room, result.viewer, false)
       this.resetExpenseForm(result.room.ledger)
@@ -430,10 +474,11 @@ Page({
       this.setData({ step: 1, syncText: '已同步', syncPending: false })
       this.startPolling()
     } catch (error) {
+      if (!current()) return
       this.setData({ syncText: '创建失败' })
       wx.showToast({ title: message(error, '创建失败，请重试'), icon: 'none' })
     } finally {
-      this.setData({ busy: false })
+      if (current()) this.setData({ busy: false })
     }
   },
 
@@ -444,6 +489,10 @@ Page({
       return
     }
     if (!await this.ensureAccountScope()) return
+    const snapshot = this.scopeSnapshot()
+    let operationDocId = snapshot.docId
+    const current = () => this.scopeMatches() && this.docId === operationDocId && snapshot.scope === this.localScope && snapshot.generation === (this.scopeGeneration || 0)
+    if (!current()) return
     const name = this.data.name.trim()
     const code = cleanCode(this.data.code)
     if (!name || code.length !== 8) {
@@ -454,8 +503,10 @@ Page({
     this.setData({ busy: true, syncText: '加入中' })
     try {
       const result = await gateway.join(code, 'ledger', name)
+      if (!current()) return
       storage.saveName(name)
       this.docId = result.docId
+      operationDocId = this.docId
       storage.save({ docId: result.docId, room: result.room })
       this.applyRoom(result.room, result.viewer, false)
       this.resetExpenseForm(result.room.ledger)
@@ -464,18 +515,22 @@ Page({
       this.setData({ step: 2, syncText: '已同步', syncPending: false })
       this.startPolling()
     } catch (error) {
+      if (!current()) return
       this.setData({ syncText: '加入失败' })
       wx.showToast({ title: message(error, '加入失败，请重试'), icon: 'none' })
     } finally {
-      this.setData({ busy: false })
+      if (current()) this.setData({ busy: false })
     }
   },
 
   async fetchRoom() {
     if (!this.scopeReady || !this.docId || this.fetchBusy || this.data.busy) return
+    const snapshot = this.scopeSnapshot()
+    if (!this.scopeMatches(snapshot)) return
     this.fetchBusy = true
     try {
       const result = await gateway.getRoom(this.docId)
+      if (!this.scopeMatches(snapshot)) return
       this.lastFetchError = false
       if (!result.room) {
         const removedId = this.docId
@@ -489,6 +544,7 @@ Page({
         }
         clearLedgerOutboxEntry(removedId)
         this.docId = ''
+        this.fetchBusy = false
         this.stopPolling()
         storage.remove(removedId)
         this.viewer = null
@@ -507,8 +563,10 @@ Page({
         this.setData({ step: 2 })
       }
       await this.flushLedgerOutbox(false)
+      if (!this.scopeMatches(snapshot)) return
       if (!ledgerOutboxEntry(this.docId)) this.setData({ syncText: '已同步', syncPending: false })
     } catch (error) {
+      if (!this.scopeMatches(snapshot)) return
       const pending = ledgerOutboxEntry(this.docId)
       this.setData({
         syncText: pending ? '等待同步' : '同步重试中',
@@ -517,7 +575,7 @@ Page({
       if (!this.lastFetchError) wx.showToast({ title: message(error, '同步暂时中断'), icon: 'none' })
       this.lastFetchError = true
     } finally {
-      this.fetchBusy = false
+      if (this.scopeMatches(snapshot)) this.fetchBusy = false
     }
   },
 
@@ -560,12 +618,14 @@ Page({
       members: members.map((member) => Object.assign({}, member, {
         checked: checkedIds.map(String).includes(String(member.id)),
         payerSelected: String(member.id) === String(members[payerIndex] && members[payerIndex].id),
-        initial: String(member.name || '?').slice(0, 1)
+        initial: String(member.name || '?').slice(0, 1),
+        color: member.color || AVATAR_COLORS[members.indexOf(member) % AVATAR_COLORS.length]
       })),
       expenses: (source.expenses || []).map((expense) => Object.assign({}, expense, {
         amountYuan: (Number(expense.amountCents || 0) / 100).toFixed(2),
         payerName: (members.find((member) => String(member.id) === String(expense.payerId)) || {}).name || '未知',
         payerInitial: String(((members.find((member) => String(member.id) === String(expense.payerId)) || {}).name || '?')).slice(0, 1),
+        payerColor: (members.find((member) => String(member.id) === String(expense.payerId)) || {}).color || AVATAR_COLORS[Math.max(0, members.findIndex((member) => String(member.id) === String(expense.payerId))) % AVATAR_COLORS.length],
         splitNames: (expense.splitIds || []).map((id) => {
           const member = members.find((item) => String(item.id) === String(id))
           return member ? member.name : '未知'
@@ -589,6 +649,7 @@ Page({
         id: row.id,
         name: row.name,
         initial: String(row.name || '?').slice(0, 1),
+        color: (members.find((member) => String(member.id) === String(row.id)) || {}).color || AVATAR_COLORS[Math.max(0, members.findIndex((member) => String(member.id) === String(row.id))) % AVATAR_COLORS.length],
         status: row.cents > 0 ? '应收' : row.cents < 0 ? '应付' : '已结清',
         yuan: (Math.abs(row.cents) / 100).toFixed(2),
         tone: row.cents > 0 ? 'positive' : row.cents < 0 ? 'negative' : 'neutral'
@@ -608,6 +669,7 @@ Page({
   },
 
   applyRoom(room, viewer, preserveForm, fromRemote) {
+    if (!this.scopeMatches()) return
     const epoch = viewer && viewer.membershipEpoch
     let pending = this.docId ? ledgerOutboxEntry(this.docId) : null
     if (pending && (!validMembershipEpoch(epoch) || pending.membershipEpoch !== epoch)) {
@@ -628,6 +690,7 @@ Page({
         wx.showToast({ title: snapshotId ? '成员身份已更新，旧修改已保留到本地行程' : '成员身份已更新', icon: 'none' })
       }
     }
+    if (!pending && this.docId && room.ledger && typeof storage.cacheLedgerSnapshot === 'function') storage.cacheLedgerSnapshot(this.docId, room.ledger)
     const source = (pending && pending.ledger) || room.ledger || { members: [], expenses: [], memberTombstones: {}, expenseTombstones: {} }
     // A remote delete must win over a stale edit form. Saving a missing item
     // would otherwise silently recreate an expense another member deleted.
@@ -686,10 +749,17 @@ Page({
   },
 
   writeSharedLedger(next) {
-    return gateway.syncLedger(this.docId, next, this.viewerMembershipEpoch())
+    const snapshot = this.scopeSnapshot()
+    if (!this.scopeMatches(snapshot) || !this.scopeReady || !snapshot.docId) return Promise.reject(new Error('账号范围已变化'))
+    return gateway.syncLedger(snapshot.docId, next, this.viewerMembershipEpoch()).then((result) => {
+      if (!this.scopeMatches(snapshot)) throw new Error('账号范围已变化')
+      return result
+    })
   },
 
   flushLedgerOutbox(notifyFailure) {
+    const snapshot = this.scopeSnapshot()
+    if (!this.scopeMatches(snapshot)) return Promise.resolve(false)
     if (this.outboxFlushPromise) return this.outboxFlushPromise
     if (!this.scopeReady || !this.docId) return Promise.resolve(false)
     const entry = ledgerOutboxEntry(this.docId)
@@ -708,8 +778,9 @@ Page({
 
     const docId = this.docId
     const task = Promise.resolve()
-      .then(() => this.writeSharedLedger(entry.ledger))
+      .then(() => this.scopeMatches(snapshot) ? gateway.syncLedger(docId, entry.ledger, membershipEpoch) : null)
       .then((result) => {
+        if (!this.scopeMatches(snapshot)) return false
         if (!result || !isLedger(result.ledger)) throw new Error('服务器没有返回有效账本')
         if (!clearLedgerOutboxEntry(docId, entry.mutationId)) return false
         if (this.docId !== docId) return true
@@ -722,6 +793,7 @@ Page({
         return true
       })
       .catch((error) => {
+        if (!this.scopeMatches(snapshot)) return false
         if (['STALE_MEMBERSHIP', 'ROOM_NOT_FOUND'].includes(error && error.code)) {
           const snapshotId = saveRoomSnapshot(
             docId,
@@ -740,7 +812,7 @@ Page({
               syncPending: false,
               syncText: snapshotId ? '旧修改已保留到本地行程' : (error.code === 'STALE_MEMBERSHIP' ? '成员身份已更新' : '房间已结束')
             })
-            setTimeout(() => this.fetchRoom(), 0)
+            setTimeout(() => { if (this.scopeMatches(snapshot)) this.fetchRoom() }, 0)
           }
           wx.showToast({ title: snapshotId ? '未同步修改已保留到本地行程' : (error.message || '待同步修改已失效'), icon: 'none' })
           return false
@@ -762,20 +834,18 @@ Page({
         return false
       })
       .finally(() => {
-        if (this.outboxFlushPromise === task) this.outboxFlushPromise = null
+        if (this.scopeMatches(snapshot) && this.outboxFlushPromise === task) this.outboxFlushPromise = null
       })
     this.outboxFlushPromise = task
     return task
   },
 
   async syncLedger(next) {
-    if (!this.docId && this.guestMode) {
-      this.applyStandaloneLedger(next, true)
-      this.setData({ syncText: '游客体验' })
-      return next
-    }
-    if (!await this.ensureAccountScope()) throw new Error('账号身份未就绪')
     if (!this.docId) {
+      if (this.localScope !== storage.localScopeToken()) {
+        wx.showToast({ title: '账号已变化，请重新打开本机账本', icon: 'none' })
+        throw new Error('本机账本账号范围已变化')
+      }
       if (!saveLocalLedger(this.tripId, next)) {
         wx.showToast({ title: '本机存储空间不足，修改未保存', icon: 'none' })
         throw new Error('无法保存本地账本')
@@ -784,6 +854,9 @@ Page({
       this.setData({ syncText: '本机保存' })
       return next
     }
+    if (!await this.ensureAccountScope()) throw new Error('账号身份未就绪')
+    const snapshot = this.scopeSnapshot()
+    if (!this.scopeMatches(snapshot)) throw new Error('账号范围已变化')
     const membershipEpoch = this.viewerMembershipEpoch()
     if (!validMembershipEpoch(membershipEpoch)) throw new Error('成员身份正在同步，请稍后重试')
     const entry = {
@@ -801,12 +874,15 @@ Page({
     this.applyRoom(room, this.viewer, true)
     this.setData({ syncText: '等待同步', syncPending: true })
     await this.flushLedgerOutbox(true)
+    if (!this.scopeMatches(snapshot)) throw new Error('账号范围已变化，旧操作结果未应用到当前页面')
     const pending = ledgerOutboxEntry(this.docId)
     return pending ? pending.ledger : this.data.ledger
   },
 
   async saveTripName(event) {
     if (this.data.busy) return
+    const snapshot = this.scopeSnapshot()
+    if (!this.scopeMatches(snapshot)) return
     const name = String((event && event.detail && event.detail.value) || this.data.tripName || '').trim().slice(0, 20)
     if (name === String(this.data.ledger.name || '')) return
     const now = math.stamp()
@@ -818,11 +894,13 @@ Page({
       revision: now
     })
     this.setData({ busy: true, tripName: name })
-    try { await this.syncLedger(next) } finally { this.setData({ busy: false }) }
+    try { await this.syncLedger(next) } catch (error) { if (this.scopeMatches(snapshot)) wx.showToast({ title: message(error, '保存失败，请重试'), icon: 'none' }) } finally { if (this.scopeMatches(snapshot)) this.setData({ busy: false }) }
   },
 
   async addMember() {
     if (this.data.busy) return
+    const snapshot = this.scopeSnapshot()
+    if (!this.scopeMatches(snapshot)) return
     const name = this.data.memberName.trim().slice(0, 12)
     if (!name) {
       wx.showToast({ title: '请填写成员名字', icon: 'none' })
@@ -849,14 +927,19 @@ Page({
     this.setData({ busy: true })
     try {
       await this.syncLedger(next)
+      if (!this.scopeMatches(snapshot)) return
       this.setData({ memberName: '' })
+    } catch (error) {
+      if (this.scopeMatches(snapshot)) wx.showToast({ title: message(error, '保存失败，请重试'), icon: 'none' })
     } finally {
-      this.setData({ busy: false })
+      if (this.scopeMatches(snapshot)) this.setData({ busy: false })
     }
   },
 
   renameMember(event) {
     if (this.data.busy) return
+    const snapshot = this.scopeSnapshot()
+    if (!this.scopeMatches(snapshot)) return
     const id = String(event.currentTarget.dataset.id || '')
     const member = this.data.ledger.members.find((item) => String(item.id) === id)
     if (!member) return
@@ -867,7 +950,7 @@ Page({
     wx.showModal({
       title: '修改成员名称', editable: true, placeholderText: '成员名称', content: member.name,
       success: async (result) => {
-        if (!result.confirm) return
+        if (!result.confirm || !this.scopeMatches(snapshot)) return
         const name = String(result.content || '').trim()
         if (!name || name.length > 12) {
           wx.showToast({ title: '请输入 1 至 12 个字符的名称', icon: 'none' })
@@ -884,13 +967,15 @@ Page({
           updatedAt: now, updatedBy: this.viewerUid(), revision: now
         })
         this.setData({ busy: true })
-        try { await this.syncLedger(next) } finally { this.setData({ busy: false }) }
+        try { await this.syncLedger(next) } catch (error) { if (this.scopeMatches(snapshot)) wx.showToast({ title: message(error, '保存失败，请重试'), icon: 'none' }) } finally { if (this.scopeMatches(snapshot)) this.setData({ busy: false }) }
       }
     })
   },
 
   async removeMember(event) {
     if (this.data.busy) return
+    const snapshot = this.scopeSnapshot()
+    if (!this.scopeMatches(snapshot)) return
     const id = String(event.currentTarget.dataset.id || '')
     const member = this.data.ledger.members.find((item) => String(item.id) === id)
     if (!member) return
@@ -906,7 +991,7 @@ Page({
       title: '移除成员？', content: this.docId ? `将移除“${member.name}”，此操作会同步到所有成员。` : `将从本机账本移除“${member.name}”。`,
       success: resolve, fail: () => resolve({ confirm: false })
     }))
-    if (!result.confirm) return
+    if (!result.confirm || !this.scopeMatches(snapshot)) return
     const now = math.stamp()
     const next = Object.assign({}, this.data.ledger, {
       members: this.data.ledger.members.filter((item) => String(item.id) !== id),
@@ -916,11 +1001,13 @@ Page({
       updatedAt: now, updatedBy: this.viewerUid(), revision: now
     })
     this.setData({ busy: true })
-    try { await this.syncLedger(next) } finally { this.setData({ busy: false }) }
+    try { await this.syncLedger(next) } catch (error) { if (this.scopeMatches(snapshot)) wx.showToast({ title: message(error, '保存失败，请重试'), icon: 'none' }) } finally { if (this.scopeMatches(snapshot)) this.setData({ busy: false }) }
   },
 
   async saveExpense() {
     if (this.data.busy) return
+    const snapshot = this.scopeSnapshot()
+    if (!this.scopeMatches(snapshot)) return
     const ledger = this.data.ledger
     const cents = Math.round(Number(this.data.amount) * 100)
     const splitIds = this.data.splitIds
@@ -962,9 +1049,12 @@ Page({
     this.setData({ busy: true })
     try {
       const savedLedger = await this.syncLedger(next)
+      if (!this.scopeMatches(snapshot)) return
       this.resetExpenseForm(savedLedger)
+    } catch (error) {
+      if (this.scopeMatches(snapshot)) wx.showToast({ title: message(error, '保存失败，请重试'), icon: 'none' })
     } finally {
-      this.setData({ busy: false })
+      if (this.scopeMatches(snapshot)) this.setData({ busy: false })
     }
   },
 
@@ -990,6 +1080,8 @@ Page({
     this.setData({ step: 2 })
   },
 
+  preventClose() {},
+
   cancelEdit() {
     if (this.data.busy) return
     this.formDirty = false
@@ -1004,12 +1096,14 @@ Page({
 
   deleteExpense(event) {
     if (this.data.busy) return
+    const snapshot = this.scopeSnapshot()
+    if (!this.scopeMatches(snapshot)) return
     const id = event.currentTarget.dataset.id
     wx.showModal({
       title: '删除这笔支出？',
       content: this.docId ? '删除后会同步给所有成员。' : '删除后会从本机账本移除。',
       success: async (result) => {
-        if (!result.confirm || this.data.busy) return
+        if (!result.confirm || this.data.busy || !this.scopeMatches(snapshot)) return
         const ledger = this.data.ledger
         const now = math.stamp()
         const expenseTombstones = Object.assign({}, ledger.expenseTombstones || {}, {
@@ -1025,9 +1119,12 @@ Page({
         this.setData({ busy: true })
         try {
           await this.syncLedger(next)
+          if (!this.scopeMatches(snapshot)) return
           if (String(this.data.editingId) === String(id)) this.resetExpenseForm(this.data.ledger)
+        } catch (error) {
+          if (this.scopeMatches(snapshot)) wx.showToast({ title: message(error, '保存失败，请重试'), icon: 'none' })
         } finally {
-          this.setData({ busy: false })
+          if (this.scopeMatches(snapshot)) this.setData({ busy: false })
         }
       }
     })
@@ -1046,6 +1143,8 @@ Page({
   exitRoom() {
     const room = this.data.room
     if (!room || this.data.busy) return
+    const snapshot = this.scopeSnapshot()
+    if (!this.scopeMatches(snapshot)) return
     const isOwner = this.data.isOwner
     const action = isOwner ? 'disband' : 'leave'
     const membershipEpoch = this.viewerMembershipEpoch()
@@ -1054,7 +1153,7 @@ Page({
       title: isOwner ? '解散这个房间？' : '退出这个房间？',
       content: `${isOwner ? '解散后所有成员都无法再进入。' : '退出后可凭房间码重新加入。'}${hasExpenses ? ' 已有支出会保留为本机历史行程。' : ''}`,
       success: async (result) => {
-        if (!result.confirm || this.data.busy) return
+        if (!result.confirm || this.data.busy || !this.scopeMatches(snapshot)) return
         this.setData({ busy: true, syncText: isOwner ? '解散中' : '退出中' })
         const docId = this.docId
         const pending = ledgerOutboxEntry(docId)
@@ -1066,19 +1165,22 @@ Page({
           snapshotId = saveRoomSnapshot(docId, room.name, snapshotLedger, Boolean(pending))
           if (snapshotId === null) throw new Error('无法保存账本快照，请清理本机空间后重试')
           await gateway[action](docId, membershipEpoch)
+          if (!this.scopeMatches(snapshot)) return
           clearLedgerOutboxEntry(docId)
           storage.remove(docId)
           this.viewer = null
           this.stopPolling()
+          this.setData({ room: null, isOwner: false, busy: false })
           this.docId = ''
           wx.switchTab({ url: '/pages/trips/index' })
         } catch (error) {
+          if (!this.scopeMatches(snapshot)) return
           // A timeout may still mean leave/disband completed. Keep the latest
           // snapshot instead of replacing it with an older recovery copy.
           this.setData({ syncText: '操作失败' })
           wx.showToast({ title: message(error, '操作失败，请重试'), icon: 'none' })
         } finally {
-          this.setData({ busy: false })
+          if (this.scopeMatches(snapshot)) this.setData({ busy: false })
         }
       }
     })

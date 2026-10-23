@@ -124,6 +124,11 @@ jobs:
           node scripts/test-launch-readiness.cjs
           node scripts/test-midpoint-ui.cjs
           node scripts/test-full-audit.cjs
+          node scripts/test-native-backup.cjs
+          node scripts/test-native-pages-parity.cjs
+          node scripts/test-native-midpoint-parity.cjs
+          node scripts/test-wechat-release.cjs
+          node scripts/test-native-account-isolation.cjs
 
       - name: Install deployment dependencies
         run: npm install --no-save @cloudbase/manager-node@5.6.6 @cloudbase/node-sdk@3.18.3
