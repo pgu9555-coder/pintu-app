@@ -2,6 +2,12 @@
 
 This directory contains Pintu's native WeChat Mini Program. It does not use `web-view`, browser DOM APIs, or a third-party runtime.
 
+## Development upload status
+
+On 2026-10-23, version `1.1.1` passed compilation and preview-code generation through the official WeChat Developer Tools CLI `2.02.2609231` and was successfully uploaded as a development version. The compiled package is 276,531 bytes (approximately 270 KB), from feature source commit [`d82ad94`](https://github.com/pgu9555-coder/pintu-app/commit/d82ad941cdddf98002ffb87de8d98e6b4aab5b6a). The earlier `1.1.0` development upload was completed on 2026-10-22.
+
+Physical-device testing, filing, privacy-guide configuration, `chooseLocation` approval, storage rules, and live business calls remain to be verified. The Mini Program has not been submitted for review or published. See [LAUNCH.md](../LAUNCH.md) for the current checklist.
+
 ## Import and configuration
 
 1. Import this `miniprogram-shell/` directory into WeChat Developer Tools.
@@ -15,6 +21,7 @@ This directory contains Pintu's native WeChat Mini Program. It does not use `web
 - **Native invitations:** Meetup and ledger rooms support WeChat invitation cards. Cards contain only the room code and room type—not addresses, expenses, nicknames, or internal document identifiers. Recipients must confirm their name and required consent before joining.
 - **Trusted identity:** Cloud functions identify the WeChat account through a trusted OpenID. Users may choose, replace, or remove a profile image and nickname, and can recover authorized rooms across devices under the same WeChat identity.
 - **Meetup planning:** Participants may plan locally with multiple starting points or contribute their locations from separate devices. A shared room supports midpoint estimation, candidate destinations, voting, owner confirmation, and sequential destination selection.
+- **Manual starting-point search:** Local starting points support typed address search and selection of a valid result, with a separate button for native map selection. Denying native location permission does not prevent searching public places or cause the app to read the current location. Failed requests preserve the previous location; stale requests cannot update a different account, point editor, page, or room.
 - **Shared ledger:** Local and cloud rooms support members, expense creation and editing, payer and participant selection, balances, and settlement recommendations. For up to ten people with non-zero balances, the solver minimizes the number of transfers; larger groups receive a valid settlement plan.
 - **Room lifecycle:** Owners may dissolve rooms and other members may leave. Online rooms currently remain active until they are dissolved.
 - **Local spinner:** The spinner completes its visible animation before revealing a result. Entries and outcomes remain on the device and are not synchronized.
@@ -28,7 +35,7 @@ The displayed midpoint is a coordinate estimate. Participants should consider ac
 
 - The first launch opens directly to the home screen without automatic login or requests for a phone number, profile image, nickname, or location.
 - Users may try the local midpoint, ledger, and spinner flows as guests. Midpoint drafts and local books are saved in a separate device guest space. Signed-in users have separate account-scoped local storage; logging in does not automatically merge guest drafts. Spinner entries remain session-only.
-- A cancellable login prompt appears only when the user initiates a cloud-dependent action such as creating or joining a shared room, opening cloud history, or managing a profile.
+- A cancellable login prompt appears when the user initiates an account-dependent action such as creating or joining a shared room, opening cloud history, or managing a profile. Public-place search does not create a saved cloud collaboration profile.
 - The Terms of Service and Privacy Guide must be opened separately. Consent is unchecked by default, and login remains disabled until the user opts in.
 - Login does not request a phone number or automatically retrieve a profile image or nickname. Profile data is uploaded only after an authenticated user explicitly edits and saves it.
 
@@ -36,11 +43,11 @@ Before release, reconcile these actual data uses with the account's privacy-guid
 
 - **User information (nickname and profile image):** display member identity and prefill the user's chosen nickname.
 - **Published content:** store and display room names, member names, expense descriptions, candidate destinations, and votes within the authorized room.
-- **User-selected location:** call `wx.chooseLocation` only after the user chooses a starting point or candidate destination.
+- **User-selected location:** call `wx.chooseLocation` only after the user chooses the map-selection control for a starting point or candidate destination. The location-purpose explanation covers both uses; typed public-place search remains available for local starting points after native location permission is denied.
 - **Clipboard:** write a room code only after the user presses the copy control; Pintu does not read existing clipboard contents.
 - **Custom user identifier (OpenID):** identify owners and members, enforce authorization, synchronize profiles, and retrieve the user's rooms.
 - **User-selected files:** import JSON ledger backups chosen from WeChat chat files; export/share a backup only after the user's tap. Files contain member names and financial records and should be shared only with trusted recipients.
-- **Map search:** manually entered address keywords and submitted coordinates are sent through the CloudBase map gateway to AMap. The server uses a hashed caller identifier for rate limits. Local use does not create a saved cloud collaboration profile.
+- **Map search:** manually entered address keywords and submitted coordinates are sent through the CloudBase map gateway to AMap. Typed search does not read the current location. The server derives the rate-limit identifier by hashing a platform-trusted caller identifier. Local use does not create a saved cloud collaboration profile.
 
 The native client uses `chooseLocation`, not background location tracking. Use the actual interface detection and available declaration options in the WeChat console; final interface approval and privacy configuration must be checked on the existing account.
 
@@ -54,13 +61,17 @@ The web application and Mini Program share protected `schemaVersion: 5` rooms. A
 
 ## Release checklist
 
+The official read-only CLI lists `roomGateway`, `mapGateway`, and `quotaCleanup` as `Active` when given the AppID and environment explicitly. The environment-list command returns an empty list, which does not establish whether the environment is linked. Linkage and runtime calls still require verification; an active function status is not a live business-flow test.
+
 - Link the Mini Program account to the configured CloudBase environment.
 - Deploy `roomGateway` and, when address search is enabled, `mapGateway`.
+- Verify private storage rules and live map, room, ledger, content-safety, and profile-image operations.
 - Complete the WeChat privacy declarations described above.
 - Request the required user-selected-location capability for `wx.chooseLocation`.
 - Complete Mini Program filing and any verification needed for search or sharing.
 - Test creation, joining, synchronization, voting, ledger editing, member departure, and owner dissolution on at least two physical devices.
 - Test guest/account storage isolation, backup import/export, destination photos/details, and native-map controls on iOS and Android. Offline source/VM checks are not a substitute for a WeChat build and device preview.
+- Test manual starting-point search and result selection after denying native location permission, failure preservation, and stale-request isolation across account, editor, page, and room changes.
 - Use the manual preview/upload helper in [scripts/wechat-release/README.md](../scripts/wechat-release/README.md) if available, or upload from official WeChat Developer Tools. An upload produces a development version; review submission and publication are separate console actions.
 
 Return to the [main project documentation](../README.md) for architecture, testing, deployment, and security details.

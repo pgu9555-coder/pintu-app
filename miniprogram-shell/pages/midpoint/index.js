@@ -275,6 +275,13 @@ Page({
     localCandidates: [],
     localCalculated: false,
     localStorageMessage: '',
+    localPointEditorId: '',
+    localPointEditorLabel: '',
+    localAddressQuery: '',
+    localAddressSuggestions: [],
+    localAddressSearchLoading: false,
+    localAddressMessage: '',
+    localAddressError: false,
     mapSearchMessage: '',
     mineName: '',
     mineAddress: '',
@@ -450,6 +457,7 @@ Page({
   },
 
   reloadLocalScope() {
+    this.closeLocalPointEditor()
     this.pageGeneration = (this.pageGeneration || 0) + 1
     this.decisionToken = (this.decisionToken || 0) + 1
     this.pointFlushToken = (this.pointFlushToken || 0) + 1
@@ -491,7 +499,7 @@ Page({
     const app = typeof getApp === 'function' ? getApp() : null
     const consentGranted = Boolean(app && typeof app.hasAccountConsent === 'function' && app.hasAccountConsent())
     if (!consentGranted) {
-      localStorageMessage = '出发点草稿仅保存在本机，不会上传；创建或加入房间时再登录。'
+      localStorageMessage = '出发点草稿仅保存在本机；地点搜索经云端高德查询，不会自动加入共享房间。'
     } else {
       try {
         if (!app || typeof app.ensureAccountScope !== 'function') throw new Error('账户存储初始化不可用')
@@ -543,11 +551,14 @@ Page({
   },
 
   onHide() {
+    this.invalidateLocalAddressSearch()
+    this.present({ localAddressSuggestions: [], localAddressSearchLoading: false })
     this.stopPolling()
   },
 
   onUnload() {
     this.closed = true
+    this.invalidateLocalAddressSearch()
     this.pageGeneration = (this.pageGeneration || 0) + 1
     this.stopPolling()
     this.detailGeneration = (this.detailGeneration || 0) + 1
@@ -774,6 +785,7 @@ Page({
       wx.showToast({ title: '无法保存创建请求，请返回首页重试', icon: 'none' })
       return
     }
+    this.closeLocalPointEditor()
     this.present({ busy: true })
     try {
       const result = await gateway.create(roomInput(name), pendingCreateId)
@@ -810,6 +822,7 @@ Page({
       wx.showToast({ title: '请填写名字和 8 位房间码', icon: 'none' })
       return
     }
+    this.closeLocalPointEditor()
     this.present({ busy: true })
     try {
       const result = await gateway.join(code, 'midpoint', name)
@@ -883,6 +896,7 @@ Page({
   },
 
   renderRoom(room, viewer) {
+    if (this.data.localPointEditorId) this.closeLocalPointEditor()
     const decision = currentDecision(room)
     const candidates = decisionCandidates(decision, viewer, room, this.candidateDetails)
     const participation = decisionParticipation(decision, room)
@@ -1030,7 +1044,7 @@ Page({
     this.localSearchVersion += 1
     this.detailGeneration = (this.detailGeneration || 0) + 1
     this.poiDetails = Object.create(null)
-    this.saveLocalState(normalizedPoints, [])
+    if (!this.saveLocalState(normalizedPoints, [])) return false
     this.present({
       localPoints: normalizedPoints,
       localCandidates: [],
@@ -1040,6 +1054,7 @@ Page({
       markers: [],
       mapSearchMessage: ''
     })
+    return true
   },
 
   addLocalPoint() {
@@ -1047,6 +1062,7 @@ Page({
       wx.showToast({ title: '最多 6 位出发的人', icon: 'none' })
       return
     }
+    this.closeLocalPointEditor()
     const index = this.data.localPoints.length
     const points = this.data.localPoints.concat({
       id: `local-friend-${Date.now()}-${index}`,
@@ -1066,22 +1082,121 @@ Page({
     const target = this.data.localPoints.find((point) => String(point.id) === id)
     if (!target || target.isSelf) return
     if (this.data.localPoints.length <= 2) { wx.showToast({title:'至少保留 2 个出发点',icon:'none'}); return }
+    this.closeLocalPointEditor()
     const points = this.data.localPoints.filter((point) => String(point.id) !== id)
     this.resetLocalCalculation(points)
   },
 
-  chooseLocalPoint(event) {
+  invalidateLocalAddressSearch() {
+    this.localAddressSearchRequest = (this.localAddressSearchRequest || 0) + 1
+    this.localAddressResultsContext = null
+    if (this.localAddressSearchTimer) clearTimeout(this.localAddressSearchTimer)
+    this.localAddressSearchTimer = null
+  },
+
+  closeLocalPointEditor() {
+    this.localPointEditorVersion = (this.localPointEditorVersion || 0) + 1
+    this.invalidateLocalAddressSearch()
+    this.present({ localPointEditorId: '', localPointEditorLabel: '', localAddressQuery: '', localAddressSuggestions: [], localAddressSearchLoading: false, localAddressMessage: '', localAddressError: false })
+  },
+
+  openLocalPointEditor(event) {
+    if (this.data.busy || this.data.room || this.docId || !this.localStorageReady || !this.localScopeMatches()) return
     const id = String(event.currentTarget.dataset.id || '')
+    const point = this.data.localPoints.find((item) => String(item.id) === id)
+    if (!point || this.data.localPointEditorId === id) return
+    this.closeLocalPointEditor()
+    this.present({ localPointEditorId: id, localPointEditorLabel: point.label, localAddressQuery: '', localAddressMessage: '输入至少 2 个字，搜索后选择具体地点；原地点会保留到选定新地点。' })
+  },
+
+  captureLocalPointEditor() {
+    return Object.assign(this.captureViewContext(), { pointId: this.data.localPointEditorId, editorVersion: this.localPointEditorVersion || 0, editRevision: this.localPointEditRevision || 0 })
+  },
+
+  localPointEditorMatches(context) {
+    return this.viewContextMatches(context) && !this.data.room && !this.docId && !this.data.busy &&
+      context.editorVersion === (this.localPointEditorVersion || 0) && context.editRevision === (this.localPointEditRevision || 0) && context.pointId === this.data.localPointEditorId &&
+      this.data.localPoints.some((point) => String(point.id) === context.pointId)
+  },
+
+  localAddressInput(event) {
+    const context = this.captureLocalPointEditor()
+    if (!this.localPointEditorMatches(context)) return
+    const query = String(event.detail.value || '').slice(0, 80)
+    this.invalidateLocalAddressSearch()
+    this.localPointEditRevision = (this.localPointEditRevision || 0) + 1
+    this.present({ localAddressQuery: query, localAddressSuggestions: [], localAddressSearchLoading: false, localAddressError: false, localAddressMessage: query.trim().length < 2 ? '请输入至少 2 个字的地点名称或地址。' : '' })
+    if (query.trim().length < 2) return
+    const inputContext = this.captureLocalPointEditor()
+    const request = this.localAddressSearchRequest
+    this.localAddressSearchTimer = setTimeout(() => {
+      this.localAddressSearchTimer = null
+      if (request === this.localAddressSearchRequest && this.localPointEditorMatches(inputContext)) this.searchLocalPointAddress()
+    }, 300)
+  },
+
+  async searchLocalPointAddress() {
+    const context = this.captureLocalPointEditor()
+    if (!this.localPointEditorMatches(context)) return
+    const query = String(this.data.localAddressQuery || '').trim()
+    this.invalidateLocalAddressSearch()
+    const request = this.localAddressSearchRequest
+    const current = () => request === this.localAddressSearchRequest && this.localPointEditorMatches(context) && query === String(this.data.localAddressQuery || '').trim()
+    if (query.length < 2) {
+      this.present({ localAddressSuggestions: [], localAddressSearchLoading: false, localAddressError: false, localAddressMessage: '请输入至少 2 个字的地点名称或地址。' })
+      return
+    }
+    this.present({ localAddressSuggestions: [], localAddressSearchLoading: true, localAddressMessage: '', localAddressError: false })
+    try {
+      const results = await amap.inputTips(query)
+      if (!current()) return
+      const suggestions = (Array.isArray(results) ? results : []).filter((item) => item && hasLocalCoordinates(item) && String(item.name || item.address || '').trim()).slice(0, 10).map((item) => ({
+        id: String(item.id || item.name || '').slice(0, 80), name: String(item.name || item.address).slice(0, 80), address: String(item.address || '').slice(0, 120), lat: Number(item.lat), lng: Number(item.lng)
+      }))
+      this.localAddressResultsContext = Object.assign({}, context, { request, query })
+      this.present({ localAddressSuggestions: suggestions, localAddressSearchLoading: false, localAddressMessage: suggestions.length ? '选择下方地点，将替换当前出发点。' : '没有找到带坐标的地点，请补充城市或更换关键词后重试。', localAddressError: false })
+    } catch (error) {
+      if (!current()) return
+      this.present({ localAddressSuggestions: [], localAddressSearchLoading: false, localAddressMessage: error.message || '地点搜索失败，请点击搜索重试。', localAddressError: true })
+    }
+  },
+
+  selectLocalAddressSuggestion(event) {
+    const context = this.localAddressResultsContext
+    if (!context || context.request !== this.localAddressSearchRequest || context.query !== String(this.data.localAddressQuery || '').trim() || !this.localPointEditorMatches(context)) return
+    const index = Number(event.currentTarget.dataset.index)
+    const suggestion = Number.isInteger(index) && this.data.localAddressSuggestions[index]
+    if (!suggestion) return
+    this.applyLocalPointSelection(context, suggestion)
+  },
+
+  applyLocalPointSelection(context, location) {
+    if (!this.localPointEditorMatches(context)) return
+    if (!hasLocalCoordinates(location)) {
+      this.present({ localAddressError: true, localAddressMessage: '这个地点的坐标无效，请重新搜索或从地图选点。' })
+      return
+    }
+    const address = ([location.name, location.address].filter(Boolean).join(' · ') || '地图地点').slice(0, 120)
+    const points = this.data.localPoints.map((point) => String(point.id) === context.pointId ? Object.assign({}, point, {
+      name: String(location.name || location.address || point.name).slice(0, 48), address, lat: Number(location.lat), lng: Number(location.lng)
+    }) : point)
+    if (!this.resetLocalCalculation(points)) {
+      this.present({ localAddressError: true, localAddressMessage: '新地点未保存，本机存储不可用，请清理空间后重新选择。' })
+      return
+    }
+    this.closeLocalPointEditor()
+  },
+
+  chooseLocalPoint(event) {
+    const id = String(event.currentTarget.dataset.id || this.data.localPointEditorId || '')
     if (!id) return
-    this.requestLocation((location) => {
-      const points = this.data.localPoints.map((point) => String(point.id) === id ? Object.assign({}, point, {
-        name: String(location.name || location.address || point.name).slice(0, 48),
-        address: String(location.address || location.name || '地图地点').slice(0, 120),
-        lat: Number(location.latitude),
-        lng: Number(location.longitude)
-      }) : point)
-      this.resetLocalCalculation(points)
-    })
+    if (this.data.localPointEditorId !== id) this.openLocalPointEditor({ currentTarget: { dataset: { id } } })
+    if (!this.localPointEditorMatches(this.captureLocalPointEditor())) return
+    this.localPointEditRevision = (this.localPointEditRevision || 0) + 1
+    const context = this.captureLocalPointEditor()
+    this.invalidateLocalAddressSearch()
+    this.present({ localAddressSuggestions: [], localAddressSearchLoading: false })
+    this.requestLocation((location) => this.applyLocalPointSelection(context, { name: location.name, address: location.address, lat: location.latitude, lng: location.longitude }))
   },
 
   calculateLocalMidpoint() {
@@ -1094,6 +1209,7 @@ Page({
       wx.showToast({ title: '请为每位出发的人选择地点', icon: 'none' })
       return
     }
+    this.closeLocalPointEditor()
     const room = { meetup: { people: points } }
     const center = midpoint.average(room)
     this.present({
