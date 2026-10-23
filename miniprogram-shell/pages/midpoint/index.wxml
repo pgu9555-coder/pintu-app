@@ -135,14 +135,25 @@
       </block>
 
       <block wx:else>
-        <view wx:for="{{localPoints}}" wx:key="id" class="point-row local-person-row selectable" bindtap="chooseLocalPoint" data-id="{{item.id}}">
+        <view wx:for="{{localPoints}}" wx:key="id" class="point-row local-person-row selectable" bindtap="openLocalPointEditor" data-id="{{item.id}}" role="button" aria-label="编辑{{item.label}}的出发地点">
           <view class="point-avatar {{item.isSelf ? 'self-avatar' : 'friend-avatar'}}">
             <image wx:if="{{item.isSelf && item.avatarFileId}}" class="point-avatar-image" src="{{item.avatarFileId}}" mode="aspectFill" />
             <text wx:else>{{item.initial}}</text>
           </view>
-          <view class="point-copy"><view class="point-name">{{item.label}}</view><view class="point-address">{{item.address || '点击选择出发地点'}}</view></view>
+          <view class="point-copy"><view class="point-name">{{item.label}}</view><view class="point-address">{{item.address || '输入地址或从地图选点'}}</view></view>
           <view wx:if="{{!item.isSelf && localPoints.length > 2}}" class="remove-point" catchtap="removeLocalPoint" data-id="{{item.id}}" role="button" aria-label="删除这位朋友">×</view>
           <view wx:else class="row-arrow">›</view>
+        </view>
+        <view wx:if="{{localPointEditorId}}" class="mine-editor local-point-editor">
+          <view class="local-editor-heading"><view class="editor-label">{{localPointEditorLabel}}的出发地点</view><button class="text-action" bindtap="closeLocalPointEditor">收起</button></view>
+          <view class="local-search-row"><input class="input" value="{{localAddressQuery}}" placeholder="输入城市、地点名称或地址" maxlength="80" confirm-type="search" bindinput="localAddressInput" bindconfirm="searchLocalPointAddress" /><button class="room-small-button" bindtap="searchLocalPointAddress" loading="{{localAddressSearchLoading}}" disabled="{{busy || localAddressSearchLoading}}">搜索</button></view>
+          <view class="local-search-note">搜索关键词经云端高德查询，不读取当前位置。</view>
+          <view wx:if="{{localAddressSearchLoading}}" class="suggestion-status">正在搜索地点…</view>
+          <view wx:if="{{localAddressMessage}}" class="local-search-message {{localAddressError ? 'search-error' : ''}}">{{localAddressMessage}}</view>
+          <scroll-view wx:if="{{localAddressSuggestions.length}}" class="address-suggestions" scroll-y="true">
+            <view wx:for="{{localAddressSuggestions}}" wx:key="index" class="suggestion-item" data-index="{{index}}" bindtap="selectLocalAddressSuggestion" role="button" aria-label="使用{{item.name}}作为出发点"><view class="suggestion-name">{{item.name}}</view><view class="suggestion-address">{{item.address}}</view></view>
+          </scroll-view>
+          <button class="text-action local-map-choice" bindtap="chooseLocalPoint" data-id="{{localPointEditorId}}" disabled="{{busy}}">地图选点</button>
         </view>
         <button wx:if="{{localPoints.length < 6}}" class="dashed-button" bindtap="addLocalPoint">＋ 添加一位出发的朋友</button>
         <button class="btn calculate-button" bindtap="calculateLocalMidpoint">寻找碰面点</button>
