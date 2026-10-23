@@ -71,8 +71,8 @@ module.exports = {
   reopenDecision(data) {
     return call('reopenDecision', data)
   },
-  leave(docId) {
-    return call('leave', { docId })
+  leave(docId, membershipEpoch) {
+    return call('leave', { docId, membershipEpoch })
   },
   disband(docId) {
     return call('disband', { docId })

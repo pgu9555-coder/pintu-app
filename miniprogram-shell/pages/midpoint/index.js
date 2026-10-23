@@ -1363,6 +1363,7 @@ Page({
     const room = this.data.room
     if (!room || this.data.busy) return
     const action = this.data.isOwner ? 'disband' : 'leave'
+    const membershipEpoch = this.viewer && this.viewer.membershipEpoch
     wx.showModal({
       title: this.data.isOwner ? '解散这个房间？' : '退出这个房间？',
       content: this.data.isOwner ? '解散后，所有成员都无法再进入。' : '退出后可凭房间码重新加入。',
@@ -1370,7 +1371,7 @@ Page({
         if (!result.confirm) return
         this.setData({ busy: true })
         try {
-          await gateway[action](this.docId)
+          await gateway[action](this.docId, membershipEpoch)
           this.clearPointOutbox(this.docId)
           storage.remove(this.docId)
           this.stopPolling()

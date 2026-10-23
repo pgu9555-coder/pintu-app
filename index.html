@@ -1580,6 +1580,7 @@
             <div class="tb-sub" id="glFinalSub"></div>
           </div>
 
+          <p class="gl-field-note" style="line-height:1.6;margin:0 0 16px;">每笔支出分别均摊到分，余下的分按参与人顺序分配，因此可能与总额直接均摊相差几分。</p>
           <div class="mp-title" style="margin-bottom:10px;"><i class="ti-scale" style="color:var(--gold)"></i>每人收支情况</div>
           <div class="settle-list" id="glBalanceList" style="margin-bottom:20px;"></div>
 
@@ -1737,6 +1738,7 @@ var mpRoomMode = false;   /* 当前是否处于房间协作模式 */
 var mpRoomRef = null;     /* 协作模式下对应的房间对象 */
 
 function openMidpoint(roomMode){
+  mpPointSaveGeneration++;
   var room = (roomMode && typeof rmCurrentRoom === 'function') ? rmCurrentRoom() : null;
   var sharedRoom = room && room.toolType === 'midpoint';
   mpRoomMode = !!sharedRoom;
@@ -1851,6 +1853,7 @@ function mpRenderRoomPanel(room){
 
 /* 把当前用户的资料装入下方编辑区。仅本人行会出现“修改”按钮。 */
 function mpLoadMineEditor(room){
+  mpPointSaveGeneration++;
   var nameInput = document.getElementById('mpMineName');
   var addressInput = document.getElementById('mpMineInput');
   var suggest = document.getElementById('mpMineSuggest');
@@ -1886,6 +1889,7 @@ function mpSetMineEditing(editing){
 }
 
 function mpBeginEditMyPoint(person){
+  mpPointSaveGeneration++;
   var nameInput = document.getElementById('mpMineName');
   var addressInput = document.getElementById('mpMineInput');
   var editor = document.getElementById('mpMineEditor');
@@ -1908,6 +1912,12 @@ function mpCancelMineEdit(){
   mpLoadMineEditor(mpRoomRef);
 }
 
+var mpPointSaveGeneration = 0;
+['mpMineName', 'mpMineInput'].forEach(function(id){
+  var field = document.getElementById(id);
+  if (field) field.addEventListener('input', function(){ mpPointSaveGeneration++; });
+});
+
 /* 放下 / 更新我的出发点 */
 function mpSetMyPoint(){
   var room = mpRoomRef;
@@ -1919,7 +1929,19 @@ function mpSetMyPoint(){
   if (!myName){ alert('请先填写你的名字'); if (nameInput) nameInput.focus(); return; }
   if (!text || text.indexOf('正在') === 0){ input.focus(); return; }
 
+  var generation = ++mpPointSaveGeneration;
+  var docId = room.docId;
+  var membershipEpoch = rmMembershipEpochForRoom(room);
+  function isCurrent(){
+    var view = document.getElementById('viewMidpoint');
+    return generation === mpPointSaveGeneration && mpRoomMode && mpRoomRef && mpRoomRef.docId === docId &&
+      rmMembershipEpochForRoom(mpRoomRef) === membershipEpoch && (!view || view.classList.contains('show')) &&
+      input.value.trim() === text && (nameInput ? nameInput.value.trim() : myName) === myName;
+  }
+
   function commit(lat, lng){
+    if (!isCurrent()) return;
+    room = mpRoomRef;
     var people = (room.meetup && room.meetup.people) ? room.meetup.people.slice() : [];
     var mine = null;
     for (var i = 0; i < people.length; i++){ if (people[i].uid === window.rmMyUid){ mine = people[i]; break; } }
@@ -1943,8 +1965,12 @@ function mpSetMyPoint(){
     commit(parseFloat(input.dataset.lat), parseFloat(input.dataset.lng));
   } else {
     getCoordinates(text).then(function(c){
+      if (!isCurrent()) return;
       if (!c){ alert('这个地址定位不了，试试从下拉里选一个精确地址，或用右边的定位按钮。'); return; }
       commit(c.lat, c.lng);
+    }).catch(function(){
+      if (!isCurrent()) return;
+      showAppToast('地址查询失败或超时，请检查网络后重新保存；输入内容已保留');
     });
   }
 }
@@ -2543,20 +2569,34 @@ function geolocateMe(inputEl) {
   } catch (_) { fail(); }
 }
 
+function pintuMapRequest(start) {
+  return new Promise(function(resolve, reject){
+    var settled = false;
+    var timer = setTimeout(function(){ finish(false, new Error('地图服务连接超时，请检查网络后重试')); }, 10000);
+    function finish(ok, value){
+      if (settled) return;
+      settled = true; clearTimeout(timer);
+      if (ok) resolve(value); else reject(value instanceof Error ? value : new Error('地图服务暂时不可用，请稍后重试'));
+    }
+    try {
+      if (typeof window.AMap === 'undefined') throw new Error('地图服务暂时不可用，请刷新后重试');
+      start(function(value){ finish(true, value); }, function(error){ finish(false, error); });
+    } catch(error){ finish(false, error); }
+  });
+}
+
 function getCoordinates(address) {
-  return new Promise((resolve) => {
-    if (typeof window.AMap === 'undefined') { resolve(null); return; }
+  return pintuMapRequest(function(resolve, reject){
     AMap.plugin('AMap.Geocoder', function() {
-      const scopeCity = getCurrentSearchCityName();
-      const geocoder = new AMap.Geocoder({ city: scopeCity });
-      
-      geocoder.getLocation(address, function(status, result) {
-        if (status === 'complete' && result.geocodes.length) {
-          resolve({ lat: result.geocodes[0].location.lat, lng: result.geocodes[0].location.lng });
-        } else {
-          resolve(null); 
-        }
-      });
+      try {
+        const geocoder = new AMap.Geocoder({ city: getCurrentSearchCityName() });
+        geocoder.getLocation(address, function(status, result) {
+          if (status === 'complete' && result && result.geocodes && result.geocodes.length) {
+            resolve({ lat: result.geocodes[0].location.lat, lng: result.geocodes[0].location.lng });
+          } else if (status === 'no_data') resolve(null);
+          else reject(new Error('地址查询暂时失败，请检查网络后重试'));
+        });
+      } catch(error){ reject(error); }
     });
   });
 }
@@ -2566,17 +2606,12 @@ let allMapMarkers = [];
 
 /* —— 增强版周边搜索 (商场和餐饮分离搜索) —— */
 function fetchPOIs(cLat, cLng, types, radius, pageSize) {
-  return new Promise((resolve) => {
-    const placeSearch = new AMap.PlaceSearch({
-      type: types, 
-      pageSize: pageSize,
-      pageIndex: 1,
-      autoFitView: false
-    });
-    const cpoint = [cLng, cLat]; 
-    placeSearch.searchNearBy('', cpoint, radius, function(status, result) {
-      if (status === 'complete' && result.info === 'OK') resolve(result.poiList.pois);
-      else resolve([]);
+  return pintuMapRequest(function(resolve, reject){
+    const placeSearch = new AMap.PlaceSearch({ type: types, pageSize: pageSize, pageIndex: 1, autoFitView: false });
+    placeSearch.searchNearBy('', [cLng, cLat], radius, function(status, result) {
+      if (status === 'complete' && result && result.info === 'OK' && result.poiList && Array.isArray(result.poiList.pois)) resolve(result.poiList.pois);
+      else if (status === 'no_data') resolve([]);
+      else reject(new Error('附近地点查询失败，请检查网络或稍后重试'));
     });
   });
 }
@@ -2625,6 +2660,7 @@ async function calculateRealMidpoint() {
 /* 拿到一组坐标后：算中点、画地图、搜周边——单人模式和房间协作模式共用 */
 async function renderMidpointResult(coordsList) {
   const btn = document.getElementById('btnCalc');
+  let requestVersion = null;
   try {
     const cLat = coordsList.reduce((s, c) => s + c.lat, 0) / coordsList.length;
     const cLng = coordsList.reduce((s, c) => s + c.lng, 0) / coordsList.length;
@@ -2632,7 +2668,7 @@ async function renderMidpointResult(coordsList) {
     var ia = document.getElementById('mpInputArea'); if (ia) ia.style.display = 'none';
     if (btn) btn.style.display = 'none';
     document.getElementById('mpResultArea').style.display = 'block';
-    const requestVersion = pintuSetMidpointState(true);
+    requestVersion = pintuSetMidpointState(true);
     document.getElementById('mpPoiSummary').textContent = '正在寻找附近的好去处';
     document.getElementById('mpFilterEmpty').hidden = true;
     document.getElementById('foodSwipeEntry').style.display = 'none';
@@ -2714,8 +2750,11 @@ async function renderMidpointResult(coordsList) {
 
     pintuRenderMidpointPois(window.foodSwipeDeck);
   } catch (err) {
+    if (requestVersion !== null && !pintuMidpointRequestIsCurrent(requestVersion)) return;
     console.error(err);
-    alert("网络或地图服务出现异常，请稍后再试！");
+    document.getElementById('poiLoading').style.display = 'none';
+    resetMidpoint();
+    showAppToast('附近地点加载失败，请检查网络后重新寻找碰面点');
     if (btn) { btn.disabled = false; btn.textContent = "寻找碰面点"; }
   }
 }
@@ -3068,22 +3107,15 @@ document.addEventListener("DOMContentLoaded", function(){
 /* ---------- 详情数据：按需查询、每个 poi 只查一次并缓存 ---------- */
 function fetchPoiFullDetail(poi){
   if (poi._detailCache) return Promise.resolve(poi._detailCache);
-  return new Promise(function(resolve){
-    try {
-      var placeSearch = new AMap.PlaceSearch({ pageSize: 5, pageIndex: 1 });
-      placeSearch.searchNearBy(poi.name, [poi.lng, poi.lat], 60, function(status, result){
-        var detail = null;
-        if (status === 'complete' && result.info === 'OK' && result.poiList && result.poiList.pois.length){
-          var exact = result.poiList.pois.find(function(p){ return p.name === poi.name; });
-          detail = exact || result.poiList.pois[0];
-        }
-        poi._detailCache = detail || {};
-        resolve(poi._detailCache);
-      });
-    } catch(e){
-      poi._detailCache = {};
-      resolve({});
-    }
+  return pintuMapRequest(function(resolve, reject){
+    var placeSearch = new AMap.PlaceSearch({ pageSize: 5, pageIndex: 1 });
+    placeSearch.searchNearBy(poi.name, [poi.lng, poi.lat], 60, function(status, result){
+      if (status === 'no_data'){ poi._detailCache = {}; resolve(poi._detailCache); return; }
+      if (status !== 'complete' || !result || result.info !== 'OK' || !result.poiList || !Array.isArray(result.poiList.pois)) { reject(new Error('地点资料查询失败')); return; }
+      var exact = result.poiList.pois.find(function(p){ return p.name === poi.name; });
+      poi._detailCache = exact || result.poiList.pois[0] || {};
+      resolve(poi._detailCache);
+    });
   });
 }
 
@@ -3105,33 +3137,22 @@ function buildPlatformLinksHtml(poi){
    所以没有用共享的 fetchPOIs（它只查第 1 页、最多几十条），
    而是单独写了一个会自动翻页的版本，直到把这一类查完或碰到安全上限为止。 ---------- */
 function fetchAllPoisForHighlights(cLat, cLng, types, radius){
-  return new Promise(function(resolve){
-    var all = [];
-    var maxPages = 4; /* 每页最多 50 条，4 页 = 200 条安全上限，避免极端情况下无限翻页 */
-    function fetchPage(pageIndex, isRetry){
+  var all = [], maxPages = 4;
+  function fetchPage(pageIndex){
+    return pintuMapRequest(function(resolve, reject){
       var placeSearch = new AMap.PlaceSearch({ type: types, pageSize: 50, pageIndex: pageIndex, autoFitView: false });
       placeSearch.searchNearBy('', [cLng, cLat], radius, function(status, result){
-        if (status === 'complete' && result.info === 'OK' && result.poiList && result.poiList.pois){
-          all = all.concat(result.poiList.pois);
-          var total = result.poiList.count || all.length;
-          if (all.length < total && pageIndex < maxPages && result.poiList.pois.length > 0){
-            fetchPage(pageIndex + 1, false);
-          } else {
-            resolve(all);
-          }
-        } else if (!isRetry){
-          /* 第一次失败先别急着认输——高德接口偶尔会因为瞬时并发被限流，
-             隔 400ms 重试一次，多数情况下第二次就能成功 */
-          console.warn('[吃喝玩乐分类] 第 ' + pageIndex + ' 页查询失败，status=' + status + '，result.info=' + (result && result.info) + '，300ms 后重试一次');
-          setTimeout(function(){ fetchPage(pageIndex, true); }, 400);
-        } else {
-          console.warn('[吃喝玩乐分类] 重试后仍然失败，type=' + types + '，放弃这一类，本次返回已拿到的 ' + all.length + ' 条');
-          resolve(all);
-        }
+        if (status === 'no_data'){ resolve({pois:[],count:all.length}); return; }
+        if (status !== 'complete' || !result || result.info !== 'OK' || !result.poiList || !Array.isArray(result.poiList.pois)){ reject(new Error('分类地点加载失败')); return; }
+        resolve(result.poiList);
       });
-    }
-    fetchPage(1, false);
-  });
+    }).then(function(page){
+      all = all.concat(page.pois);
+      if (all.length < Number(page.count || all.length) && pageIndex < maxPages && page.pois.length) return fetchPage(pageIndex + 1);
+      return all;
+    });
+  }
+  return fetchPage(1);
 }
 
 /* ---------- 吃喝玩乐分类：以这个地点自己的坐标为圆心搜索。
@@ -3161,22 +3182,13 @@ function mapHlPoi(poi, p, label){
 /* ---------- 只查第 1 页：一次请求就能同时拿到「这一类总共有多少家」(poiList.count)
    和前 50 家的预览。数字用 count，是高德给的真实总数，不受我们只下了一页影响。 ---------- */
 function fetchFirstPageForHighlights(cLat, cLng, types, radius){
-  return new Promise(function(resolve){
-    function attempt(isRetry){
-      try {
-        var placeSearch = new AMap.PlaceSearch({ type: types, pageSize: 50, pageIndex: 1, autoFitView: false });
-        placeSearch.searchNearBy('', [cLng, cLat], radius, function(status, result){
-          if (status === 'complete' && result.info === 'OK' && result.poiList && result.poiList.pois){
-            resolve({ pois: result.poiList.pois, total: result.poiList.count || result.poiList.pois.length });
-          } else if (!isRetry){
-            setTimeout(function(){ attempt(true); }, 400); /* 瞬时限流兜底，隔 400ms 重试一次 */
-          } else {
-            resolve({ pois: [], total: 0 });
-          }
-        });
-      } catch(e){ resolve({ pois: [], total: 0 }); }
-    }
-    attempt(false);
+  return pintuMapRequest(function(resolve, reject){
+    var placeSearch = new AMap.PlaceSearch({ type: types, pageSize: 50, pageIndex: 1, autoFitView: false });
+    placeSearch.searchNearBy('', [cLng, cLat], radius, function(status, result){
+      if (status === 'no_data'){ resolve({pois:[],total:0}); return; }
+      if (status !== 'complete' || !result || result.info !== 'OK' || !result.poiList || !Array.isArray(result.poiList.pois)){ reject(new Error('分类地点查询失败')); return; }
+      resolve({pois:result.poiList.pois,total:result.poiList.count || result.poiList.pois.length});
+    });
   });
 }
 
@@ -3229,8 +3241,6 @@ function fetchCategoryHighlights(poi){
     });
     poi._highlightsCache = out;
     return out;
-  }).catch(function(){
-    return [];
   });
 }
 
@@ -3352,7 +3362,7 @@ function buildHighlightsEl(poi, cats){
         full.forEach(function(p){ body.appendChild(renderRow(p)); });
       }).catch(function(){
         c._loading = false;
-        if (more.parentNode) more.parentNode.removeChild(more);
+        more.textContent = '加载失败，收起后重新展开可重试';
       });
     });
   });
@@ -3414,14 +3424,11 @@ function renderPoiFullBack(poi, targetEl){
     targetEl.appendChild(linkWrap.firstElementChild);
   }).catch(function(){
     targetEl.innerHTML = '';
-    var infoWrap = document.createElement('div');
-    infoWrap.style.flex = '1';
-    infoWrap.style.overflowY = 'auto';
-    infoWrap.innerHTML = buildPoiDetailHtml(poi, {});
-    targetEl.appendChild(infoWrap);
-    var linkWrap = document.createElement('div');
-    linkWrap.innerHTML = buildPlatformLinksHtml(poi);
-    targetEl.appendChild(linkWrap.firstElementChild);
+    var message = document.createElement('p');
+    message.textContent = '地点资料暂时加载失败，请检查网络后重试'; targetEl.appendChild(message);
+    var retry = document.createElement('button'); retry.type = 'button'; retry.className = 'btn-sub'; retry.textContent = '重新加载';
+    retry.addEventListener('click', function(){ renderPoiFullBack(poi, targetEl); }); targetEl.appendChild(retry);
+    var linkWrap = document.createElement('div'); linkWrap.innerHTML = buildPlatformLinksHtml(poi); targetEl.appendChild(linkWrap.firstElementChild);
   });
 }
 
@@ -4159,6 +4166,7 @@ function glPersistTrips(){
 
 function glSave(){
   var stored = glPersistTrips();
+  if (!stored && typeof showAppToast === 'function') showAppToast('未保存：本机存储空间不足或不可用，修改只在当前页面，请勿关闭并尽快导出备份');
   /* 如果当前编辑的是"房间共享账本"，顺手把它同步到云端 room.ledger，
      房间的实时监听会把这次改动推给房间里所有其他成员（多人共享的核心）。 */
   if (!glHydrating){
@@ -4167,7 +4175,7 @@ function glSave(){
       glQueueCloudSync(trip, true);
     } else if (trip && trip.roomDocId && !stored){
       glSetSyncBadge('retry', '● 本机保存失败，本次未同步');
-      if (typeof showAppToast === 'function') showAppToast('本机存储失败，修改仅保留在当前页面，未同步');
+
     }
   }
   return stored;
@@ -5078,7 +5086,7 @@ function rmCancelRoom(room, options){
   var fail = function(err){
     room._cancelBusy = false;
     console.warn('[取消/退出房间] 云端操作失败：', err);
-    if (typeof showAppToast === 'function') showAppToast('操作失败，房间仍然保留，请检查网络后重试');
+    if (typeof showAppToast === 'function') showAppToast(err && err.code === 'STALE_MEMBERSHIP' ? '成员身份已更新，请刷新房间后重试退出' : '操作失败，房间仍然保留，请检查网络后重试');
   };
 
   if (isLocal){ finish(); return; }
@@ -5089,7 +5097,7 @@ function rmCancelRoom(room, options){
   }
   if (!canLeaveMembership){ finish(); return; }
   /* memberUids 是数据库门禁，客户端无权自行修改；退出必须交给云函数。 */
-  rmRoomGateway('leave', { docId: room.docId }, '退出房间').then(finish).catch(fail);
+  rmRoomGateway('leave', { docId: room.docId, membershipEpoch: rmMembershipEpochForRoom(room) }, '退出房间').then(finish).catch(fail);
 }
 
 function rmCurrentRoom(){
@@ -5782,9 +5790,18 @@ var spinnerAngle = 0;      /* 当前累计旋转角度 */
 var spinnerBusy = false;   /* 转动中，禁止重复点 */
 var spinnerRaf = null;     /* 用逐帧动画代替 CSS transition，兼容微信 WebView */
 
-function openSpinner(roomMode){
+function spinnerResetBusyState(){
   if (spinnerRaf){ cancelAnimationFrame(spinnerRaf); spinnerRaf = null; }
   spinnerBusy = false;
+  var btn = document.getElementById('spinGoBtn');
+  if (btn){ btn.disabled = false; btn.textContent = '转'; btn.setAttribute('aria-label', '开始转盘'); }
+  var canvas = document.getElementById('spinCanvas');
+  var wrap = canvas ? canvas.closest('.spin-wheel-wrap') : null;
+  if (wrap) wrap.classList.remove('spinning');
+}
+
+function openSpinner(roomMode){
+  spinnerResetBusyState();
   hideAllViews();
   document.getElementById('viewSpinner').classList.add('show');
   window.scrollTo(0, 0);
@@ -5807,8 +5824,7 @@ function openSpinner(roomMode){
 }
 
 function spinnerGoBack(){
-  if (spinnerRaf){ cancelAnimationFrame(spinnerRaf); spinnerRaf = null; }
-  spinnerBusy = false;
+  spinnerResetBusyState();
   goHome(); /* goHome 已处理"从房间进来就回房间、否则回首页" */
 }
 
@@ -6389,6 +6405,19 @@ function spinnerSpin(){
   window.openGroupLedger = function(){
     if (typedRoom('ledger')) rmCurrentRoomId = null;
     var result = originalOpenGroupLedger();
+    rmRefreshTypedRoomUI('ledger');
+    return result;
+  };
+
+  var originalOpenGroupLedgerTrip = window.openGroupLedgerTrip;
+  window.openGroupLedgerTrip = function(tripId){
+    var trip = GL_TRIPS.find(function(item){ return item.id === tripId; });
+    if (trip && !trip.roomDocId){
+      stopTypedSync();
+      rmCurrentRoomId = null;
+      rmReturnToRoom = false;
+    }
+    var result = originalOpenGroupLedgerTrip(tripId);
     rmRefreshTypedRoomUI('ledger');
     return result;
   };

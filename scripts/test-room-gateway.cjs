@@ -206,6 +206,12 @@ async function callWx(openid, data, appid = "wx-test-pintu") {
   return gateway.main(data || {});
 }
 
+function membershipEpochFor(uid, docId) {
+  const room = rooms.get(docId);
+  const member = room && (room.members || []).find((item) => item.uid === uid);
+  return member && member.membershipEpoch;
+}
+
 async function main() {
   const spoofed = await call(null, { action: "create", userInfo: { uid: "forged" }, room: {} });
   assert.equal(spoofed.code, "UNAUTHENTICATED", "client-supplied uid must never be trusted");
@@ -400,7 +406,7 @@ async function main() {
   });
   const beforeLeaveRooms = await callWx("openid-list-member", { action: "listMyRooms" });
   assert.equal(beforeLeaveRooms.data.rooms.some((item) => item.docId === lifecycleRoom.data.docId), true, "joined rooms appear in my rooms");
-  const leftLifecycleRoom = await callWx("openid-list-member", { action: "leave", docId: lifecycleRoom.data.docId });
+  const leftLifecycleRoom = await callWx("openid-list-member", { action: "leave", docId: lifecycleRoom.data.docId, membershipEpoch: membershipEpochFor("wx:wx-test-pintu:openid-list-member", lifecycleRoom.data.docId) });
   assert.equal(leftLifecycleRoom.ok, true);
   const afterLeaveRooms = await callWx("openid-list-member", { action: "listMyRooms" });
   assert.equal(afterLeaveRooms.data.rooms.some((item) => item.docId === lifecycleRoom.data.docId), false, "left rooms disappear from my rooms");
@@ -546,7 +552,7 @@ async function main() {
     action: "syncLedger", docId: wxDocId, ledger: riskyExitLedger,
     membershipEpoch: webJoinedMiniRoom.data.viewer.membershipEpoch
   })).ok, true);
-  assert.equal((await call("web-joiner", { action: "leave", docId: wxDocId })).ok, true, "the Web author can leave before review");
+  assert.equal((await call("web-joiner", { action: "leave", docId: wxDocId, membershipEpoch: membershipEpochFor("web-joiner", wxDocId) })).ok, true, "the Web author can leave before review");
   nextModerationSuggestion = "risky";
   const recoveredAfterExit = await callWx("openid-owner", { action: "getRoom", docId: wxDocId });
   assert.equal(recoveredAfterExit.ok, true, "a rejected Web update is sanitized instead of permanently freezing the room");
@@ -737,7 +743,7 @@ async function main() {
   });
   assert.equal(retriedDeletedExpense.ok, true);
   assert.equal(retriedDeletedExpense.data.ledger.expenses.some((expense) => expense.id === crossLedgerExpense.id), false, "a duplicate, reordered stale retry cannot resurrect a deleted expense");
-  const leftCrossLedger = await call("cross-ledger-web", { action: "leave", docId: crossLedgerDocId });
+  const leftCrossLedger = await call("cross-ledger-web", { action: "leave", docId: crossLedgerDocId, membershipEpoch: membershipEpochFor("cross-ledger-web", crossLedgerDocId) });
   assert.equal(leftCrossLedger.ok, true);
   assert.equal((await call("cross-ledger-web", { action: "getRoom", docId: crossLedgerDocId })).data.room, null, "leave is visible immediately to the other client session's room read");
   const crossLedgerRejoined = await call("cross-ledger-web", {
@@ -1053,7 +1059,7 @@ async function main() {
   assert.equal(autoMidpoint.ok, true);
   assert.equal(autoMidpoint.data.type, "midpoint");
   assert.equal(autoMidpoint.data.room.toolType, "midpoint");
-  const autoMidpointLeft = await call("auto-midpoint", { action: "leave", docId: midpointDocId });
+  const autoMidpointLeft = await call("auto-midpoint", { action: "leave", docId: midpointDocId, membershipEpoch: membershipEpochFor("auto-midpoint", midpointDocId) });
   assert.equal(autoMidpointLeft.ok, true);
   const pointSaved = await call("mid-owner", {
     action: "setMeetupPoint",
@@ -1100,7 +1106,7 @@ async function main() {
   });
   assert.equal(midpointMemberJoined.ok, true);
   const oldMemberEpoch = midpointMemberJoined.data.room.members.find((item) => item.uid === "mid-member").membershipEpoch;
-  const midpointMemberLeft = await call("mid-member", { action: "leave", docId: midpointDocId });
+  const midpointMemberLeft = await call("mid-member", { action: "leave", docId: midpointDocId, membershipEpoch: membershipEpochFor("mid-member", midpointDocId) });
   assert.equal(midpointMemberLeft.ok, true);
   const midpointMemberRejoined = await call("mid-member", {
     action: "join",
@@ -1251,7 +1257,7 @@ async function main() {
     roundId: reopened.data.decision.roundId, revision: reopened.data.decision.revision, candidateId: candidateOne.id, value: "no"
   });
   assert.equal(delayedOldRoundVote.code, "STALE_DECISION", "late writes from a prior round must not pollute refreshed candidates");
-  const leaveWithVote = await call("mid-member", { action: "leave", docId: midpointDocId });
+  const leaveWithVote = await call("mid-member", { action: "leave", docId: midpointDocId, membershipEpoch: membershipEpochFor("mid-member", midpointDocId) });
   assert.equal(leaveWithVote.ok, true);
   assert.equal(rooms.get(midpointDocId).meetup.decision.votes.some((vote) => vote.uid === "mid-member"), false, "leaving clears that user's votes");
   rooms.get(midpointDocId).meetup.decision.votes.push({ candidateId: candidateOne.id, uid: "removed-member", value: "want", updatedAt: stamp + 99 });
@@ -1322,7 +1328,7 @@ async function main() {
   assert.equal(legacyAdd.ok, true);
   assert.equal(rooms.get(legacyDocId).members.length, 3);
 
-  const left = await call("member", { action: "leave", docId });
+  const left = await call("member", { action: "leave", docId, membershipEpoch: membershipEpochFor("member", docId) });
   assert.equal(left.ok, true);
   assert.equal(rooms.get(docId).memberUids.includes("member"), false);
   assert.equal(rooms.get(docId).members.some((item) => item.uid === "member"), false);
@@ -1360,10 +1366,10 @@ async function main() {
   });
   const oldTypedRead = await call("old-member", { action: "getRoom", docId: oldTypedDocId });
   assert.equal(oldTypedRead.data.room, null, "rooms without the v4 access platform must fail closed");
-  const oldTypedLeave = await call("old-member", { action: "leave", docId: oldTypedDocId });
+  const oldTypedLeave = await call("old-member", { action: "leave", docId: oldTypedDocId, membershipEpoch: membershipEpochFor("old-member", oldTypedDocId) });
   assert.equal(oldTypedLeave.code, "ROOM_NOT_FOUND", "old rooms cannot be mutated without a trusted platform binding");
 
-  const ownerLeave = await call("owner", { action: "leave", docId });
+  const ownerLeave = await call("owner", { action: "leave", docId, membershipEpoch: membershipEpochFor("owner", docId) });
   assert.equal(ownerLeave.code, "OWNER_MUST_DISBAND");
   assert.equal(rooms.get(docId).memberUids.includes("owner"), true);
 
@@ -1583,6 +1589,26 @@ async function main() {
   assert.equal((await call('quota-user',request)).ok,true,'existing result remains recoverable at the limit');
   if(previousLimit===undefined)delete process.env.ROOM_CREATES_PER_USER_DAY;else process.env.ROOM_CREATES_PER_USER_DAY=previousLimit;
 
+  }
+  // A delayed leave from an older session cannot remove a new membership.
+  for (const toolType of ["ledger", "midpoint"]) {
+    const owner = "leave-owner-" + toolType, member = "leave-member-" + toolType;
+    const created = await call(owner, { action: "create", room: { toolType, members: [{ name: "Owner" }] } });
+    const roomId = created.data.docId;
+    const joining = { action: "join", type: toolType, code: created.data.room.code, name: "Member" };
+    const first = await call(member, joining);
+    const oldEpoch = first.data.viewer.membershipEpoch;
+    assert.equal((await call(member, { action: "leave", docId: roomId })).code, "STALE_MEMBERSHIP", "active typed membership requires an epoch");
+    assert.equal((await call(member, { action: "leave", docId: roomId, membershipEpoch: oldEpoch })).ok, true);
+    assert.equal((await call(member, { action: "leave", docId: roomId, membershipEpoch: oldEpoch })).ok, true, "leave remains idempotent before rejoin");
+    const rejoined = await call(member, joining);
+    const newEpoch = rejoined.data.viewer.membershipEpoch;
+    assert.notEqual(newEpoch, oldEpoch);
+    const stale = await call(member, { action: "leave", docId: roomId, membershipEpoch: oldEpoch });
+    assert.equal(stale.code, "STALE_MEMBERSHIP", "old session leave must reject after rejoin");
+    assert.ok((await call(member, { action: "getRoom", docId: roomId })).data.room, "current membership survives stale leave");
+    assert.equal((await call(member, { action: "leave", docId: roomId, membershipEpoch: newEpoch })).ok, true, "current session can leave");
+    assert.equal((await call(member, { action: "getRoom", docId: roomId })).data.room, null);
   }
   console.log("roomGateway unit checks passed.");
 }

@@ -1048,6 +1048,7 @@ Page({
     if (!room || this.data.busy) return
     const isOwner = this.data.isOwner
     const action = isOwner ? 'disband' : 'leave'
+    const membershipEpoch = this.viewerMembershipEpoch()
     const hasExpenses = Boolean(this.data.ledger.expenses && this.data.ledger.expenses.length)
     wx.showModal({
       title: isOwner ? '解散这个房间？' : '退出这个房间？',
@@ -1064,7 +1065,7 @@ Page({
         try {
           snapshotId = saveRoomSnapshot(docId, room.name, snapshotLedger, Boolean(pending))
           if (snapshotId === null) throw new Error('无法保存账本快照，请清理本机空间后重试')
-          await gateway[action](docId)
+          await gateway[action](docId, membershipEpoch)
           clearLedgerOutboxEntry(docId)
           storage.remove(docId)
           this.viewer = null

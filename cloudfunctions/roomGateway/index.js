@@ -2318,6 +2318,11 @@ async function leaveRoom(event, uid, accessPlatform) {
       return success({ removed: true });
     }
 
+    // An old tab must not remove a membership created by a later rejoin.
+    const type = roomTypeFor(room);
+    if ((type === "ledger" || type === "midpoint") && !requireCurrentMembership(room, uid, event.membershipEpoch)) {
+      return failure("STALE_MEMBERSHIP", "成员身份已更新，请刷新房间后重试");
+    }
     const currentMemberUids = Array.isArray(room.memberUids)
       ? room.memberUids
       : activeTopLevelMemberUids(room);
