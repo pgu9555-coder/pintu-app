@@ -227,7 +227,10 @@ test('every stop has a places file with sane rows', () => {
     const d = JSON.parse(fs.readFileSync(f, 'utf8'));
     assert(Array.isArray(d.p) && d.p.length <= 80, st[0]);
     if (!d.p.length) empty++;
-    for (const r of d.p) assert(r.length === 8 && r[1] && r[7] <= 600 && /^[ABC]?$/.test(r[4]), JSON.stringify(r));
+    for (const r of d.p) {
+      assert((r.length === 8 || r.length === 12) && r[1] && r[7] <= 600 && /^[ABC]?$/.test(r[4]), JSON.stringify(r));
+      if (r.length === 12) assert(r[10] === '' || /^https:\/\//.test(r[10]), 'photo must be https: ' + r[10]);
+    }
   }
   assert(empty < data.stations.length / 4, empty + ' stops have no places');
 });

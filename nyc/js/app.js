@@ -316,10 +316,11 @@
       infoCard('Services Pintu contacts',
         infoList([
           '<b>Address search:</b> the text you type goes to OpenStreetMap\'s Nominatim search service.',
-          '<b>Nearby places:</b> come from NYC health inspection data built into Pintu, so nothing is sent. Only if that is missing for a stop does Pintu ask OpenStreetMap\'s Overpass service, sending the stop\'s location, not yours.',
+          '<b>Nearby places:</b> come from NYC health inspection data, with hours and websites from OpenStreetMap, built into Pintu, so nothing is sent. Only if that is missing for a stop does Pintu ask OpenStreetMap\'s Overpass service, sending the stop\'s location, not yours.',
           '<b>Map tiles:</b> from OpenStreetMap\'s tile servers, or Esri\'s if OpenStreetMap can\'t be reached. They see which map area you view.',
           '<b>Font:</b> IBM Plex Sans, from Google Fonts.',
-          '<b>Links:</b> OpenTable, Resy, Google Maps and Venmo open only when you tap them. Venmo links include the room name as the payment note. Those sites have their own privacy policies.',
+          '<b>Place photos:</b> some cards show the photo a restaurant publishes on its own website. Your phone loads it from that website, which can see your IP address.',
+          '<b>Links:</b> booking sites, restaurant websites, Google Maps and Venmo open only when you tap them. Venmo links include the room name as the payment note. Those sites have their own privacy policies.',
         ])) +
       infoCard('Ads, analytics and cookies',
         '<p>Pintu has no ads, no analytics and no tracking scripts, and it sets no cookies. Like any website, your hosting provider may keep standard server logs, such as IP addresses.</p>') +
@@ -529,6 +530,14 @@
   }
   function flush() { if (S.dirty && !isBusy()) render(); }
   $app.addEventListener('focusout', function () { setTimeout(flush, 0); });
+  // A place photo that fails to load (moved, hotlink-blocked) shows the cuisine panel instead.
+  $app.addEventListener('error', function (e) {
+    var img = e.target;
+    if (img && img.classList && img.classList.contains('venue-photo')) {
+      if (img.parentNode) img.parentNode.classList.remove('has-photo');
+      img.remove();
+    }
+  }, true);
 
   function roomHeaderRight() {
     return '<a class="room-pill num" href="#/r/' + esc(S.code) + '/room" aria-label="Room code ' + esc(S.code) + ', share the room">' + esc(S.code) + '</a>';
@@ -832,6 +841,31 @@
     return '<a href="' + esc(opentable) + '" target="_blank" rel="noopener" title="Search OpenTable for a table">OpenTable</a>' +
       '<a href="' + esc(resy) + '" target="_blank" rel="noopener" title="Search Resy for a table">Resy</a>';
   }
+  // Card top: the place's own photo (its website's share image) when we have
+  // one, otherwise its cuisine set large on a tinted panel. Broken photos fall
+  // back to the panel (see the 'error' listener below).
+  var ART_TINTS = ['coral', 'gold', 'blue', 'pink', 'green'];
+  function venueArtOpen(v) {
+    var label = (v.cuisine || labelFor(v.kind)).split(/[\/,·]/)[0].trim();
+    var h = 0;
+    for (var i = 0; i < label.length; i++) h = (h * 31 + label.charCodeAt(i)) >>> 0;
+    var tint = ART_TINTS[h % ART_TINTS.length];
+    return '<div class="venue-art tint-' + tint + (v.image ? ' has-photo' : '') + '">' +
+      '<span class="art-word" aria-hidden="true">' + esc(label) + '</span>' +
+      (v.image ? '<img class="venue-photo" src="' + esc(v.image) + '" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer">' : '');
+  }
+  function venueSiteLinks(v) {
+    if (v.book) {
+      var host = '';
+      try { host = new URL(v.book).hostname; } catch (e) { /* keep generic label */ }
+      var name = /resy/.test(host) ? 'Resy' : /opentable/.test(host) ? 'OpenTable' : /tock/.test(host) ? 'Tock'
+        : /sevenrooms/.test(host) ? 'SevenRooms' : 'Book';
+      return '<a href="' + esc(v.book) + '" target="_blank" rel="noopener">Reserve' + (name === 'Book' ? '' : ' · ' + name) + '</a>' +
+        (v.website && v.website !== v.book ? '<a href="' + esc(v.website) + '" target="_blank" rel="noopener">Website</a>' : '');
+    }
+    return v.website ? '<a href="' + esc(v.website) + '" target="_blank" rel="noopener">Website</a>' : '';
+  }
+
   function cuisineList(list) {
     var count = {};
     list.forEach(function (v) {
@@ -958,7 +992,7 @@
         var reserve = RESERVABLE[v.kind];
         card = '<article class="venue-card" tabindex="0" aria-label="' + esc(v.name) + '" data-vid="' + esc(v.id) + '">' +
           '<span class="stamp yes" aria-hidden="true">YES</span><span class="stamp no" aria-hidden="true">PASS</span>' +
-          '<div class="venue-art">' + icon('food') +
+          venueArtOpen(v) +
             (status ? '<span class="pill-tl ' + (status.cls === 'open' ? 'open' : 'closed') + '">' + esc(status.text) + '</span>' : '') +
             '<span class="pill-tr num">' + walk + ' min walk</span></div>' +
           '<div class="venue-body">' +
@@ -967,10 +1001,11 @@
             '<div class="sub">' + esc(v.address || labelFor(v.kind)) + ' · near ' + esc(meet.name) + (liked ? ' · ' + liked + ' liked it' : '') + '</div></div>' +
             '<div class="venue-tags">' + (v.grade ? '<span style="background:var(--gold-tint);color:var(--gold-ink, #7A5A1C)">Grade ' + esc(v.grade) + '</span>' : '') +
               (reserve && v.src !== 'nyc' ? '<span style="background:var(--blue-tint);color:var(--blue)">Takes reservations</span>' : '') +
-              (v.website ? '<span style="background:var(--line-soft);color:var(--ink-soft)">Has a website</span>' : '') + '</div>' +
+              (v.website && v.src !== 'nyc' ? '<span style="background:var(--line-soft);color:var(--ink-soft)">Has a website</span>' : '') + '</div>' +
             '<div class="venue-links">' +
               '<a href="' + esc(Places.googleMapsLink(v)) + '" target="_blank" rel="noopener">Map</a>' +
-              (reserve ? bookingLinksHTML(v, t) : (v.website ? '<a href="' + esc(v.website) + '" target="_blank" rel="noopener">Website</a>' : '')) +
+              (v.src === 'nyc' ? venueSiteLinks(v)
+                : (reserve ? bookingLinksHTML(v, t) : (v.website ? '<a href="' + esc(v.website) + '" target="_blank" rel="noopener">Website</a>' : ''))) +
             '</div></div></article>';
         body = '<div class="deck"><div class="stack-wrap"><div class="stack-back b2"></div><div class="stack-back b1"></div>' + card + '</div></div>' +
           '<div class="round-controls">' +

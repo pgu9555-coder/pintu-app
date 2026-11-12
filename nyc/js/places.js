@@ -68,7 +68,9 @@
     var d = await res.json();
     var list = (d.p || []).map(function (r) {
       return { id: 'n' + r[0], name: r[1], kind: 'restaurant', cuisine: r[2], address: r[3], grade: r[4],
-        hours: '', website: '', lat: r[5], lon: r[6], meters: r[7], src: 'nyc' };
+        lat: r[5], lon: r[6], meters: r[7], src: 'nyc',
+        // Added by build_extras.py from OpenStreetMap and the place's own website.
+        hours: r[8] || '', website: r[9] || '', image: r[10] || '', book: r[11] || '' };
     });
     cache[key] = list;
     return list;
