@@ -13,6 +13,8 @@
   'use strict';
 
   var ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  // Prefixed so they can share a Supabase project with other apps' tables.
+  var T = { rooms: 'meet_rooms', people: 'meet_people', votes: 'meet_votes' };
 
   function newCode() {
     var bytes = new Uint8Array(6), s = '';
@@ -40,7 +42,7 @@
   CloudStore.prototype.createRoom = async function (name) {
     for (var attempt = 0; attempt < 5; attempt++) {
       var code = newCode();
-      var res = await this.db.from('rooms').insert({ code: code, name: name });
+      var res = await this.db.from(T.rooms).insert({ code: code, name: name });
       if (!res.error) return code;
       if (res.error.code !== '23505') throw new Error(res.error.message); // 23505 = taken
     }
@@ -48,9 +50,9 @@
   };
   CloudStore.prototype.load = async function (code) {
     var r = await Promise.all([
-      this.db.from('rooms').select('*').eq('code', code).maybeSingle(),
-      this.db.from('people').select('*').eq('room_code', code).order('created_at'),
-      this.db.from('votes').select('*').eq('room_code', code),
+      this.db.from(T.rooms).select('*').eq('code', code).maybeSingle(),
+      this.db.from(T.people).select('*').eq('room_code', code).order('created_at'),
+      this.db.from(T.votes).select('*').eq('room_code', code),
     ]);
     var room = this._check(r[0]);
     if (!room) return null;
@@ -58,28 +60,28 @@
   };
   CloudStore.prototype.addPerson = async function (code, p) {
     var row = { id: uuid(), room_code: code, name: p.name, origin: p.origin || null, venmo: p.venmo || null };
-    this._check(await this.db.from('people').insert(row));
+    this._check(await this.db.from(T.people).insert(row));
     return row;
   };
   CloudStore.prototype.updatePerson = async function (id, patch) {
-    this._check(await this.db.from('people').update(patch).eq('id', id));
+    this._check(await this.db.from(T.people).update(patch).eq('id', id));
   };
   CloudStore.prototype.removePerson = async function (id) {
-    this._check(await this.db.from('people').delete().eq('id', id));
+    this._check(await this.db.from(T.people).delete().eq('id', id));
   };
   CloudStore.prototype.updateRoom = async function (code, patch) {
-    this._check(await this.db.from('rooms').update(patch).eq('code', code));
+    this._check(await this.db.from(T.rooms).update(patch).eq('code', code));
   };
   CloudStore.prototype.vote = async function (code, personId, venue, vote) {
-    this._check(await this.db.from('votes').upsert(
+    this._check(await this.db.from(T.votes).upsert(
       { room_code: code, person_id: personId, venue_id: venue.id, venue: venue, vote: vote },
       { onConflict: 'person_id,venue_id' }));
   };
   CloudStore.prototype.subscribe = function (code, onChange) {
     var ch = this.db.channel('room-' + code);
-    ['rooms', 'people', 'votes'].forEach(function (table) {
+    ['rooms', 'people', 'votes'].forEach(function (kind) {
       ch.on('postgres_changes',
-        { event: '*', schema: 'public', table: table, filter: (table === 'rooms' ? 'code' : 'room_code') + '=eq.' + code },
+        { event: '*', schema: 'public', table: T[kind], filter: (kind === 'rooms' ? 'code' : 'room_code') + '=eq.' + code },
         function () { onChange(); });
     });
     ch.subscribe();
