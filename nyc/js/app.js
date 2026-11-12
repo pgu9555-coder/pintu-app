@@ -555,6 +555,21 @@
   }
 
   // ------------------------------------------------------------ 2 spot
+  var DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  var RESERVABLE = { restaurant: true, bar: true, pub: true, cafe: true };
+  var SWIPE_PX = 100, FLICK_PX_PER_MS = 0.5, THROW_MS = 200, SPRING_MS = 260;
+
+  var drag = null;          // the card under the pointer: {card, id, x0, lastX, lastT, dx, vel, moved}
+  var throwing = false;     // a card is flying off; don't re-render under it
+  var spotDirty = false;    // a render was skipped while swiping; do it when the swipe ends
+
+  function reducedMotion() {
+    return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  }
+  function spotKey() {
+    var meet = S.data.room.meet;
+    return meet.station + ':' + S.venueKind + ':' + S.venueRadius;
+  }
   function voteTally() {
     var tally = {};
     (S.data.votes || []).forEach(function (v) {
@@ -563,6 +578,114 @@
       (v.vote > 0 ? t.yes : t.no).push(v.person_id);
     });
     return tally;
+  }
+  function isClosedAt(v, t) {
+    return window.PintuHours.isOpenAt(v.hours, t.dow, t.min) === false;
+  }
+  // Opening status for the card: {text, cls: 'open' | 'closed'}, or null when the hours are unknown.
+  function hoursStatus(v, t) {
+    var H = window.PintuHours, i = H.info(v.hours, t.dow, t.min);
+    if (!i) return null;
+    var text;
+    if (t.isNow) text = H.describe(v.hours, t.dow, t.min);
+    else {
+      var day = DAY_NAMES[t.dow], at = H.formatTime(t.min);
+      if (i.open) text = 'Open at ' + at + ' ' + day + (i.always ? ' · 24 hours' : ' · until ' + i.closes);
+      else text = 'Closed ' + day + ' ' + at + (i.opens ? ' · opens ' + i.opens : '');
+    }
+    return { text: text, cls: i.open ? 'open' : 'closed' };
+  }
+  // Find-a-table search links, only for places that take reservations.
+  function bookingLinksHTML(v, t) {
+    if (!RESERVABLE[v.kind]) return '';
+    var n = Math.min(20, Math.max(1, window.PintuApp.partySize()));
+    var opentable = 'https://www.opentable.com/s?term=' + encodeURIComponent(v.name) + '&covers=' + n +
+      '&dateTime=' + t.date + 'T' + t.time + '&latitude=' + v.lat + '&longitude=' + v.lon;
+    var resy = 'https://resy.com/cities/new-york-ny/search?query=' + encodeURIComponent(v.name) +
+      '&date=' + t.date + '&seats=' + n;
+    return '<a class="btn" target="_blank" rel="noopener" href="' + esc(opentable) + '">Find on OpenTable</a>' +
+      '<a class="btn" target="_blank" rel="noopener" href="' + esc(resy) + '">Find on Resy</a>';
+  }
+
+  // One place for every vote: buttons, swipes and arrow keys. Optimistic, so the
+  // next card shows at once; the store is updated in the background.
+  async function castVote(venueId, vote) {
+    if (!S.me || !S.code || !S.data || !S.data.room.meet) return;
+    var venue = (S.venues[spotKey()] || []).find(function (x) { return x.id === venueId; });
+    if (!venue) return;
+    S.data.votes = (S.data.votes || []).filter(function (x) { return !(x.person_id === S.me && x.venue_id === venue.id); })
+      .concat([{ person_id: S.me, venue_id: venue.id, venue: venue, vote: vote }]);
+    renderSpot();
+    try { await store.vote(S.code, S.me, venue, vote); } catch (err) { fail(err); refresh(); }
+  }
+
+  // Fly the card off-screen (dir +1 = yes, -1 = pass), then vote.
+  function throwCard(card, dir) {
+    var venueId = card.dataset.vid;
+    throwing = true;
+    if (reducedMotion()) return finishThrow(venueId, dir);
+    card.style.transition = 'transform ' + THROW_MS + 'ms ease-in, opacity ' + THROW_MS + 'ms ease-in';
+    card.style.transform = 'translateX(' + dir * (window.innerWidth + 200) + 'px) rotate(' + dir * 20 + 'deg)';
+    card.style.opacity = '0';
+    setTimeout(function () { finishThrow(venueId, dir); }, THROW_MS);
+  }
+  function finishThrow(venueId, vote) {
+    throwing = false;
+    castVote(venueId, vote);
+  }
+  // Snap a card that was let go too early back into place.
+  function springBack(card) {
+    card.querySelectorAll('.stamp').forEach(function (s) { s.style.opacity = ''; });
+    card.style.transition = 'transform ' + SPRING_MS + 'ms ease-out';
+    card.style.transform = '';
+    setTimeout(function () {
+      card.style.transition = '';
+      if (spotDirty && !drag) { spotDirty = false; renderSpot(); }
+    }, reducedMotion() ? 0 : SPRING_MS);
+  }
+
+  function bindSwipe(sec) {
+    sec.onpointerdown = function (e) {
+      if (drag || throwing) return;
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      if (e.target.closest('a, button, input, select, textarea')) return;   // links and buttons keep working
+      var card = e.target.closest('.venue');
+      if (!card) return;
+      drag = { card: card, id: e.pointerId, x0: e.clientX, lastX: e.clientX, lastT: e.timeStamp, dx: 0, vel: 0, moved: false };
+      try { card.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+    };
+    sec.onpointermove = function (e) {
+      var d = drag;
+      if (!d || e.pointerId !== d.id) return;
+      var dx = e.clientX - d.x0, dt = e.timeStamp - d.lastT;
+      if (dt > 0) { d.vel = (e.clientX - d.lastX) / dt; d.lastX = e.clientX; d.lastT = e.timeStamp; }
+      if (!d.moved && Math.abs(dx) < 6) return;   // a tap, not a swipe
+      d.moved = true; d.dx = dx;
+      d.card.classList.add('dragging');
+      d.card.style.transform = 'translateX(' + dx + 'px) rotate(' + (dx / 15) + 'deg)';
+      var share = Math.min(1, Math.abs(dx) / SWIPE_PX);
+      d.card.querySelector('.stamp.yes').style.opacity = dx > 0 ? share : 0;
+      d.card.querySelector('.stamp.no').style.opacity = dx < 0 ? share : 0;
+    };
+    sec.onpointerup = sec.onpointercancel = function (e) {
+      var d = drag;
+      if (!d || e.pointerId !== d.id) return;
+      drag = null;
+      d.card.classList.remove('dragging');
+      if (!d.moved) { if (spotDirty) { spotDirty = false; renderSpot(); } return; }
+      // A release after a pause isn't a flick, however fast the drag was before it.
+      var vel = e.timeStamp - d.lastT > 80 ? 0 : d.vel;
+      var flick = Math.abs(vel) > FLICK_PX_PER_MS && (vel > 0) === (d.dx > 0);
+      if (e.type === 'pointerup' && (Math.abs(d.dx) > SWIPE_PX || flick)) throwCard(d.card, d.dx > 0 ? 1 : -1);
+      else springBack(d.card);
+    };
+    sec.onkeydown = function (e) {
+      var card = e.target;
+      if (!card.classList || !card.classList.contains('venue') || throwing || drag) return;
+      if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+      e.preventDefault();
+      throwCard(card, e.key === 'ArrowRight' ? 1 : -1);
+    };
   }
 
   function renderSpot() {
@@ -574,13 +697,18 @@
       sec.innerHTML = head + '<div class="card"><div class="empty">Choose where to meet first, then everyone swipes on places nearby.</div></div>';
       return;
     }
+    // Don't swap the deck out from under a card that is being dragged or thrown.
+    if ((drag && drag.moved) || throwing) { spotDirty = true; return; }
+    spotDirty = false;
     sec.className = 'section';
     var kinds = [['food', 'Food'], ['drinks', 'Drinks'], ['coffee', 'Coffee']];
-    var key = meet.station + ':' + S.venueKind + ':' + S.venueRadius;
+    var key = spotKey();
     var list = S.venues[key];
     if (!list && !S.venueLoading && !S.venueError) loadVenues(key, meet);
 
-    var tally = voteTally();
+    var t = hangoutTime(), tally = voteTally();
+    // Keep keyboard focus on the deck across re-renders (votes, or updates from other phones).
+    var keepFocus = sec.contains(document.activeElement) && document.activeElement.classList.contains('venue');
     var myVotes = {};
     (S.data.votes || []).forEach(function (v) { if (v.person_id === S.me) myVotes[v.venue_id] = v.vote; });
     var html = head + '<div class="card"><div class="seg" role="group" aria-label="Category">' + kinds.map(function (k) {
@@ -593,19 +721,26 @@
       html += '<div class="empty">Finding places near ' + esc(meet.name) + '…</div>';
     } else {
       var queue = list.filter(function (v) { return myVotes[v.id] === undefined; });
+      // Places that are closed at the planned time go to the back; the rest keep their order.
+      queue = queue.filter(function (v) { return !isClosedAt(v, t); })
+        .concat(queue.filter(function (v) { return isClosedAt(v, t); }));
       if (!S.me) {
         html += '<div class="empty">Join the hangout to vote on places.</div>';
       } else if (queue.length) {
         var v = queue[0], walk = mins(window.PintuSubway.walkSec(v.meters));
         var others = tally[v.id] ? tally[v.id].yes.length : 0;
-        html += '<div class="venue"><div class="label">' + esc(labelFor(v.kind)) + ' · ' + (list.length - queue.length + 1) + ' of ' + list.length + '</div>' +
+        var status = hoursStatus(v, t);
+        html += '<div class="venue" tabindex="0" role="group" aria-label="' + esc(v.name) + '" data-vid="' + esc(v.id) + '">' +
+          '<span class="stamp yes" aria-hidden="true">YES</span><span class="stamp no" aria-hidden="true">PASS</span>' +
+          '<div class="label">' + esc(labelFor(v.kind)) + ' · ' + (list.length - queue.length + 1) + ' of ' + list.length + '</div>' +
           '<div class="vname">' + esc(v.name) + '</div>' +
           '<div class="meta">' + (v.cuisine ? '<span>' + esc(v.cuisine) + '</span>' : '') +
             '<span class="num">' + walk + ' min walk from the station</span>' +
             (others ? '<span style="color:var(--good);font-weight:600">' + others + ' liked it</span>' : '') + '</div>' +
-          (v.hours ? '<div class="small muted">Hours: ' + esc(v.hours.length > 80 ? v.hours.slice(0, 80) + '…' : v.hours) + '</div>' : '') +
+          (status ? '<div class="hours ' + status.cls + '">' + esc(status.text) + '</div>' : '') +
           '<div class="row" style="flex-wrap:wrap;margin-top:auto"><a class="btn" target="_blank" rel="noopener" href="' + esc(Places.googleMapsLink(v)) + '">Reviews &amp; photos</a>' +
-            (v.website ? '<a class="btn" target="_blank" rel="noopener" href="' + esc(v.website) + '">Website</a>' : '') + '</div></div>' +
+            (v.website ? '<a class="btn" target="_blank" rel="noopener" href="' + esc(v.website) + '">Website</a>' : '') +
+            bookingLinksHTML(v, t) + '</div></div>' +
           '<div class="vote-row"><button class="btn no" data-vote="-1" data-v="' + esc(v.id) + '">✕ Pass</button>' +
           '<button class="btn yes" data-vote="1" data-v="' + esc(v.id) + '">♥ I\'d go</button></div>';
       } else {
@@ -617,35 +752,33 @@
     html += '</div>';
 
     var picks = Object.keys(tally).map(function (id) { return tally[id]; })
-      .filter(function (t) { return t.yes.length; })
+      .filter(function (p) { return p.yes.length; })
       .sort(function (a, b) { return b.yes.length - a.yes.length || a.no.length - b.no.length; }).slice(0, 8);
     var total = peopleList().length;
     html += '<div class="label" style="margin-top:4px">Group picks</div>';
     if (!picks.length) html += '<div class="empty">Places someone likes will show up here.</div>';
-    else html += '<div class="picks">' + picks.map(function (t) {
-      return '<div class="pick"><span class="count num' + (t.yes.length === total ? ' all' : '') + '">' + t.yes.length + '</span>' +
-        '<div class="pname">' + esc(t.venue.name) + '<div class="likes">' + esc(t.yes.map(personName).join(', ')) +
-          (t.yes.length === total ? ' — everyone' : '') + '</div></div>' +
-        '<a class="btn" target="_blank" rel="noopener" href="' + esc(Places.googleMapsLink(t.venue)) + '">Map</a></div>';
+    else html += '<div class="picks">' + picks.map(function (p) {
+      var closed = isClosedAt(p.venue, t);
+      return '<div class="pick"><span class="count num' + (p.yes.length === total ? ' all' : '') + '">' + p.yes.length + '</span>' +
+        '<div class="pname">' + esc(p.venue.name) + (closed ? ' <span class="closed-tag">Closed then</span>' : '') +
+          '<div class="likes">' + esc(p.yes.map(personName).join(', ')) +
+          (p.yes.length === total ? ' — everyone' : '') + '</div></div>' +
+        '<a class="btn" target="_blank" rel="noopener" href="' + esc(Places.googleMapsLink(p.venue)) + '">Map</a></div>';
     }).join('') + '</div>';
     html += '</div>';
     sec.innerHTML = html;
-    sec.onclick = async function (e) {
+    if (keepFocus) {
+      var c = sec.querySelector('.venue');
+      if (c) c.focus({ preventScroll: true });
+    }
+    bindSwipe(sec);
+    sec.onclick = function (e) {
       var b = e.target.closest('button');
       if (!b) return;
       if (b.dataset.kind) { S.venueKind = b.dataset.kind; S.venueError = ''; renderSpot(); }
       else if (b.hasAttribute('data-retry')) { S.venueError = ''; renderSpot(); }
       else if (b.hasAttribute('data-wider')) { S.venueRadius = 1000; renderSpot(); }
-      else if (b.dataset.vote) {
-        var venue = (S.venues[key] || []).find(function (x) { return x.id === b.dataset.v; });
-        if (!venue) return;
-        b.disabled = true;
-        // Optimistic: record locally so the next card shows immediately.
-        S.data.votes = (S.data.votes || []).filter(function (x) { return !(x.person_id === S.me && x.venue_id === venue.id); })
-          .concat([{ person_id: S.me, venue_id: venue.id, venue: venue, vote: +b.dataset.vote }]);
-        renderSpot();
-        try { await store.vote(S.code, S.me, venue, +b.dataset.vote); } catch (err) { fail(err); refresh(); }
-      }
+      else if (b.dataset.vote) castVote(b.dataset.v, +b.dataset.vote);
     };
   }
 

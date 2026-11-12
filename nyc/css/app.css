@@ -184,9 +184,28 @@ a { color: var(--accent); }
 
 /* ---------- venues ---------- */
 .deck { display: flex; flex-direction: column; gap: 12px; }
-.venue { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); padding: 18px; display: flex; flex-direction: column; gap: 8px; min-height: 168px; }
+.venue {
+  border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); padding: 18px;
+  display: flex; flex-direction: column; gap: 8px; min-height: 168px; position: relative;
+  touch-action: pan-y; cursor: grab; /* vertical page scroll still works; sideways drags are ours */
+}
+.venue.dragging { cursor: grabbing; user-select: none; -webkit-user-select: none; }
 .venue .vname { font-size: 21px; font-weight: 700; line-height: 1.2; letter-spacing: -0.01em; }
 .venue .meta { color: var(--muted); font-size: 14px; display: flex; gap: 10px; flex-wrap: wrap; }
+.venue .hours { font-size: 14px; font-weight: 700; }
+.venue .hours.open { color: var(--good); }
+.venue .hours.closed { color: var(--bad); }
+.stamp {
+  position: absolute; top: 16px; font: 800 24px/1 var(--font); letter-spacing: 0.06em; padding: 6px 10px;
+  border: 3px solid currentColor; border-radius: 8px; opacity: 0; pointer-events: none;
+}
+/* YES sits on the left edge and PASS on the right: the edge a card is dragged toward stays on screen. */
+.stamp.yes { left: 14px; color: var(--good); transform: rotate(-8deg); }
+.stamp.no { right: 14px; color: var(--bad); transform: rotate(8deg); }
+.closed-tag {
+  display: inline-block; vertical-align: 2px; margin-left: 6px; padding: 1px 8px; border-radius: 999px;
+  font-size: 12px; font-weight: 700; color: var(--bad); background: var(--bad-soft); white-space: nowrap;
+}
 .vote-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .btn.no { color: var(--bad); }
 .btn.no:hover { background: var(--bad-soft); border-color: var(--bad); }
