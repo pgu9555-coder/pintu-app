@@ -163,8 +163,18 @@ h1, h2, h3, p { margin: 0; }
 .btn-danger { color: var(--coral); }
 .btn-venmo { background: var(--blue-tint); color: var(--blue); }
 .btn-block { width: 100%; }
+.btn-mid { background: var(--green-mid); color: var(--card); }
+.btn-mid:hover { background: var(--green); }
+.map-pin {
+  width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--card); display: grid; place-items: center;
+  color: var(--card); font: 700 12px/1 var(--font); box-shadow: 0 1px 4px rgba(27, 42, 46, 0.35);
+}
+.map-pin.map-opt { width: 30px; height: 30px; background: var(--card); color: var(--green); border: 2px solid var(--green); font-size: 13px; }
+.map-pin.map-opt.chosen { background: var(--green); color: var(--card); }
+.leaflet-container { font-family: var(--font); }
 .btn-sm { min-height: 36px; height: 36px; padding: 0 12px; font-size: 12.5px; border-radius: var(--r-sm); }
 .btn-lg { min-height: 52px; font-size: 15px; border-radius: 14px; }
+.btn-lg.btn-mid { min-height: 46px; }
 .btn.is-done { background: var(--green-tint); color: var(--green-mid); border-color: transparent; }
 
 .chip {
@@ -343,7 +353,10 @@ h1, h2, h3, p { margin: 0; }
 .venue-card.dragging { cursor: grabbing; user-select: none; -webkit-user-select: none; }
 .venue-art { height: 170px; flex: none; background: var(--coral-tint); position: relative; display: grid; place-items: center; color: var(--coral); }
 .venue-art svg { width: 74px; height: 74px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
-.venue-art .pill-tr, .venue-art .pill-tl { position: absolute; top: 12px; height: 26px; padding: 0 10px; font-size: 12px; }
+.venue-art .pill-tr, .venue-art .pill-tl {
+  position: absolute; top: 12px; height: 26px; padding: 0 10px; font-size: 12px; font-weight: 700; border-radius: 999px;
+  display: inline-flex; align-items: center; white-space: nowrap; max-width: 60%;
+}
 .venue-art .pill-tl { left: 12px; }
 .venue-art .pill-tr { right: 12px; background: var(--card); color: var(--ink); }
 .venue-art .pill-tl.open { background: var(--green-tint); color: var(--green-mid); }
@@ -355,7 +368,11 @@ h1, h2, h3, p { margin: 0; }
 .venue-tags { display: flex; gap: 6px; flex-wrap: wrap; }
 .venue-tags span { height: 26px; padding: 0 10px; border-radius: 8px; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; }
 .venue-links { margin-top: auto; display: flex; gap: 8px; }
-.venue-links a, .venue-links .btn { flex: 1; min-height: 38px; height: 38px; padding: 0 8px; font-size: 13px; font-weight: 600; border-color: var(--line); background: var(--card); color: var(--ink); border-radius: var(--r-md); }
+.venue-links a, .venue-links .btn {
+  flex: 1; min-height: 38px; height: 38px; padding: 0 8px; font-size: 13px; font-weight: 600; text-decoration: none;
+  border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: var(--r-md);
+  display: flex; align-items: center; justify-content: center; white-space: nowrap;
+}
 .venue-card .hours-line { font-size: 13px; font-weight: 700; }
 .venue-card .hours-line.open { color: var(--green-mid); }
 .venue-card .hours-line.closed { color: var(--coral); }
