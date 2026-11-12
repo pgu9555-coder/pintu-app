@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>My trips</title>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#0F3D36}a:hover{color:#0A2B26}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #F6F3EA; color: #1B2A2E; font-family: 'IBM Plex Sans', system-ui, sans-serif; display: flex; flex-direction: column;">
+  <div style="flex-grow: 1; padding: 14px 16px 0; display: flex; flex-direction: column; gap: 14px;">
+    <h1 style="margin: 0; text-align: center; font-size: 19px; font-weight: 700; color: #0F3D36;">My trips</h1>
+
+    <div style="display: flex; gap: 8px;">
+      <span style="height: 32px; padding: 0 14px; border-radius: 999px; background: #0F3D36; color: #FFFDF6; font-size: 12.5px; font-weight: 600; display: flex; align-items: center;">All</span>
+      <span style="height: 32px; padding: 0 14px; border-radius: 999px; background: #FFFDF6; border: 1px solid #DED8C6; font-size: 12.5px; display: flex; align-items: center;">Meetups</span>
+      <span style="height: 32px; padding: 0 14px; border-radius: 999px; background: #FFFDF6; border: 1px solid #DED8C6; font-size: 12.5px; display: flex; align-items: center;">Ledgers</span>
+    </div>
+
+    <h3 style="margin: 4px 0 -6px; font-size: 12.5px; font-weight: 600; color: #4C5C5B;">This week</h3>
+
+    <a href="Room.html" style="text-decoration: none; color: inherit; background: #FFFDF6; border: 1px solid #DED8C6; border-radius: 16px; padding: 14px; display: flex; align-items: center; gap: 12px;">
+      <div style="width: 40px; height: 40px; border-radius: 10px; background: #DCE7EC; display: grid; place-items: center; flex: none;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3E6E8E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-6-5.4-6-11a6 6 0 0 1 12 0c0 5.6-6 11-6 11z"/><circle cx="12" cy="10" r="2.2"/></svg>
+      </div>
+      <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 2px;">
+        <span style="font-size: 14.5px; font-weight: 700;">Sat dinner · Union Sq</span>
+        <span style="font-size: 12px; color: #4C5C5B;">Mia, Dev, Ana, Leo · Sat 8:00 PM</span>
+      </div>
+      <span style="height: 24px; padding: 0 9px; border-radius: 999px; background: #E5EEE7; color: #20584D; font-size: 11.5px; font-weight: 700; display: flex; align-items: center;">Live</span>
+    </a>
+
+    <a href="Ledger.html" style="text-decoration: none; color: inherit; background: #FFFDF6; border: 1px solid #DED8C6; border-radius: 16px; padding: 14px; display: flex; align-items: center; gap: 12px;">
+      <div style="width: 40px; height: 40px; border-radius: 10px; background: #F2DDE4; display: grid; place-items: center; flex: none;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#A8506E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6M9 16h3"/></svg>
+      </div>
+      <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 2px;">
+        <span style="font-size: 14.5px; font-weight: 700;">Friday in K-town</span>
+        <span style="font-size: 12px; color: #4C5C5B;">$270.40 · 2 payments left</span>
+      </div>
+      <span style="height: 24px; padding: 0 9px; border-radius: 999px; background: #F2DDE4; color: #A8506E; font-size: 11.5px; font-weight: 700; display: flex; align-items: center;">You get $105</span>
+    </a>
+
+    <h3 style="margin: 4px 0 -6px; font-size: 12.5px; font-weight: 600; color: #4C5C5B;">Earlier</h3>
+
+    <a href="#" style="text-decoration: none; color: inherit; background: #FFFDF6; border: 1px solid #DED8C6; border-radius: 16px; padding: 14px; display: flex; align-items: center; gap: 12px;">
+      <div style="width: 40px; height: 40px; border-radius: 10px; background: #DCE7EC; display: grid; place-items: center; flex: none;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3E6E8E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-6-5.4-6-11a6 6 0 0 1 12 0c0 5.6-6 11-6 11z"/><circle cx="12" cy="10" r="2.2"/></svg>
+      </div>
+      <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 2px;">
+        <span style="font-size: 14.5px; font-weight: 700;">Brunch · Court Sq</span>
+        <span style="font-size: 12px; color: #4C5C5B;">Mia, Ana · Nov 2</span>
+      </div>
+    </a>
+
+    <a href="#" style="text-decoration: none; color: inherit; background: #FFFDF6; border: 1px solid #DED8C6; border-radius: 16px; padding: 14px; display: flex; align-items: center; gap: 12px;">
+      <div style="width: 40px; height: 40px; border-radius: 10px; background: #F2DDE4; display: grid; place-items: center; flex: none;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#A8506E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6M9 16h3"/></svg>
+      </div>
+      <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 2px;">
+        <span style="font-size: 14.5px; font-weight: 700;">Beacon day trip</span>
+        <span style="font-size: 12px; color: #4C5C5B;">$412.00 · Oct 19</span>
+      </div>
+      <span style="height: 24px; padding: 0 9px; border-radius: 999px; background: #EEEADF; color: #4C5C5B; font-size: 11.5px; font-weight: 700; display: flex; align-items: center;">Settled</span>
+    </a>
+
+    <p style="margin: 6px 0 0; font-size: 11.5px; color: #4C5C5B; text-align: center;">Saved on this phone. Use Backup &amp; restore to move them.</p>
+  </div>
+
+  <nav aria-label="Main" style="height: 62px; background: #FFFDF6; border-top: 1px solid #DED8C6; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));">
+    <a href="Main.html" style="text-decoration: none; color: #4C5C5B; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; font-size: 11px; font-weight: 500;">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#4C5C5B" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>
+      Home
+    </a>
+    <a href="Trips.html" style="text-decoration: none; color: #0F3D36; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; font-size: 11px; font-weight: 600;">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0F3D36" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M3 9a3 3 0 0 0 0 6v3h18v-3a3 3 0 0 0 0-6V6H3z"/></svg>
+      Trips
+    </a>
+  </nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

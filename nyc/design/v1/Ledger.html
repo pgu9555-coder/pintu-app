@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Trip ledger</title>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#0F3D36}a:hover{color:#0A2B26}
+</style>
+</helmet>
+<div style="width: 390px; height: 960px; box-sizing: border-box; background: #F6F3EA; color: #1B2A2E; font-family: 'IBM Plex Sans', system-ui, sans-serif; display: flex; flex-direction: column;">
+  <header style="height: 60px; flex: none; display: grid; grid-template-columns: 56px 1fr 56px; align-items: center; border-bottom: 1px solid #DED8C6; background: #FFFDF6;">
+    <a href="Main.html" aria-label="Back" style="justify-self: center; width: 36px; height: 36px; display: grid; place-items: center;">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1B2A2E" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+    </a>
+    <h1 style="margin: 0; text-align: center; font-size: 16.5px; font-weight: 700; color: #0F3D36;">Trip ledger</h1>
+    <a href="Room.html" aria-label="Share room" style="justify-self: center; width: 36px; height: 36px; display: grid; place-items: center;">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1B2A2E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M7 8l5-5 5 5"/><path d="M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6"/></svg>
+    </a>
+  </header>
+
+  <div style="padding: 16px; display: flex; flex-direction: column; gap: 14px;">
+    <section style="background: #FFFDF6; border: 1px solid #DED8C6; border-radius: 20px; padding: 16px; display: flex; align-items: center; gap: 12px;">
+      <div style="width: 42px; height: 42px; border-radius: 12px; background: #F2DDE4; display: grid; place-items: center; flex: none;">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#A8506E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6M9 16h3"/></svg>
+      </div>
+      <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 2px;">
+        <h2 style="margin: 0; font-size: 16px; font-weight: 700;">Friday in K-town</h2>
+        <span style="font-size: 12px; color: #4C5C5B;">4 people · 3 expenses · room K7Q2MX</span>
+      </div>
+      <div style="text-align: right;">
+        <div style="font-size: 20px; font-weight: 700; color: #A8506E;">$270.40</div>
+        <div style="font-size: 10.5px; color: #4C5C5B; text-transform: uppercase; letter-spacing: 0.05em;">total</div>
+      </div>
+    </section>
+
+    <div role="tablist" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); background: #EEEADF; border-radius: 12px; padding: 4px; gap: 4px;">
+      <span role="tab" style="height: 36px; border-radius: 9px; display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 13px; color: #4C5C5B;"><b style="width: 18px; height: 18px; border-radius: 50%; background: #DED8C6; font-size: 11px; display: grid; place-items: center;">1</b>People</span>
+      <span role="tab" aria-selected="true" style="height: 36px; border-radius: 9px; background: #FFFDF6; display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 13px; font-weight: 700; box-shadow: 0 1px 2px rgba(27,42,46,0.08);"><b style="width: 18px; height: 18px; border-radius: 50%; background: #0F3D36; color: #FFFDF6; font-size: 11px; display: grid; place-items: center;">2</b>Expenses</span>
+      <span role="tab" style="height: 36px; border-radius: 9px; display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 13px; color: #4C5C5B;"><b style="width: 18px; height: 18px; border-radius: 50%; background: #DED8C6; font-size: 11px; display: grid; place-items: center;">3</b>Settle up</span>
+    </div>
+
+    <section style="background: #FFFDF6; border: 1px solid #DED8C6; border-radius: 20px; overflow: hidden;">
+      <div style="padding: 14px 16px; display: flex; gap: 12px; align-items: center; border-bottom: 1px solid #EEEADF;">
+        <span style="width: 36px; height: 36px; border-radius: 10px; background: #F4DED3; display: grid; place-items: center; flex: none;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#C05B3C" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M7 3v8M5 3v4a2 2 0 0 0 4 0V3M7 11v10M17 3c-2 0-3 3-3 6s1 3 3 3v9"/></svg></span>
+        <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 1px;">
+          <span style="font-size: 14px; font-weight: 700;">Dinner at Jongro BBQ</span>
+          <span style="font-size: 12px; color: #4C5C5B;">Mia paid · split 4 ways · incl. tax + 20% tip</span>
+        </div>
+        <span style="font-size: 15px; font-weight: 700;">$186.40</span>
+      </div>
+      <div style="padding: 14px 16px; display: flex; gap: 12px; align-items: center; border-bottom: 1px solid #EEEADF;">
+        <span style="width: 36px; height: 36px; border-radius: 10px; background: #DCE7EC; display: grid; place-items: center; flex: none;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3E6E8E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 16V11l2-5h10l2 5v5z"/><path d="M5 16v2M19 16v2"/><circle cx="8" cy="13" r="0.8" fill="#3E6E8E"/><circle cx="16" cy="13" r="0.8" fill="#3E6E8E"/></svg></span>
+        <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 1px;">
+          <span style="font-size: 14px; font-weight: 700;">Uber home</span>
+          <span style="font-size: 12px; color: #4C5C5B;">Dev paid · split 4 ways</span>
+        </div>
+        <span style="font-size: 15px; font-weight: 700;">$48.00</span>
+      </div>
+      <div style="padding: 14px 16px; display: flex; gap: 12px; align-items: center;">
+        <span style="width: 36px; height: 36px; border-radius: 10px; background: #EADFC5; display: grid; place-items: center; flex: none;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#B8842A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h14l-7 8z"/><path d="M12 12v8M8 20h8"/></svg></span>
+        <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 1px;">
+          <span style="font-size: 14px; font-weight: 700;">Drinks at Pocha 32</span>
+          <span style="font-size: 12px; color: #4C5C5B;">Ana paid · Ana, Mia, Leo</span>
+        </div>
+        <span style="font-size: 15px; font-weight: 700;">$36.00</span>
+      </div>
+    </section>
+
+    <button style="height: 48px; border: 1px dashed #C9C2AC; border-radius: 14px; background: #FBFAF4; color: #1B2A2E; font: inherit; font-size: 14px; font-weight: 600;">+ Add expense</button>
+
+    <section style="background: #FFFDF6; border: 1.5px solid #20584D; border-radius: 20px; padding: 16px; display: flex; flex-direction: column; gap: 12px;">
+      <div style="display: flex; align-items: baseline; justify-content: space-between;">
+        <h2 style="margin: 0; font-size: 16px; font-weight: 700; color: #0F3D36;">Who pays whom</h2>
+        <span style="font-size: 12px; color: #4C5C5B;">3 payments</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <span style="width: 28px; height: 28px; border-radius: 50%; background: #B8842A; color: #FFFDF6; font-size: 12px; font-weight: 700; display: grid; place-items: center;">L</span>
+        <span style="font-size: 14px;"><b>Leo</b> → <b>Mia</b></span>
+        <span style="margin-left: auto; font-size: 15px; font-weight: 700;">$70.60</span>
+        <a href="#" style="height: 32px; padding: 0 12px; border-radius: 10px; background: #DCE7EC; color: #3E6E8E; font-size: 12.5px; font-weight: 700; text-decoration: none; display: grid; place-items: center;">Venmo</a>
+      </div>
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <span style="width: 28px; height: 28px; border-radius: 50%; background: #3E6E8E; color: #FFFDF6; font-size: 12px; font-weight: 700; display: grid; place-items: center;">A</span>
+        <span style="font-size: 14px;"><b>Ana</b> → <b>Mia</b></span>
+        <span style="margin-left: auto; font-size: 15px; font-weight: 700;">$34.60</span>
+        <a href="#" style="height: 32px; padding: 0 12px; border-radius: 10px; background: #DCE7EC; color: #3E6E8E; font-size: 12.5px; font-weight: 700; text-decoration: none; display: grid; place-items: center;">Venmo</a>
+      </div>
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <span style="width: 28px; height: 28px; border-radius: 50%; background: #5E8A6E; color: #FFFDF6; font-size: 12px; font-weight: 700; display: grid; place-items: center;">D</span>
+        <span style="font-size: 14px;"><b>Dev</b> → <b>Mia</b></span>
+        <span style="margin-left: auto; font-size: 15px; font-weight: 700;">$10.60</span>
+        <span style="height: 32px; padding: 0 10px; border-radius: 10px; background: #E5EEE7; color: #20584D; font-size: 12.5px; font-weight: 700; display: flex; align-items: center; gap: 4px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#20584D" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>Paid</span>
+      </div>
+      <button style="height: 44px; border: 0; border-radius: 12px; background: #0F3D36; color: #FFFDF6; font: inherit; font-size: 14px; font-weight: 700;">Copy summary for the group chat</button>
+    </section>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":960}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

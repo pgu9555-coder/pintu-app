@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Find the middle</title>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#0F3D36}a:hover{color:#0A2B26}
+</style>
+</helmet>
+<div style="width: 390px; height: 1060px; box-sizing: border-box; background: #F6F3EA; color: #1B2A2E; font-family: 'IBM Plex Sans', system-ui, sans-serif; display: flex; flex-direction: column;">
+  <header style="height: 60px; flex: none; display: grid; grid-template-columns: 56px 1fr 56px; align-items: center; border-bottom: 1px solid #DED8C6; background: #FFFDF6;">
+    <a href="Main.html" aria-label="Back" style="justify-self: center; width: 36px; height: 36px; display: grid; place-items: center;">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1B2A2E" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+    </a>
+    <h1 style="margin: 0; text-align: center; font-size: 16.5px; font-weight: 700; color: #0F3D36;">Find the middle</h1>
+  </header>
+
+  <div style="padding: 16px; display: flex; flex-direction: column; gap: 16px;">
+    <section style="background: #FFFDF6; border: 1px solid #DED8C6; border-radius: 20px; padding: 18px; display: flex; flex-direction: column; gap: 12px;">
+      <div style="display: flex; gap: 12px; align-items: flex-start;">
+        <div style="width: 42px; height: 42px; border-radius: 12px; background: #E5EEE7; display: grid; place-items: center; flex: none;">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0F3D36" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c.6-3 2.8-4.6 5.5-4.6s4.9 1.6 5.5 4.6"/><circle cx="17" cy="9" r="2.4"/><path d="M16.5 14.6c2.2.2 3.6 1.6 4 4"/></svg>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 2px;">
+          <h2 style="margin: 0; font-size: 16px; font-weight: 700;">Meetup room</h2>
+          <p style="margin: 0; font-size: 12px; color: #4C5C5B;">Create a room and share the link — friends add where they're coming from.</p>
+        </div>
+      </div>
+      <div style="display: flex; align-items: center; gap: 10px; height: 46px; border: 1px solid #DED8C6; border-radius: 12px; background: #F6F3EA; padding: 0 14px;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4C5C5B" stroke-width="2" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6"/></svg>
+        <label style="flex-grow: 1;"><span style="position: absolute; left: -9999px;">Your name</span><input value="Mia" style="width: 100%; border: 0; background: transparent; font: inherit; font-size: 15px; color: #1B2A2E;"></label>
+      </div>
+      <button style="height: 46px; border: 0; border-radius: 12px; background: #20584D; color: #FFFDF6; font: inherit; font-size: 14px; font-weight: 700;">+ Create room</button>
+      <div style="display: flex; gap: 8px;">
+        <label style="flex-grow: 1;"><span style="position: absolute; left: -9999px;">Room code</span><input placeholder="6-character code" style="width: 100%; box-sizing: border-box; height: 46px; border: 1px solid #DED8C6; border-radius: 12px; background: #F6F3EA; padding: 0 12px; font: inherit; font-size: 14px;"></label>
+        <button style="height: 46px; padding: 0 18px; border: 1px solid #0F3D36; border-radius: 12px; background: #FFFDF6; color: #0F3D36; font: inherit; font-size: 14px; font-weight: 700;">Join room</button>
+      </div>
+    </section>
+
+    <section style="background: #FFFDF6; border: 1px solid #DED8C6; border-radius: 20px; padding: 18px; display: flex; flex-direction: column; gap: 14px;">
+      <div style="display: flex; flex-direction: column; gap: 4px;">
+        <h2 style="margin: 0; font-size: 24px; font-weight: 700; color: #0F3D36; letter-spacing: -0.01em;">Where's everyone coming from?</h2>
+        <p style="margin: 0; font-size: 13px; color: #4C5C5B;">We'll find the subway stop where nobody's trip is long.</p>
+      </div>
+
+      <div style="background: #EEF2EA; border-radius: 12px; padding: 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#20584D" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+        <span style="font-size: 13px; font-weight: 600; color: #20584D;">Leaving</span>
+        <button style="height: 34px; padding: 0 14px; border: 0; border-radius: 999px; background: #0F3D36; color: #FFFDF6; font: inherit; font-size: 13px; font-weight: 600;">Now</button>
+        <button style="height: 34px; padding: 0 12px; border: 1px solid #DED8C6; border-radius: 999px; background: #FFFDF6; color: #1B2A2E; font: inherit; font-size: 13px;">Sat, Nov 14 · 8:00 PM</button>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 600; color: #4C5C5B;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4C5C5B" stroke-width="2" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6"/></svg>
+        Starting points
+      </div>
+
+      <div style="border: 1px solid #DED8C6; border-radius: 14px; padding: 12px 10px; display: flex; flex-direction: column; gap: 10px;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="width: 30px; height: 30px; border-radius: 50%; background: #E89A7E; color: #FFFDF6; display: grid; place-items: center; font-size: 13px; font-weight: 700;">M</span>
+          <span style="font-size: 14px; font-weight: 700;">Mia</span>
+          <span style="font-size: 11px; font-weight: 700; color: #20584D; background: #E5EEE7; border-radius: 999px; padding: 2px 8px;">You</span>
+        </div>
+        <div style="display: flex; align-items: center; height: 46px; border: 1px solid #DED8C6; border-radius: 12px; background: #F6F3EA; padding: 0 6px 0 12px; gap: 6px;">
+          <label style="flex-grow: 1;"><span style="position: absolute; left: -9999px;">Mia's starting point</span><input value="Myrtle-Wyckoff Avs, Bushwick" style="width: 100%; border: 0; background: transparent; font: inherit; font-size: 14px; color: #1B2A2E;"></label>
+          <button aria-label="Use my location" style="height: 34px; border: 0; background: transparent; color: #1B2A2E; font: inherit; font-size: 12.5px; font-weight: 700; display: flex; align-items: center; gap: 4px;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1B2A2E" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.5"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>Locate
+          </button>
+        </div>
+      </div>
+
+      <div style="border: 1px solid #DED8C6; border-radius: 14px; padding: 12px 10px; display: flex; flex-direction: column; gap: 10px;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="width: 30px; height: 30px; border-radius: 50%; background: #5E8A6E; color: #FFFDF6; display: grid; place-items: center; font-size: 13px; font-weight: 700;">D</span>
+          <span style="font-size: 14px; font-weight: 700;">Dev</span>
+        </div>
+        <div style="display: flex; align-items: center; height: 46px; border: 1px solid #DED8C6; border-radius: 12px; background: #F6F3EA; padding: 0 6px 0 12px; gap: 6px;">
+          <label style="flex-grow: 1;"><span style="position: absolute; left: -9999px;">Dev's starting point</span><input value="72 St (1/2/3), Upper West Side" style="width: 100%; border: 0; background: transparent; font: inherit; font-size: 14px; color: #1B2A2E;"></label>
+          <button aria-label="Use location" style="height: 34px; border: 0; background: transparent; color: #1B2A2E; font: inherit; font-size: 12.5px; font-weight: 700; display: flex; align-items: center; gap: 4px;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1B2A2E" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.5"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>Locate
+          </button>
+        </div>
+      </div>
+
+      <div style="border: 1px solid #DED8C6; border-radius: 14px; padding: 12px 10px; display: flex; flex-direction: column; gap: 10px;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="width: 30px; height: 30px; border-radius: 50%; background: #3E6E8E; color: #FFFDF6; display: grid; place-items: center; font-size: 13px; font-weight: 700;">A</span>
+          <span style="font-size: 14px; font-weight: 700;">Ana</span>
+        </div>
+        <div style="display: flex; align-items: center; height: 46px; border: 1px solid #DED8C6; border-radius: 12px; background: #F6F3EA; padding: 0 6px 0 12px; gap: 6px;">
+          <label style="flex-grow: 1;"><span style="position: absolute; left: -9999px;">Ana's starting point</span><input placeholder="Address, cross streets or a subway stop" style="width: 100%; border: 0; background: transparent; font: inherit; font-size: 14px;"></label>
+          <button aria-label="Use location" style="height: 34px; border: 0; background: transparent; color: #1B2A2E; font: inherit; font-size: 12.5px; font-weight: 700; display: flex; align-items: center; gap: 4px;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1B2A2E" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.5"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>Locate
+          </button>
+        </div>
+      </div>
+
+      <button style="height: 44px; border: 1px dashed #C9C2AC; border-radius: 12px; background: #FBFAF4; color: #4C5C5B; font: inherit; font-size: 13px;">+ Add a friend</button>
+    </section>
+
+    <a href="Results.html" style="height: 52px; border-radius: 14px; background: #0F3D36; color: #FFFDF6; display: grid; place-items: center; font-size: 15px; font-weight: 700; text-decoration: none;">Find meetup spots</a>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1060}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

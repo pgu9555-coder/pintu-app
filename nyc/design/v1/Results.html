@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Meetup spots</title>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#0F3D36}a:hover{color:#0A2B26}
+</style>
+</helmet>
+<div style="width: 390px; height: 1180px; box-sizing: border-box; background: #F6F3EA; color: #1B2A2E; font-family: 'IBM Plex Sans', system-ui, sans-serif; display: flex; flex-direction: column;">
+  <header style="height: 60px; flex: none; display: grid; grid-template-columns: 56px 1fr 56px; align-items: center; border-bottom: 1px solid #DED8C6; background: #FFFDF6;">
+    <a href="Meetup.html" aria-label="Back" style="justify-self: center; width: 36px; height: 36px; display: grid; place-items: center;">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1B2A2E" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+    </a>
+    <h1 style="margin: 0; text-align: center; font-size: 16.5px; font-weight: 700; color: #0F3D36;">Meetup spots</h1>
+  </header>
+
+  <div style="padding: 16px; display: flex; flex-direction: column; gap: 14px;">
+    <div role="img" aria-label="Map with three starting points and three suggested stops" style="height: 210px; border-radius: 20px; border: 1px solid #DED8C6; background: #E9E6DA; position: relative; overflow: hidden;">
+      <div style="position: absolute; left: -20px; top: 70px; width: 440px; height: 14px; background: #D9D4C3; transform: rotate(-18deg);"></div>
+      <div style="position: absolute; left: 150px; top: -20px; width: 22px; height: 260px; background: #CFE0E6; transform: rotate(28deg);"></div>
+      <div style="position: absolute; left: 40px; top: 150px; width: 300px; height: 8px; background: #D9D4C3; transform: rotate(8deg);"></div>
+      <span style="position: absolute; left: 300px; top: 160px; width: 26px; height: 26px; border-radius: 50%; background: #E89A7E; border: 2px solid #FFFDF6; color: #FFFDF6; font-size: 12px; font-weight: 700; display: grid; place-items: center;">M</span>
+      <span style="position: absolute; left: 92px; top: 26px; width: 26px; height: 26px; border-radius: 50%; background: #5E8A6E; border: 2px solid #FFFDF6; color: #FFFDF6; font-size: 12px; font-weight: 700; display: grid; place-items: center;">D</span>
+      <span style="position: absolute; left: 248px; top: 38px; width: 26px; height: 26px; border-radius: 50%; background: #3E6E8E; border: 2px solid #FFFDF6; color: #FFFDF6; font-size: 12px; font-weight: 700; display: grid; place-items: center;">A</span>
+      <span style="position: absolute; left: 150px; top: 98px; width: 32px; height: 32px; border-radius: 50%; background: #0F3D36; border: 2px solid #FFFDF6; color: #FFFDF6; font-size: 14px; font-weight: 700; display: grid; place-items: center;">1</span>
+      <span style="position: absolute; left: 214px; top: 82px; width: 28px; height: 28px; border-radius: 50%; background: #FFFDF6; border: 2px solid #0F3D36; color: #0F3D36; font-size: 13px; font-weight: 700; display: grid; place-items: center;">2</span>
+      <span style="position: absolute; left: 172px; top: 60px; width: 28px; height: 28px; border-radius: 50%; background: #FFFDF6; border: 2px solid #0F3D36; color: #0F3D36; font-size: 13px; font-weight: 700; display: grid; place-items: center;">3</span>
+    </div>
+
+    <p style="margin: 0; font-size: 12.5px; color: #4C5C5B;">Leaving <b style="color: #1B2A2E;">Sat 8:00 PM</b> · ranked by the longest trip, among stops with plenty to eat.</p>
+
+    <article style="background: #FFFDF6; border: 1.5px solid #20584D; border-radius: 20px; padding: 16px; display: flex; flex-direction: column; gap: 12px;">
+      <div style="display: flex; gap: 12px; align-items: flex-start;">
+        <span style="width: 30px; height: 30px; border-radius: 50%; background: #0F3D36; color: #FFFDF6; display: grid; place-items: center; font-weight: 700; flex: none;">1</span>
+        <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 5px;">
+          <h2 style="margin: 0; font-size: 17px; font-weight: 700;">14 St–Union Sq</h2>
+          <div style="display: flex; gap: 3px;">
+            <span style="width: 20px; height: 20px; border-radius: 50%; background: #FCCC0A; color: #1A1A1A; font-size: 11.5px; font-weight: 700; display: grid; place-items: center;">N</span>
+            <span style="width: 20px; height: 20px; border-radius: 50%; background: #FCCC0A; color: #1A1A1A; font-size: 11.5px; font-weight: 700; display: grid; place-items: center;">Q</span>
+            <span style="width: 20px; height: 20px; border-radius: 50%; background: #FCCC0A; color: #1A1A1A; font-size: 11.5px; font-weight: 700; display: grid; place-items: center;">R</span>
+            <span style="width: 20px; height: 20px; border-radius: 50%; background: #00933C; color: #FFFFFF; font-size: 11.5px; font-weight: 700; display: grid; place-items: center;">4</span>
+            <span style="width: 20px; height: 20px; border-radius: 50%; background: #A7A9AC; color: #1A1A1A; font-size: 11.5px; font-weight: 700; display: grid; place-items: center;">L</span>
+          </div>
+          <span style="font-size: 12px; color: #4C5C5B;">~410 places to eat within 10 min · Japanese, Italian, Chinese</span>
+        </div>
+        <div style="text-align: right; flex: none;">
+          <div style="font-size: 24px; font-weight: 700; line-height: 1; color: #0F3D36;">31<span style="font-size: 12px;"> min</span></div>
+          <div style="font-size: 10.5px; color: #4C5C5B; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 3px;">longest trip</div>
+        </div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <div style="display: grid; grid-template-columns: 54px 50px 1fr; gap: 8px; align-items: center; font-size: 13px;">
+          <span style="font-weight: 700; color: #C05B3C;">Mia</span><span style="font-weight: 700; text-align: right;">25 min</span>
+          <div style="display: flex; flex-direction: column; gap: 3px;"><span style="font-size: 11.5px; color: #4C5C5B;">L direct</span><div style="height: 6px; border-radius: 3px; background: #EEEADF;"><div style="width: 80%; height: 6px; border-radius: 3px; background: #E89A7E;"></div></div></div>
+        </div>
+        <div style="display: grid; grid-template-columns: 54px 50px 1fr; gap: 8px; align-items: center; font-size: 13px;">
+          <span style="font-weight: 700; color: #3F6E52;">Dev</span><span style="font-weight: 700; text-align: right;">21 min</span>
+          <div style="display: flex; flex-direction: column; gap: 3px;"><span style="font-size: 11.5px; color: #4C5C5B;">2 › Q at Times Sq</span><div style="height: 6px; border-radius: 3px; background: #EEEADF;"><div style="width: 68%; height: 6px; border-radius: 3px; background: #5E8A6E;"></div></div></div>
+        </div>
+        <div style="display: grid; grid-template-columns: 54px 50px 1fr; gap: 8px; align-items: center; font-size: 13px;">
+          <span style="font-weight: 700; color: #3E6E8E;">Ana</span><span style="font-weight: 700; text-align: right;">31 min</span>
+          <div style="display: flex; flex-direction: column; gap: 3px;"><span style="font-size: 11.5px; color: #4C5C5B;">N direct</span><div style="height: 6px; border-radius: 3px; background: #EEEADF;"><div style="width: 100%; height: 6px; border-radius: 3px; background: #3E6E8E;"></div></div></div>
+        </div>
+      </div>
+      <div style="display: flex; gap: 8px;">
+        <span style="flex-grow: 1; height: 44px; border-radius: 12px; background: #E5EEE7; color: #20584D; display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 14px; font-weight: 700;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#20584D" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>Meeting here
+        </span>
+        <a href="Swipe.html" style="height: 44px; padding: 0 16px; border-radius: 12px; background: #0F3D36; color: #FFFDF6; display: grid; place-items: center; font-size: 14px; font-weight: 700; text-decoration: none;">Pick food</a>
+      </div>
+    </article>
+
+    <article style="background: #FFFDF6; border: 1px solid #DED8C6; border-radius: 20px; padding: 16px; display: flex; flex-direction: column; gap: 12px;">
+      <div style="display: flex; gap: 12px; align-items: flex-start;">
+        <span style="width: 30px; height: 30px; border-radius: 50%; background: #FFFDF6; border: 2px solid #0F3D36; color: #0F3D36; display: grid; place-items: center; font-weight: 700; flex: none; box-sizing: border-box;">2</span>
+        <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 5px;">
+          <h2 style="margin: 0; font-size: 17px; font-weight: 700;">28 St</h2>
+          <div style="display: flex; gap: 3px;">
+            <span style="width: 20px; height: 20px; border-radius: 50%; background: #FCCC0A; color: #1A1A1A; font-size: 11.5px; font-weight: 700; display: grid; place-items: center;">N</span>
+            <span style="width: 20px; height: 20px; border-radius: 50%; background: #FCCC0A; color: #1A1A1A; font-size: 11.5px; font-weight: 700; display: grid; place-items: center;">R</span>
+            <span style="width: 20px; height: 20px; border-radius: 50%; background: #FCCC0A; color: #1A1A1A; font-size: 11.5px; font-weight: 700; display: grid; place-items: center;">W</span>
+          </div>
+          <span style="font-size: 12px; color: #4C5C5B;">~670 places · Korean, Japanese, Italian</span>
+        </div>
+        <div style="text-align: right; flex: none;">
+          <div style="font-size: 24px; font-weight: 700; line-height: 1;">32<span style="font-size: 12px;"> min</span></div>
+          <div style="font-size: 10.5px; color: #4C5C5B; margin-top: 3px;">+1 min</div>
+        </div>
+      </div>
+      <a href="#" style="height: 44px; border-radius: 12px; border: 1px solid #0F3D36; color: #0F3D36; display: grid; place-items: center; font-size: 14px; font-weight: 700; text-decoration: none;">Meet here</a>
+    </article>
+
+    <article style="background: #FFFDF6; border: 1px solid #DED8C6; border-radius: 20px; padding: 16px; display: flex; flex-direction: column; gap: 12px;">
+      <div style="display: flex; gap: 12px; align-items: flex-start;">
+        <span style="width: 30px; height: 30px; border-radius: 50%; background: #FFFDF6; border: 2px solid #0F3D36; color: #0F3D36; display: grid; place-items: center; font-weight: 700; flex: none; box-sizing: border-box;">3</span>
+        <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 5px;">
+          <h2 style="margin: 0; font-size: 17px; font-weight: 700;">Court Sq, Long Island City</h2>
+          <div style="display: flex; gap: 3px;">
+            <span style="width: 20px; height: 20px; border-radius: 50%; background: #6CBE45; color: #FFFFFF; font-size: 11.5px; font-weight: 700; display: grid; place-items: center;">G</span>
+            <span style="width: 20px; height: 20px; border-radius: 50%; background: #B933AD; color: #FFFFFF; font-size: 11.5px; font-weight: 700; display: grid; place-items: center;">7</span>
+          </div>
+          <span style="font-size: 12px; color: #4C5C5B;">~120 places · Chinese, Japanese, Thai</span>
+        </div>
+        <div style="text-align: right; flex: none;">
+          <div style="font-size: 24px; font-weight: 700; line-height: 1;">32<span style="font-size: 12px;"> min</span></div>
+          <div style="font-size: 10.5px; color: #4C5C5B; margin-top: 3px;">+1 min</div>
+        </div>
+      </div>
+      <a href="#" style="height: 44px; border-radius: 12px; border: 1px solid #0F3D36; color: #0F3D36; display: grid; place-items: center; font-size: 14px; font-weight: 700; text-decoration: none;">Meet here</a>
+    </article>
+
+    <p style="margin: 0; font-size: 11.5px; color: #4C5C5B; text-align: center;">Estimated from MTA schedules for that time — check live service before you go.</p>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1180}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
