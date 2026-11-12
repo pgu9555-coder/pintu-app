@@ -11,6 +11,6 @@
  *                       access is governed by the policies in schema.sql)
  */
 window.PINTU_CONFIG = {
-  SUPABASE_URL: '',
-  SUPABASE_ANON_KEY: '',
+  SUPABASE_URL: 'https://dgsyrzbdwqtmhisdoiyf.supabase.co',
+  SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRnc3lyemJkd3F0bWhpc2RvaXlmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg4MDE0MzUsImV4cCI6MjEwNDM3NzQzNX0.VtKvZtA7p8uLx14cxDEvOod32_IQ-OO-YxrZiT2VZaU',
 };
