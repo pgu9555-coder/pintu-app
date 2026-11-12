@@ -1443,6 +1443,8 @@
   $app.addEventListener('submit', function (e) {
     var f = e.target;
     e.preventDefault();
+    // Typing defers redraws (isBusy); a submitted add-name form is done typing.
+    if (/^(addFriendForm|ledgerPersonForm|joinAsForm|spinAddForm)$/.test(f.id) && document.activeElement) document.activeElement.blur();
     if (f.id === 'joinForm') return handleJoinHome(f);
     if (f.id === 'createForm') return createRoomFromForm(f);
     if (f.id === 'joinRoomForm') {
