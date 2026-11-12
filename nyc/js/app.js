@@ -51,6 +51,12 @@
     return '<span class="bullets">' + legs.map(function (l) { return bullet(subway.routes[l.route]); })
       .join('<span class="walk" aria-hidden="true">›</span>') + '</span>';
   }
+  function placesHTML(st) {
+    if (!st.places || !st.places.count) return '';
+    var n = st.places.count, approx = n >= 100 ? Math.round(n / 10) * 10 : n;
+    var top = st.places.top.length ? ' · ' + st.places.top.slice(0, 3).map(esc).join(', ') : '';
+    return '<div class="places small muted num">' + (n >= 100 ? '~' : '') + approx + ' places to eat within 10 min' + top + '</div>';
+  }
   function personColor(i) { return PEOPLE_COLORS[i % PEOPLE_COLORS.length]; }
   function initial(name) { return esc((name || '?').trim().charAt(0).toUpperCase() || '?'); }
   function peopleList() { return (S.data && S.data.people) || []; }
@@ -135,7 +141,7 @@
       subway.validTo.replace(/(\d{4})(\d{2})(\d{2})/, '$2/$3/$1') + ')' : '';
     return '<footer>Subway times estimated from MTA schedules' + valid + ', not live service.<br>' +
       'Map © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors © CARTO. ' +
-      'Places from OpenStreetMap.' + (store.mode === 'local' ? '' : '') + '</footer>';
+      'Places from OpenStreetMap; restaurant counts from NYC DOHMH inspection data.</footer>';
   }
 
   // ------------------------------------------------------------ room
@@ -414,7 +420,7 @@
     }
 
     var head = '<div class="band"><span class="step">1</span><h2>Where to meet</h2>' +
-      (people.length >= 2 ? '<span class="hint">fairest first</span>' : '') + '</div>';
+      (people.length >= 2 ? '<span class="hint">' + (subway.hasPlaces ? 'fair, with lots to eat' : 'fairest first') + '</span>' : '') + '</div>';
     if (people.length < 2) {
       if (S.map) { S.map.remove(); S.map = null; }
       sec.innerHTML = head + '<div class="card"><div class="empty">Add at least two starting points and Pintu will find the stop where nobody\'s trip is long.</div></div>';
@@ -422,13 +428,16 @@
     }
 
     var longest = Math.max.apply(null, options.map(function (o) { return o.max; }));
+    // "+N min" is relative to the quickest option shown, in displayed minutes.
+    var fastestShown = Math.min.apply(null, options.map(function (o) { return mins(o.max); }));
     var html = head + '<div id="map" role="img" aria-label="Map of everyone\'s starting points and suggested stops"></div><div class="options">';
     options.forEach(function (o, k) {
       var st = subway.stations[o.station], chosen = o.station === chosenIdx;
       html += '<div class="option' + (chosen ? ' chosen' : '') + '">' +
         '<div class="option-head"><span class="option-rank">' + (k + 1) + '</span>' +
-          '<div class="option-title"><div class="st">' + esc(st.name) + '</div>' + stationBullets(st) + '</div>' +
-          '<div class="option-max"><div class="big num">' + mins(o.max) + '<span class="small"> min</span></div><div class="cap">longest trip</div></div></div>' +
+          '<div class="option-title"><div class="st">' + esc(st.name) + '</div>' + stationBullets(st) + placesHTML(st) + '</div>' +
+          '<div class="option-max"><div class="big num">' + mins(o.max) + '<span class="small"> min</span></div><div class="cap">longest trip</div>' +
+            (mins(o.max) - fastestShown >= 2 ? '<div class="extra-min num">+' + (mins(o.max) - fastestShown) + ' min vs quickest here</div>' : '') + '</div></div>' +
         '<div class="trips">' + people.map(function (p, i) {
           var pi = personIndex(p.id);
           return '<div class="trip"><span class="tname" style="color:' + personColor(pi) + '">' + esc(p.name) + '</span>' +
@@ -733,6 +742,11 @@
       if (!res.ok) throw new Error('HTTP ' + res.status);
       subway = new window.PintuSubway.Subway(await res.json());
       subway.stations.forEach(function (st) { stationIdx[st.id] = st.idx; });
+      // Optional: places-to-eat counts per station, used to prefer good hangout stops.
+      try {
+        var vres = await fetch('data/venues.json');
+        if (vres.ok) subway.setPlaces(await vres.json());
+      } catch (e) { console.warn('venues.json not loaded; ranking by time only', e); }
     } catch (err) {
       $app.innerHTML = '<div class="error" style="margin-top:40px">Couldn\'t load the subway map (' + esc(err.message) + '). Refresh to try again.</div>';
       return;

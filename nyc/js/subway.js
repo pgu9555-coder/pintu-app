@@ -189,12 +189,37 @@
   };
 
   /**
-   * Fairest meeting stations for a group.
+   * Attach place counts from data/venues.json so meetup ranking can prefer
+   * stops with plenty to eat. Optional: without it, ranking is time-only.
+   */
+  Subway.prototype.setPlaces = function (venues) {
+    var by = (venues && venues.stations) || {};
+    this.stations.forEach(function (st) {
+      var v = by[st.id];
+      st.places = v ? { count: v[0], cuisines: v[1], top: v[2] || [] } : { count: 0, cuisines: 0, top: [] };
+    });
+    this.hasPlaces = true;
+  };
+
+  /**
+   * Meeting stops for a group: fair first, then good for a hangout.
    * people: [{lat, lon} | {station}], at least 2.
    * Returns up to `limit` options in different neighborhoods:
-   *   [{station, times: [sec per person], max, total, paths: [legs per person]}]
-   * Ranked by the longest trip in the group (minimax), then by total time.
+   *   [{station, times: [sec per person], max, total, extra, paths: [legs per person]}]
+   * `max` is the longest trip in the group; `extra` is how much longer that
+   * is than the fairest possible stop.
+   *
+   * Without place data: ranked by longest trip, then total time.
+   * With place data: among stops whose longest trip is within a few minutes
+   * of the fairest one (5, widening to 25 if needed) and that have at least
+   * MIN_PLACES places to eat nearby, prefer livelier ones (see value()).
    */
+  var MIN_PLACES = 40;
+  var PLACES_ENOUGH = 150;
+  var MINUTES_PER_STEP = 7;
+  var BANDS_MIN = [5, 10, 15, 25];
+  var MIN_APART_M = 900;
+
   Subway.prototype.fairMeet = function (people, limit) {
     limit = limit || 3;
     var self = this;
@@ -208,17 +233,45 @@
     scored.sort(function (a, b) {
       return Math.round(a.max / 60) - Math.round(b.max / 60) || a.total - b.total;
     });
+    if (!scored.length) return [];
+    var bestMax = scored[0].max;
+
+    function pickApart(list, picked) {
+      for (var i = 0; i < list.length && picked.length < limit; i++) {
+        var cand = self.stations[list[i].station];
+        if (picked.some(function (p) { return p.station === list[i].station; })) continue;
+        var tooClose = picked.some(function (p) {
+          var o = self.stations[p.station];
+          return haversineM(cand.lat, cand.lon, o.lat, o.lon) < MIN_APART_M;
+        });
+        if (!tooClose) picked.push(list[i]);
+      }
+      return picked;
+    }
+
+    // More places help, with diminishing returns: past PLACES_ENOUGH a stop
+    // is "lively enough" and fairness decides. Each extra MINUTES_PER_STEP on
+    // the longest trip costs about one step of liveliness.
+    function value(x) {
+      var n = Math.min(self.stations[x.station].places.count, PLACES_ENOUGH);
+      return Math.log(1 + n) - (x.max - bestMax) / (MINUTES_PER_STEP * 60);
+    }
 
     var picked = [];
-    for (var i = 0; i < scored.length && picked.length < limit; i++) {
-      var cand = self.stations[scored[i].station];
-      var tooClose = picked.some(function (p) {
-        var o = self.stations[p.station];
-        return haversineM(cand.lat, cand.lon, o.lat, o.lon) < 900;
-      });
-      if (!tooClose) picked.push(scored[i]);
+    if (this.hasPlaces) {
+      for (var b = 0; b < BANDS_MIN.length && picked.length < limit; b++) {
+        var band = BANDS_MIN[b] * 60;
+        var pool = scored.filter(function (x) {
+          return x.max <= bestMax + band && self.stations[x.station].places.count >= MIN_PLACES;
+        });
+        pool.sort(function (x, y) { return value(y) - value(x) || x.max - y.max || x.total - y.total; });
+        picked = pickApart(pool, picked.slice());
+      }
     }
+    picked = pickApart(scored, picked);  // top up time-only if place data is thin
+
     picked.forEach(function (p) {
+      p.extra = p.max - bestMax;
       p.paths = results.map(function (r) { return r.path(p.station); });
     });
     return picked;
