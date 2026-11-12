@@ -582,5 +582,4 @@ dialog h3 { font-size: 18px; color: var(--green); }
   *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
 }
 
-/* Soften OpenStreetMap's tiles toward the paper palette. */
-.leaflet-tile-pane { filter: saturate(0.45) sepia(0.12) brightness(1.03); }
+/* No CSS filter on tiles: iOS Safari can paint filtered tile layers black. */

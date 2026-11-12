@@ -317,7 +317,7 @@
         infoList([
           '<b>Address search:</b> the text you type goes to OpenStreetMap\'s Nominatim search service.',
           '<b>Nearby places:</b> come from NYC health inspection data built into Pintu, so nothing is sent. Only if that is missing for a stop does Pintu ask OpenStreetMap\'s Overpass service, sending the stop\'s location, not yours.',
-          '<b>Map tiles:</b> from OpenStreetMap\'s tile servers, which see which map area you view.',
+          '<b>Map tiles:</b> from OpenStreetMap\'s tile servers, or Esri\'s if OpenStreetMap can\'t be reached. They see which map area you view.',
           '<b>Font:</b> IBM Plex Sans, from Google Fonts.',
           '<b>Links:</b> OpenTable, Resy, Google Maps and Venmo open only when you tap them. Venmo links include the room name as the payment note. Those sites have their own privacy policies.',
         ])) +
@@ -357,7 +357,7 @@
         infoList([
           'Subway schedules: MTA GTFS.',
           '© OpenStreetMap contributors (ODbL).',
-          'Map tiles: © OpenStreetMap contributors.',
+          'Map tiles: © OpenStreetMap contributors; backup tiles © Esri.',
           'Restaurant inspection data: NYC DOHMH, via NYC Open Data.',
         ])) +
       infoCard('Changes',
@@ -671,6 +671,29 @@
     }, { enableHighAccuracy: false, timeout: 10000 });
   }
 
+  // Map tiles: OpenStreetMap first (keyless; CARTO now wants an API key and OSM
+  // blocks server-relayed tiles). Some networks can't reach OSM's tile servers,
+  // so if tiles fail or nothing has loaded after a few seconds, switch to Esri's
+  // light gray basemap with its label layer.
+  function addBaseTiles(map) {
+    var osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19, attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    }).addTo(map);
+    var loaded = 0, errors = 0, switched = false;
+    function useEsri() {
+      if (switched || !map.getContainer().isConnected) return;  // already switched, or the map was closed
+      switched = true;
+      map.removeLayer(osm);
+      var base = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_';
+      L.tileLayer(base + 'Base/MapServer/tile/{z}/{y}/{x}', { maxZoom: 16,
+        attribution: '© <a href="https://www.esri.com/">Esri</a>, HERE, Garmin, OSM' }).addTo(map);
+      L.tileLayer(base + 'Reference/MapServer/tile/{z}/{y}/{x}', { maxZoom: 16 }).addTo(map);
+    }
+    osm.on('tileload', function () { loaded++; });
+    osm.on('tileerror', function () { if (++errors >= 2 && !loaded) useEsri(); });
+    setTimeout(function () { if (!loaded) useEsri(); }, 4000);
+  }
+
   // ------------------------------------------------------------ 2 spots (ranked stops + map)
   function computeOptions() {
     var people = peopleList().filter(function (p) { return toSubwayOrigin(p.origin); });
@@ -745,12 +768,7 @@
     var el = $('#map');
     if (!window.L || !el) return;
     var map = L.map(el, { zoomControl: false, attributionControl: true, scrollWheelZoom: false });
-    // OpenStreetMap's own tiles, loaded directly by the browser (keyless; CARTO's
-    // basemaps now ask for an API key, and OSM blocks tiles relayed by a server).
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-    }).addTo(map);
+    addBaseTiles(map);
     L.control.zoom({ position: 'bottomright' }).addTo(map);
     var pts = [];
     people.forEach(function (p) {
