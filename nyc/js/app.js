@@ -328,7 +328,7 @@
           '<b>A person:</b> tap × next to their name. Their starting point and food votes go with them.',
           '<b>An expense:</b> open it and tap Delete.',
           '<b>My trips:</b> Pintu has no button to clear this list yet. Clearing this site\'s data in your browser settings removes My trips, your name and everything else saved on this phone.',
-          '<b>A whole room:</b> there is no button to delete a room yet. Ask through the Contact page and we will remove it.',
+          '<b>A whole room:</b> there is no button to delete a room yet. To empty one, remove its people and expenses; that removes their starting points, votes and ledger entries.',
         ])) +
       infoCard('What not to put in a room',
         '<p>Rooms are for planning meetups and splitting bills. Don\'t add passwords, bank details, health information or anything you wouldn\'t share in a group chat.</p>') +
