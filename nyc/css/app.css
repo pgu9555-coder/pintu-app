@@ -192,6 +192,8 @@ a { color: var(--accent); }
 .venue.dragging { cursor: grabbing; user-select: none; -webkit-user-select: none; }
 .venue .vname { font-size: 21px; font-weight: 700; line-height: 1.2; letter-spacing: -0.01em; }
 .venue .meta { color: var(--muted); font-size: 14px; display: flex; gap: 10px; flex-wrap: wrap; }
+.venue-links { flex-wrap: wrap; margin-top: auto; gap: 6px; }
+.venue-links .btn { min-height: 36px; padding: 6px 12px; font-size: 14px; }
 .venue .hours { font-size: 14px; font-weight: 700; }
 .venue .hours.open { color: var(--good); }
 .venue .hours.closed { color: var(--bad); }

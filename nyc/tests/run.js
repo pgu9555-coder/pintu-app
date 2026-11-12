@@ -162,7 +162,7 @@ test('hours: describe reads well for open, closed-then and closed-all-day', () =
   const h = 'Mo-Fr 11:00-22:00';
   assert.strictEqual(Hours.describe(h, TUE, 20 * 60), 'Open until 10 PM');
   assert.strictEqual(Hours.describe(h, TUE, 10 * 60), 'Closed then · opens 11 AM');
-  assert.strictEqual(Hours.describe(h, TUE, 22 * 60 + 30), 'Closed that day');
+  assert.strictEqual(Hours.describe(h, TUE, 22 * 60 + 30), 'Closed then');  // done for the night, not closed all day
   assert.strictEqual(Hours.describe(h, SAT, 12 * 60), 'Closed that day');
 });
 test('hours: empty, garbage and unsupported input gives null and never throws', () => {

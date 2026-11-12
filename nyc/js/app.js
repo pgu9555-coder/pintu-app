@@ -587,7 +587,7 @@
     var H = window.PintuHours, i = H.info(v.hours, t.dow, t.min);
     if (!i) return null;
     var text;
-    if (t.isNow) text = H.describe(v.hours, t.dow, t.min);
+    if (t.isNow) text = H.describe(v.hours, t.dow, t.min).replace(/^Closed then/, 'Closed now').replace(/^Closed that day/, 'Closed today');
     else {
       var day = DAY_NAMES[t.dow], at = H.formatTime(t.min);
       if (i.open) text = 'Open at ' + at + ' ' + day + (i.always ? ' · 24 hours' : ' · until ' + i.closes);
@@ -603,8 +603,8 @@
       '&dateTime=' + t.date + 'T' + t.time + '&latitude=' + v.lat + '&longitude=' + v.lon;
     var resy = 'https://resy.com/cities/new-york-ny/search?query=' + encodeURIComponent(v.name) +
       '&date=' + t.date + '&seats=' + n;
-    return '<a class="btn" target="_blank" rel="noopener" href="' + esc(opentable) + '">Find on OpenTable</a>' +
-      '<a class="btn" target="_blank" rel="noopener" href="' + esc(resy) + '">Find on Resy</a>';
+    return '<a class="btn" target="_blank" rel="noopener" href="' + esc(opentable) + '" title="Search OpenTable for a table">OpenTable</a>' +
+      '<a class="btn" target="_blank" rel="noopener" href="' + esc(resy) + '" title="Search Resy for a table">Resy</a>';
   }
 
   // One place for every vote: buttons, swipes and arrow keys. Optimistic, so the
@@ -738,7 +738,7 @@
             '<span class="num">' + walk + ' min walk from the station</span>' +
             (others ? '<span style="color:var(--good);font-weight:600">' + others + ' liked it</span>' : '') + '</div>' +
           (status ? '<div class="hours ' + status.cls + '">' + esc(status.text) + '</div>' : '') +
-          '<div class="row" style="flex-wrap:wrap;margin-top:auto"><a class="btn" target="_blank" rel="noopener" href="' + esc(Places.googleMapsLink(v)) + '">Reviews &amp; photos</a>' +
+          '<div class="row venue-links"><a class="btn" target="_blank" rel="noopener" href="' + esc(Places.googleMapsLink(v)) + '">Reviews</a>' +
             (v.website ? '<a class="btn" target="_blank" rel="noopener" href="' + esc(v.website) + '">Website</a>' : '') +
             bookingLinksHTML(v, t) + '</div></div>' +
           '<div class="vote-row"><button class="btn no" data-vote="-1" data-v="' + esc(v.id) + '">✕ Pass</button>' +

@@ -142,7 +142,8 @@
       var s = today[i][0];
       if (s > minutes && s < DAY_MIN && (next === null || s < next)) next = s;
     }
-    return { open: false, always: false, closes: null, opens: next === null ? null : formatTime(next) };
+    // dayOff: no hours at all that day (vs. already closed for the night).
+    return { open: false, always: false, closes: null, opens: next === null ? null : formatTime(next), dayOff: !today.length };
   }
 
   /** true / false, or null when the hours are empty or can't be read. */
@@ -153,13 +154,15 @@
     } catch (e) { return null; }
   }
 
-  /** "Open until 10 PM", "Open 24 hours", "Closed then · opens 11 AM", "Closed that day", or null. */
+  /** "Open until 10 PM", "Open 24 hours", "Closed then · opens 11 AM", "Closed then" (done for the
+   *  night), "Closed that day" (no hours that day), or null. */
   function describe(hours, dow, minutes) {
     try {
       var i = info(hours, dow, minutes);
       if (!i) return null;
       if (i.open) return i.always ? 'Open 24 hours' : 'Open until ' + i.closes;
-      return i.opens ? 'Closed then · opens ' + i.opens : 'Closed that day';
+      if (i.opens) return 'Closed then · opens ' + i.opens;
+      return i.dayOff ? 'Closed that day' : 'Closed then';
     } catch (e) { return null; }
   }
 
