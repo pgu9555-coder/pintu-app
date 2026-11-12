@@ -316,8 +316,8 @@
       infoCard('Services Pintu contacts',
         infoList([
           '<b>Address search:</b> the text you type goes to OpenStreetMap\'s Nominatim search service.',
-          '<b>Nearby places:</b> after you pick a meeting stop, Pintu asks OpenStreetMap\'s Overpass service for places near that stop. It sends the stop\'s location, not yours.',
-          '<b>Map tiles:</b> from OpenStreetMap\'s tile servers, which see which map area you view.',
+          '<b>Nearby places:</b> come from NYC health inspection data built into Pintu, so nothing is sent. Only if that is missing for a stop does Pintu ask OpenStreetMap\'s Overpass service, sending the stop\'s location, not yours.',
+          '<b>Map tiles:</b> from OpenStreetMap, passed through this site\'s server (or fetched directly if that fails). OpenStreetMap sees which map area is shown.',
           '<b>Font:</b> IBM Plex Sans, from Google Fonts.',
           '<b>Links:</b> OpenTable, Resy, Google Maps and Venmo open only when you tap them. Venmo links include the room name as the payment note. Those sites have their own privacy policies.',
         ])) +
@@ -746,10 +746,17 @@
     if (!window.L || !el) return;
     var map = L.map(el, { zoomControl: false, attributionControl: true, scrollWheelZoom: false });
     // OpenStreetMap's own tiles (keyless; CARTO's basemaps now ask for an API key).
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-    }).addTo(map);
+    // On the deployed site they come through our domain (/tiles, a Vercel rewrite)
+    // so phones that can reach the site always get a map; if that path fails we
+    // switch to OpenStreetMap directly.
+    var direct = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+    var local = /^(localhost|127\.|0\.0\.0\.0)/.test(location.hostname) || location.protocol === 'file:';
+    var tileOpts = { maxZoom: 19, attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' };
+    var tiles = L.tileLayer(local ? direct : '/tiles/{z}/{x}/{y}.png', tileOpts).addTo(map);
+    var tileErrors = 0;
+    tiles.on('tileerror', function () {
+      if (++tileErrors === 3 && tiles._url !== direct) tiles.setUrl(direct);
+    });
     L.control.zoom({ position: 'bottomright' }).addTo(map);
     var pts = [];
     people.forEach(function (p) {
@@ -912,7 +919,7 @@
     var chip = function (key, label) {
       return '<button class="chip" type="button" data-act="food-filter" data-f="' + esc(key) + '" aria-pressed="' + (filter === key) + '">' + esc(label) + '</button>';
     };
-    var filters = '<div class="filters" role="group" aria-label="Filter places">' + chip('all', 'All') + chip('open', 'Open then') +
+    var filters = '<div class="filters" role="group" aria-label="Filter places">' + chip('all', 'All') + (list && list.some(function (v) { return v.hours; }) ? chip('open', 'Open then') : '') +
       cuisines.map(function (c) { return chip('c:' + c, c); }).join('') + '</div>';
 
     var body = '';
@@ -945,8 +952,9 @@
           '<div class="venue-body">' +
             '<div><div class="eyebrow-c">' + esc(v.cuisine || labelFor(v.kind)) + '</div>' +
             '<h2>' + esc(v.name) + '</h2>' +
-            '<div class="sub">' + esc(labelFor(v.kind)) + ' · near ' + esc(meet.name) + (liked ? ' · ' + liked + ' liked it' : '') + '</div></div>' +
-            '<div class="venue-tags">' + (reserve ? '<span style="background:var(--blue-tint);color:var(--blue)">Takes reservations</span>' : '') +
+            '<div class="sub">' + esc(v.address || labelFor(v.kind)) + ' · near ' + esc(meet.name) + (liked ? ' · ' + liked + ' liked it' : '') + '</div></div>' +
+            '<div class="venue-tags">' + (v.grade ? '<span style="background:var(--gold-tint);color:var(--gold-ink, #7A5A1C)">Grade ' + esc(v.grade) + '</span>' : '') +
+              (reserve && v.src !== 'nyc' ? '<span style="background:var(--blue-tint);color:var(--blue)">Takes reservations</span>' : '') +
               (v.website ? '<span style="background:var(--line-soft);color:var(--ink-soft)">Has a website</span>' : '') + '</div>' +
             '<div class="venue-links">' +
               '<a href="' + esc(Places.googleMapsLink(v)) + '" target="_blank" rel="noopener">Map</a>' +
@@ -994,7 +1002,7 @@
   async function loadVenues(key, meet) {
     S.venueLoading = true;
     try {
-      var list = await Places.venues(meet.lat, meet.lon, S.venueKind || 'food', S.venueRadius);
+      var list = await Places.venues(meet.lat, meet.lon, S.venueKind || 'food', S.venueRadius, meet.station);
       S.venues[key] = list.slice(0, 40);
       S.venueError = '';
     } catch (err) {

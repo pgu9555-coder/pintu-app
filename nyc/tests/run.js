@@ -217,5 +217,25 @@ test('settle: no expenses means nothing owed', () => {
   assert.deepStrictEqual(r.transfers, []);
 });
 
+// --- prebuilt places near every stop -----------------------------------------
+test('every stop has a places file with sane rows', () => {
+  const fs = require('fs');
+  let empty = 0;
+  for (const st of data.stations) {
+    const f = path.join(__dirname, '../data/places', st[0] + '.json');
+    assert(fs.existsSync(f), 'missing ' + f);
+    const d = JSON.parse(fs.readFileSync(f, 'utf8'));
+    assert(Array.isArray(d.p) && d.p.length <= 80, st[0]);
+    if (!d.p.length) empty++;
+    for (const r of d.p) assert(r.length === 8 && r[1] && r[7] <= 600 && /^[ABC]?$/.test(r[4]), JSON.stringify(r));
+  }
+  assert(empty < data.stations.length / 4, empty + ' stops have no places');
+});
+test('Union Sq has plenty of sit-down places and no chain coffee', () => {
+  const d = require('../data/places/635.json');
+  assert(d.p.length >= 50, d.p.length);
+  assert(!d.p.some((r) => /starbucks|dunkin/i.test(r[1])));
+});
+
 console.log(failed ? `\n${failed} failed` : '\nall passed');
 process.exit(failed ? 1 : 0);
