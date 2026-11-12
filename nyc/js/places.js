@@ -72,6 +72,12 @@
         // Added by build_extras.py from OpenStreetMap and the place's own website.
         hours: r[8] || '', website: r[9] || '', image: r[10] || '', book: r[11] || '' };
     });
+    // Places with a photo, then with hours, come first so the deck opens on
+    // the richest cards; distance order is kept within each group.
+    var rank = function (v) { return v.image ? 0 : v.hours ? 1 : 2; };
+    list = list.map(function (v, i) { return [v, i]; })
+      .sort(function (a, b) { return rank(a[0]) - rank(b[0]) || a[1] - b[1]; })
+      .map(function (x) { return x[0]; });
     cache[key] = list;
     return list;
   }
