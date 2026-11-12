@@ -43,7 +43,7 @@ NYC_BBOX = "40.477,-74.259,40.917,-73.700"
 MATCH_M = 80
 UA = "Mozilla/5.0 (compatible; PintuNYC/1.0; +https://pintu-nyc.vercel.app)"
 BOOKING = re.compile(r"(resy\.com|opentable\.com|exploretock\.com|tock\.com|sevenrooms\.com|yelp\.com/reservations)", re.I)
-BAD_IMAGE = re.compile(r"(logo|favicon|icon|placeholder|default|blank|spacer|sprite|\.svg|\.gif|\.ico)(\b|_|-|\.)", re.I)
+BAD_IMAGE = re.compile(r"(logo|favicon|icon|placeholder|default|blank|spacer|sprite|preview-background|\.svg|\.gif|\.ico)(\b|_|-|\.)", re.I)
 STOP = {"the", "and", "restaurant", "restaurants", "nyc", "ny", "new", "york", "inc", "llc", "corp", "cafe", "bar",
         "grill", "kitchen", "of", "at", "co", "company", "house", "shop"}
 # Words too common to identify a place on their own ("Pizza" vs "Joe's Pizza").
@@ -96,6 +96,10 @@ def similar(a, b):
     sa, sb = set(ta), set(tb)
     small, big = (sa, sb) if len(sa) <= len(sb) else (sb, sa)
     return small <= big and any(len(w) >= 3 and w not in GENERIC for w in small)
+
+
+def norm_key(name):
+    return " ".join(norm(name))
 
 
 def haversine_m(lat1, lon1, lat2, lon2):
@@ -197,12 +201,31 @@ def get(url, limit, extra=None):
         return r.geturl(), r.headers.get("Content-Type", ""), r.read(limit)
 
 
-def photo_for(site):
+BOOK_LINK = re.compile(r'href\s*=\s*["\'](https://(?:www\.)?(?:resy\.com/cities/[^"\'\s]+|opentable\.com/(?:r/|restref/|restaurant/)[^"\'\s]+|'
+                       r'exploretock\.com/[^"\'\s/]+[^"\'\s]*|tables\.sevenrooms\.com/[^"\'\s]+|sevenrooms\.com/reservations/[^"\'\s]+))', re.I)
+LD_IMAGE = re.compile(r'"image"\s*:\s*(?:\[\s*)?(?:\{[^}]*?"url"\s*:\s*)?"(https://[^"]+\.(?:jpe?g|png|webp)[^"]*)"', re.I)
+
+
+def site_info(site):
+    """(photo, booking link) found on a restaurant's homepage; '' when none."""
     try:
-        final, ctype, body = get(site, 400_000)
+        final, ctype, body = get(site, 600_000)
         if "html" not in ctype.lower():
-            return ""
-        img = find_share_image(final, body.decode("utf-8", "replace"))
+            return "", ""
+        text = body.decode("utf-8", "replace")
+        m = BOOK_LINK.search(text)
+        book = html.unescape(m.group(1)) if m else ""
+        img = find_share_image(final, text)
+        if not img:
+            ld = LD_IMAGE.search(text)
+            img = ld.group(1).replace("\\/", "/") if ld else ""
+        return check_photo(img), book
+    except Exception:  # noqa: BLE001 - any failure just means "nothing found"
+        return "", ""
+
+
+def check_photo(img):
+    try:
         if not img.startswith("https://") or BAD_IMAGE.search(urllib.parse.urlparse(img).path):
             return ""
         # Fetch the image the way a browser on our site would (Referer set), so
@@ -245,14 +268,24 @@ def main(argv):
         f"with website: {sum(1 for e in extra.values() if e[1])}")
 
     sites = sorted({e[1] for e in extra.values() if e[1]})
-    photo = {}
+    info = {}
     with cf.ThreadPoolExecutor(max_workers=32) as pool:
-        for n, (site, img) in enumerate(zip(sites, pool.map(photo_for, sites)), 1):
-            photo[site] = img
+        for n, (site, got) in enumerate(zip(sites, pool.map(site_info, sites)), 1):
+            info[site] = got
             if n % 500 == 0:
-                log(f"  checked {n}/{len(sites)} websites, photos so far: {sum(1 for v in photo.values() if v)}")
-    for e in extra.values():
-        e[2] = photo.get(e[1], "")
+                log(f"  checked {n}/{len(sites)} websites, photos so far: {sum(1 for v in info.values() if v[0])}")
+    # A picture shared by several differently named places is a template or a
+    # chain's generic graphic, not a photo of this place.
+    owners = {}
+    for camis, e in extra.items():
+        img = info.get(e[1], ("", ""))[0]
+        if img:
+            owners.setdefault(img.split("?")[0], set()).add(norm_key(places[camis][1]))
+    for camis, e in extra.items():
+        img, book = info.get(e[1], ("", ""))
+        e[2] = img if img and len(owners.get(img.split("?")[0], ())) < 3 else ""
+        if not e[3] and book:
+            e[3] = book
     log(f"places with a photo: {sum(1 for e in extra.values() if e[2])}")
 
     for f, d in docs.items():
