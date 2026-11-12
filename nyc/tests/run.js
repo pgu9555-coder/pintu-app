@@ -175,5 +175,47 @@ test('hours: empty, garbage and unsupported input gives null and never throws', 
   assert.strictEqual(Hours.isOpenAt('Mo-Fr 11:00-22:00', TUE, 5000), null, 'bad minutes');
 });
 
+// --- trip ledger settlement ------------------------------------------------------
+const M = 'M', D = 'D', A = 'A', L = 'L';
+const trip = [
+  { id: 'dinner', cents: 18640, payerId: M, among: [M, D, A, L] },
+  { id: 'uber', cents: 4800, payerId: D, among: [M, D, A, L] },
+  { id: 'drinks', cents: 3600, payerId: A, among: [A, M, L] },
+];
+test('settle: spec example gives L->M 7060, A->M 3460, D->M 1060', () => {
+  const r = Split.settle(trip, [M, D, A, L]);
+  const t = r.transfers.map((x) => `${x.from}>${x.to}:${x.cents}`).sort();
+  assert.deepStrictEqual(t, ['A>M:3460', 'D>M:1060', 'L>M:7060'], JSON.stringify(r.transfers));
+  assert.strictEqual(r.total, 18640 + 4800 + 3600);
+  assert.deepStrictEqual(r.balances, { M: 11580, D: -1060, A: -3460, L: -7060 });
+});
+test('settle: balances sum to exactly zero and transfers clear them', () => {
+  const r = Split.settle(trip, [M, D, A, L]);
+  assert.strictEqual(Object.values(r.balances).reduce((a, b) => a + b, 0), 0);
+  const net = {};
+  r.transfers.forEach((x) => { net[x.from] = (net[x.from] || 0) - x.cents; net[x.to] = (net[x.to] || 0) + x.cents; });
+  for (const id of [M, D, A, L]) assert.strictEqual(net[id] || 0, r.balances[id], id);
+});
+test('settle: uneven cents still add up exactly', () => {
+  const odd = [{ id: 'x', cents: 1000, payerId: M, among: [M, D, A] }, { id: 'y', cents: 1, payerId: D, among: [M, D, A] }];
+  const r = Split.settle(odd, [M, D, A]);
+  assert.strictEqual(r.total, 1001);
+  assert.strictEqual(Object.values(r.balances).reduce((a, b) => a + b, 0), 0);
+  const paid = r.transfers.reduce((a, t) => a + t.cents, 0);
+  assert.strictEqual(paid, Object.values(r.balances).filter((v) => v > 0).reduce((a, b) => a + b, 0));
+});
+test('settle: tax and tip add on top of the entered subtotal', () => {
+  const e = { cents: 10000, payerId: M, among: [M, D], taxTip: true, tipPct: 20 };
+  assert.strictEqual(Split.expenseTotal(e), 10000 + 888 + 2000);
+  const r = Split.settle([e], [M, D]);
+  assert.strictEqual(r.total, 12888);
+  assert.deepStrictEqual(r.transfers, [{ from: D, to: M, cents: 6444 }]);
+});
+test('settle: no expenses means nothing owed', () => {
+  const r = Split.settle([], [M, D]);
+  assert.strictEqual(r.total, 0);
+  assert.deepStrictEqual(r.transfers, []);
+});
+
 console.log(failed ? `\n${failed} failed` : '\nall passed');
 process.exit(failed ? 1 : 0);

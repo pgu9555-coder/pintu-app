@@ -168,11 +168,13 @@
 
   function route() {
     var r = parseRoute(location.hash);
+    S.route = r.name;
     if (!r.code) leaveRoom();
     if (r.name === 'home') return renderHome();
     if (r.name === 'trips') return renderTrips();
     if (r.name === 'meet') return renderMeet();
-    if (r.name === 'spin' || r.name === 'ledger_new') return renderPlaceholder(r);
+    if (r.name === 'ledger_new') return renderLedgerNew();
+    if (r.name === 'spin') return renderPlaceholder(r);
     return routeRoom(r);
   }
 
@@ -269,11 +271,11 @@
     function row(t) {
       var ledger = t.kind === 'ledger';
       var live = t.lastOpened >= today ? '<span class="pill live"><span class="live-dot" aria-hidden="true"></span>Live</span>' : '';
-      return '<a class="card-link trip-card" href="#/r/' + esc(t.code) + (ledger ? '/ledger' : '') + '">' +
+      return '<a class="card-link trip-card" href="#/r/' + esc(t.code) + (ledger ? '/ledger' : '') + '" data-trip-money="' + esc(t.code) + '">' +
         '<span class="tile ' + (ledger ? 'pink' : 'blue') + '">' + icon(ledger ? 'receipt' : 'pin') + '</span>' +
         '<span class="txt"><span class="t">' + esc(t.name) + '</span>' +
         '<span class="s">' + (ledger ? 'Trip ledger' : 'Meetup') + ' · room <span class="num">' + esc(t.code) + '</span></span></span>' +
-        live + '</a>';
+        live + (ledger ? '<span class="pill pill-money grey"></span>' : '') + '</a>';
     }
     var body = '';
     if (!all.length) {
@@ -288,12 +290,17 @@
     var chip = function (key, label) {
       return '<button class="chip" type="button" data-act="trip-filter" data-f="' + key + '" aria-pressed="' + (f === key) + '">' + label + '</button>';
     };
+    var ledgers = list.filter(function (t) { return t.kind === 'ledger'; });
     show('<main class="screen has-tabs"><div class="content">' +
       '<h1 class="screen-title" style="text-align:center;font-size:19px">My trips</h1>' +
       '<div class="chip-row" role="group" aria-label="Filter trips">' + chip('all', 'All') + chip('meetups', 'Meetups') + chip('ledgers', 'Ledgers') + '</div>' +
       body +
       '<p class="footer-note" style="margin-top:6px">Saved on this phone. Use Backup &amp; restore to move them.</p>' +
       '</div>' + tabbar('trips') + '</main>');
+    // Ledger rows fill in their totals once each room has loaded (in local mode this is instant).
+    ledgers.forEach(function (t) {
+      store.load(t.code).then(function (d) { if (S.route === 'trips' && d) tripMoney(t.code, d); }).catch(function () {});
+    });
   }
 
   function renderPlaceholder(r) {
@@ -388,7 +395,7 @@
     if (isBusy()) { S.dirty = true; return; }
     S.dirty = false;
     var R = {
-      where: renderWhere, spots: renderSpots, food: renderFood, share: renderShare, ledger: renderLedgerRoute,
+      where: renderWhere, spots: renderSpots, food: renderFood, share: renderShare, ledger: renderLedger,
     }[S.route];
     if (R) R();
   }
@@ -893,7 +900,254 @@
     show(html);
   }
 
-  function renderLedgerRoute() { return renderPlaceholder({ name: 'ledger' }); }
+  // ------------------------------------------------------------ trip ledger
+  // Stored in room.bill as {kind:'ledger', expenses:[...], paid:{'fromId>toId': true}}.
+  function ledgerOf(room) {
+    var b = room && room.bill;
+    if (b && b.kind === 'ledger') return { expenses: b.expenses || [], paid: b.paid || {} };
+    return { expenses: [], paid: {} };
+  }
+  function ledgerSettle() {
+    var L = ledgerOf(S.data.room);
+    return { L: L, r: Split.settle(L.expenses, peopleList().map(function (p) { return p.id; })) };
+  }
+  function saveLedger(next) {
+    S.data.room.bill = Object.assign({ kind: 'ledger' }, next);   // optimistic
+    render();
+    store.updateRoom(S.code, { bill: S.data.room.bill }).catch(fail);
+  }
+  function nameOf(id) { return personName(id); }
+
+  function renderLedgerNew() {
+    document.title = 'Trip ledger · Pintu';
+    show('<main class="screen">' + topbar('Trip ledger', '#/') +
+      '<div class="content">' +
+      '<section class="panel" aria-labelledby="ledgerNewTitle">' +
+        '<div class="header-line"><span class="tile pink lg">' + icon('receipt') + '</span>' +
+        '<div class="head-txt"><h2 class="heading-md" id="ledgerNewTitle">Start a trip ledger</h2>' +
+        '<p>Everyone pays as you go. We\'ll track who owes whom and make settling up one tap.</p></div></div>' +
+        '<form class="stack" id="ledgerNewForm">' +
+          '<label class="field"><span class="caption">Trip name</span>' +
+            '<input class="input" name="trip" maxlength="60" placeholder="Friday in K-town" required></label>' +
+          '<label class="field"><span class="caption">Your name</span>' +
+            '<input class="input" name="me" maxlength="40" placeholder="Your name" autocomplete="given-name" required value="' + esc(savedName()) + '"></label>' +
+          '<button class="btn btn-primary btn-lg btn-block" type="submit">Start ledger</button>' +
+        '</form></section>' +
+      '</div></main>');
+  }
+
+  async function createLedgerFromForm(form) {
+    var trip = form.trip.value.trim(), me = form.me.value.trim();
+    if (!trip || !me) return;
+    lsSet('pintu_name', me);
+    var btn = form.querySelector('button'); btn.disabled = true;
+    try {
+      var code = await store.createRoom(trip);
+      var row = await store.addPerson(code, { name: me });
+      setMe(code, row.id);
+      await store.updateRoom(code, { bill: { kind: 'ledger', expenses: [], paid: {} } });
+      location.hash = '#/r/' + code + '/ledger';
+    } catch (err) { fail(err); btn.disabled = false; }
+  }
+
+  function renderLedger() {
+    var room = S.data.room, tab = S.ledgerTab || 'expenses';
+    var people = peopleList(), set = ledgerSettle(), L = set.L, r = set.r;
+    document.title = room.name + ' · Pintu';
+    var share = '<a class="back" href="#/r/' + esc(S.code) + '/room" aria-label="Share room" style="color:var(--ink)">' +
+      '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">' + ICON.share + '</svg></a>';
+    var tabs = [['people', 'People', people.length], ['expenses', 'Expenses', L.expenses.length], ['settle', 'Settle up', null]];
+    var tabBtns = tabs.map(function (t, i) {
+      var sel = tab === t[0];
+      return '<button type="button" role="tab" id="tab-' + t[0] + '" aria-selected="' + sel + '" aria-controls="ledgerBody" data-act="ledger-tab" data-t="' + t[0] + '">' +
+        '<span class="num-badge">' + (i + 1) + '</span>' + t[1] + '</button>';
+    }).join('');
+
+    var body = '';
+    if (tab === 'people') {
+      body = '<div class="list-card">' + (people.length ? people.map(function (p, i) {
+        return '<div class="person-edit">' + avatar(p, i, 'lg') +
+          '<div class="who"><span class="n">' + esc(p.name) + (p.id === S.me ? '<span class="tag-you">You</span>' : '') + '</span>' +
+          '<label style="display:block"><span class="sr">Venmo username for ' + esc(p.name) + '</span>' +
+          '<input class="input-inline venmo-input" style="background:var(--field);border:1px solid var(--line);border-radius:10px;padding:0 10px;height:38px;min-height:38px" ' +
+          'data-venmo="' + esc(p.id) + '" value="' + esc(p.venmo ? '@' + p.venmo : '') + '" placeholder="Venmo @username (optional)" autocomplete="off"></label></div>' +
+          '<button class="round-btn" style="width:36px;height:36px;border:0;background:none;color:var(--ink-soft);font-size:18px" type="button" data-act="ledger-remove" data-id="' + esc(p.id) + '" aria-label="Remove ' + esc(p.name) + '">×</button>' +
+          '</div>';
+      }).join('') : '<div class="empty">Nobody yet.</div>') + '</div>' +
+      '<form class="add-friend-form" id="ledgerPersonForm"><label class="grow" style="display:block"><span class="sr">Name</span>' +
+      '<input class="input" name="name" maxlength="40" placeholder="Add a name" autocomplete="off" required></label>' +
+      '<button class="btn btn-primary" type="submit">Add</button></form>';
+    } else if (tab === 'expenses') {
+      body = '<div class="list-card">' + (L.expenses.length ? L.expenses.map(function (e, i) {
+        var total = Split.expenseTotal(e), n = (e.among || []).length;
+        var tones = ['coral', 'blue', 'gold', 'pink'];
+        return '<button class="exp-row" type="button" data-act="edit-expense" data-id="' + esc(e.id) + '">' +
+          '<span class="tile ' + tones[i % 4] + '">' + icon('dollar', 'sm') + '</span>' +
+          '<span class="txt"><span class="t">' + esc(e.title) + '</span>' +
+          '<span class="s">' + esc(nameOf(e.payerId)) + ' paid · split ' + n + ' way' + (n === 1 ? '' : 's') +
+          (e.taxTip ? ' · incl. tax + ' + (e.tipPct == null ? 20 : e.tipPct) + '% tip' : '') + '</span></span>' +
+          '<span class="amt">' + Split.money(total) + '</span></button>';
+      }).join('') : '<div class="empty">No expenses yet. Add one as you pay.</div>') + '</div>' +
+      '<button class="add-dash" type="button" data-act="add-expense">+ Add expense</button>' +
+      settlePanelHTML(r, people);
+    } else {
+      body = '<div class="list-card">' + people.map(function (p, i) {
+        var net = r.balances[p.id] || 0;
+        var cls = net > 0 ? 'in' : net < 0 ? 'out' : '';
+        return '<div class="bal-row">' + avatar(p, i, 'lg') +
+          '<div class="txt"><span class="n">' + esc(p.name) + '</span>' +
+          '<span>' + (net > 0 ? 'is owed' : net < 0 ? 'owes' : 'all square') + '</span></div>' +
+          '<span class="net ' + cls + '">' + (net === 0 ? '—' : Split.money(Math.abs(net))) + '</span></div>';
+      }).join('') + '</div>' +
+      '<div class="caption" style="text-align:center;margin:4px 0">Total spent: <b class="num">' + Split.money(r.total) + '</b></div>' +
+      '<button class="btn btn-primary btn-block" type="button" data-act="copy-summary">Copy summary for the group chat</button>';
+    }
+
+    show('<main class="screen">' + topbar('Trip ledger', '#/', share) +
+      '<div class="content">' +
+      '<section class="panel ledger-head" style="padding:16px">' +
+        '<span class="tile pink lg">' + icon('receipt') + '</span>' +
+        '<div class="txt"><h2 class="heading-md">' + esc(room.name) + '</h2>' +
+        '<span>' + people.length + ' people · ' + L.expenses.length + ' expense' + (L.expenses.length === 1 ? '' : 's') + ' · room <span class="num">' + esc(S.code) + '</span></span></div>' +
+        '<div class="total"><div class="v num">' + Split.money(r.total) + '</div><div class="k">total</div></div>' +
+      '</section>' +
+      '<div class="seg-tabs" role="tablist" aria-label="Ledger sections">' + tabBtns + '</div>' +
+      '<div id="ledgerBody" role="tabpanel" aria-labelledby="tab-' + tab + '">' + body + '</div>' +
+      '</div></main>');
+  }
+
+  function settlePanelHTML(r, people) {
+    var rows = r.transfers.map(function (t) {
+      var from = people.find(function (p) { return p.id === t.from; }) || { name: 'Someone' };
+      var to = people.find(function (p) { return p.id === t.to; }) || { name: 'Someone' };
+      var key = t.from + '>' + t.to, paid = !!(S.data.room.bill && S.data.room.bill.paid && S.data.room.bill.paid[key]);
+      var venmo = Split.venmoLink(to.venmo, t.cents, S.data.room.name + ' (Pintu)');
+      return '<div class="pay-row">' + avatar(from, peopleList().indexOf(from), 'sm') +
+        '<span class="txt"><b>' + esc(from.name) + '</b> → <b>' + esc(to.name) + '</b></span>' +
+        '<span class="amt num">' + Split.money(t.cents) + '</span>' +
+        (venmo && !paid ? '<a class="btn btn-sm btn-venmo" target="_blank" rel="noopener" href="' + esc(venmo) + '">Venmo</a>' : '') +
+        '<button class="paid-toggle' + (paid ? ' on' : '') + '" type="button" data-act="toggle-paid" data-key="' + esc(key) + '" aria-pressed="' + paid + '">' +
+          (paid ? icon('check', 'xs') + 'Paid' : 'Mark paid') + '</button></div>';
+    }).join('');
+    return '<section class="settle-panel" aria-labelledby="settleTitle">' +
+      '<div class="head"><h2 id="settleTitle">Who pays whom</h2><span class="caption num">' + r.transfers.length + ' payment' + (r.transfers.length === 1 ? '' : 's') + '</span></div>' +
+      (rows || '<div class="empty">Everyone\'s square. Nothing to settle.</div>') +
+      '<button class="btn btn-primary btn-block" type="button" data-act="copy-summary">Copy summary for the group chat</button>' +
+      '</section>';
+  }
+
+  function openExpenseDialog(id) {
+    var dlg = document.getElementById('expDlg');
+    if (!dlg) {
+      dlg = document.createElement('dialog');
+      dlg.id = 'expDlg';
+      dlg.setAttribute('aria-labelledby', 'expTitle');
+      document.body.appendChild(dlg);
+      dlg.addEventListener('click', function (e) {
+        var t = e.target.closest('[data-act]');
+        if (!t) return;
+        if (t.dataset.act === 'close-dialog') dlg.close();
+        else if (t.dataset.act === 'delete-expense') deleteExpense(dlg.dataset.editing);
+      });
+      dlg.addEventListener('submit', function (e) { e.preventDefault(); saveExpenseFromDialog(dlg); });
+      dlg.addEventListener('change', function (e) {
+        if (e.target.name === 'taxTip') dlg.querySelector('[data-tip-row]').hidden = !e.target.checked;
+      });
+    }
+    var L = ledgerOf(S.data.room), e = id ? L.expenses.find(function (x) { return x.id === id; }) : null;
+    var people = peopleList();
+    dlg.dataset.editing = e ? e.id : '';
+    var payer = e ? e.payerId : (S.me || (people[0] && people[0].id));
+    dlg.innerHTML = '<form method="dialog" class="dlg" id="expenseForm">' +
+      '<h3 id="expTitle">' + (e ? 'Edit expense' : 'Add expense') + '</h3>' +
+      '<label class="field"><span class="caption">What was it?</span>' +
+        '<input class="input" name="title" maxlength="60" placeholder="Dinner at Jongro BBQ" required value="' + esc(e ? e.title : '') + '"></label>' +
+      '<label class="field"><span class="caption">Amount (USD)</span>' +
+        '<div class="money"><span>$</span><input class="input num" name="amount" inputmode="decimal" placeholder="0.00" required value="' + (e ? (e.cents / 100).toFixed(2) : '') + '"></div></label>' +
+      '<label class="field"><span class="caption">Paid by</span>' +
+        '<select class="input" name="payer">' + people.map(function (p) {
+          return '<option value="' + esc(p.id) + '"' + (p.id === payer ? ' selected' : '') + '>' + esc(p.name) + '</option>';
+        }).join('') + '</select></label>' +
+      '<div class="field"><span class="caption">Split among</span><div class="check-list">' + people.map(function (p) {
+        var on = e ? (e.among || []).indexOf(p.id) >= 0 : true;
+        return '<label class="check-row"><input type="checkbox" name="among" value="' + esc(p.id) + '"' + (on ? ' checked' : '') + '>' + esc(p.name) + '</label>';
+      }).join('') + '</div></div>' +
+      '<label class="check-row"><input type="checkbox" name="taxTip"' + (e && e.taxTip ? ' checked' : '') + '>Add NYC tax + tip</label>' +
+      '<div class="tip-row" data-tip-row' + (e && e.taxTip ? '' : ' hidden') + '>' +
+        '<span class="caption">Tax ' + Split.NYC_TAX + '% · tip</span>' +
+        '<input class="input num" name="tipPct" inputmode="decimal" value="' + (e && e.tipPct != null ? e.tipPct : 20) + '" aria-label="Tip percent">' +
+        '<span class="caption">%</span></div>' +
+      '<div class="dlg-actions">' +
+        (e ? '<button class="btn btn-danger" type="button" data-act="delete-expense">Delete</button>' : '') +
+        '<span class="grow"></span>' +
+        '<button class="btn" type="button" data-act="close-dialog">Cancel</button>' +
+        '<button class="btn btn-primary" type="submit">Save</button></div>' +
+      '</form>';
+    dlg.showModal ? dlg.showModal() : dlg.setAttribute('open', '');
+    setTimeout(function () { var t = dlg.querySelector('[name=title]'); if (t) t.focus(); }, 30);
+  }
+
+  function saveExpenseFromDialog(dlg) {
+    var f = dlg.querySelector('#expenseForm');
+    var title = f.title.value.trim(), cents = Split.parseMoney(f.amount.value);
+    var among = Array.prototype.filter.call(f.querySelectorAll('[name=among]'), function (c) { return c.checked; })
+      .map(function (c) { return c.value; });
+    if (!title || cents <= 0 || !among.length) { toast(!among.length ? 'Pick who shares this expense.' : 'Add a title and an amount.'); return; }
+    var tipPct = parseFloat(f.tipPct.value);
+    var e = {
+      id: dlg.dataset.editing || uuid(), title: title.slice(0, 60), cents: cents, payerId: f.payer.value, among: among,
+      taxTip: f.taxTip.checked, tipPct: f.taxTip.checked && isFinite(tipPct) ? Math.max(0, Math.min(100, tipPct)) : 20,
+    };
+    var L = ledgerOf(S.data.room), list = L.expenses.slice();
+    var i = list.findIndex(function (x) { return x.id === e.id; });
+    if (i >= 0) list[i] = e; else list.push(e);
+    dlg.close();
+    saveLedger({ expenses: list, paid: L.paid });
+  }
+
+  function deleteExpense(id) {
+    var dlg = document.getElementById('expDlg');
+    if (dlg) dlg.close();
+    var L = ledgerOf(S.data.room);
+    if (!id || !confirm('Delete this expense?')) return;
+    saveLedger({ expenses: L.expenses.filter(function (x) { return x.id !== id; }), paid: L.paid });
+  }
+
+  function uuid() {
+    if (window.crypto && window.crypto.randomUUID) return window.crypto.randomUUID();
+    return 'e' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  }
+
+  function copySummary() {
+    var set = ledgerSettle(), r = set.r, people = peopleList(), L = set.L;
+    var name = function (id) { return nameOf(id); };
+    var lines = [S.data.room.name + ' — ' + Split.money(r.total) + ' total'];
+    r.transfers.forEach(function (t) {
+      var key = t.from + '>' + t.to, mark = L.paid[key] ? ' (paid)' : '';
+      lines.push(name(t.from) + ' → ' + name(t.to) + ': ' + Split.money(t.cents) + mark);
+    });
+    if (!r.transfers.length) lines.push('All square.');
+    lines.push(roomUrl(S.code));
+    var text = lines.join('\n');
+    navigator.clipboard.writeText(text).then(function () { toast('Summary copied'); })
+      .catch(function () { prompt('Copy this:', text); });
+  }
+
+  // Trip list money line for a ledger: "You get $X" / "You owe $X" / "Settled".
+  function tripMoney(code, d) {
+    var row = document.querySelector('[data-trip-money="' + code + '"]');
+    if (!row || !d || !d.room.bill || d.room.bill.kind !== 'ledger') return;
+    var people = d.people.map(function (p) { return p.id; });
+    var me = getMe(code), mine = people.indexOf(me) >= 0 ? me : null;
+    var r = Split.settle((d.room.bill.expenses || []), people);
+    var total = Split.money(r.total), owed = mine ? (r.balances[mine] || 0) : 0;
+    var label = !mine ? 'total ' + total : owed > 0 ? 'You get ' + Split.money(owed) : owed < 0 ? 'You owe ' + Split.money(-owed) : 'Settled';
+    var cls = owed > 0 ? 'pink' : owed < 0 ? 'coral' : 'grey';
+    row.querySelector('.s').textContent = 'Trip ledger · ' + total;
+    var pill = row.querySelector('.pill-money');
+    if (pill) { pill.className = 'pill pill-money ' + cls; pill.textContent = label; }
+  }
+
 
   // ------------------------------------------------------------ invite
   function inviteText() { return 'Join "' + S.data.room.name + '" on Pintu — add where you\'re coming from and we\'ll find the fair place to meet.'; }
@@ -956,6 +1210,30 @@
     'vote': function (t) { castVote(t.dataset.v, +t.dataset.vote); },
     'copy-link': function (t) { copyInvite(t); },
     'share': function () { shareInvite(); },
+    'ledger-tab': function (t) { S.ledgerTab = t.dataset.t; render(); },
+    'add-expense': function () { openExpenseDialog(null); },
+    'edit-expense': function (t) { openExpenseDialog(t.dataset.id); },
+    'ledger-remove': async function (t) {
+      var p = peopleList()[personIndex(t.dataset.id)];
+      if (!p || !confirm('Remove ' + p.name + ' from this trip?')) return;
+      try {
+        var L = ledgerOf(S.data.room);
+        var expenses = L.expenses.map(function (e) {
+          var among = (e.among || []).filter(function (id) { return id !== p.id; });
+          return Object.assign({}, e, { among: among, payerId: e.payerId === p.id ? (among[0] || e.payerId) : e.payerId });
+        });
+        await store.removePerson(p.id);
+        if (p.id === S.me) { S.me = null; lsSet('pintu_me_' + S.code, ''); }
+        if (expenses.length) await store.updateRoom(S.code, { bill: { kind: 'ledger', expenses: expenses, paid: {} } });
+        refresh();
+      } catch (err) { fail(err); }
+    },
+    'toggle-paid': function (t) {
+      var L = ledgerOf(S.data.room), paid = Object.assign({}, L.paid);
+      if (paid[t.dataset.key]) delete paid[t.dataset.key]; else paid[t.dataset.key] = true;
+      saveLedger({ expenses: L.expenses, paid: paid });
+    },
+    'copy-summary': function () { copySummary(); },
     'backup': function () { if (window.PintuBackup) window.PintuBackup.open(); },
   };
   $app.addEventListener('click', function (e) {
@@ -964,6 +1242,13 @@
     ACTIONS[t.dataset.act](t, e);
   });
   $app.addEventListener('change', function (e) {
+    if (e.target.hasAttribute('data-venmo')) {
+      var pid = e.target.getAttribute('data-venmo'), handle = e.target.value.trim().replace(/^@/, '') || null;
+      var pp = peopleList()[personIndex(pid)];
+      if (pp) pp.venmo = handle;
+      store.updatePerson(pid, { venmo: handle }).catch(fail);
+      return;
+    }
     if (e.target.id !== 'whenDate' && e.target.id !== 'whenTime') return;
     var d = $('#whenDate').value, tm = $('#whenTime').value;
     if (d && tm) setWhen({ date: d, time: tm });
@@ -988,6 +1273,13 @@
       store.addPerson(S.code, { name: name }).then(function (row) {
         setMe(S.code, row.id); refresh();
       }).catch(fail);
+      return;
+    }
+    if (f.id === 'ledgerNewForm') return createLedgerFromForm(f);
+    if (f.id === 'ledgerPersonForm') {
+      var lname = f.name.value.trim();
+      if (!lname) return;
+      store.addPerson(S.code, { name: lname }).then(function () { refresh(); }).catch(fail);
       return;
     }
     if (f.id === 'addFriendForm') {
