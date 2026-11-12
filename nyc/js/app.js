@@ -317,7 +317,7 @@
         infoList([
           '<b>Address search:</b> the text you type goes to OpenStreetMap\'s Nominatim search service.',
           '<b>Nearby places:</b> come from NYC health inspection data built into Pintu, so nothing is sent. Only if that is missing for a stop does Pintu ask OpenStreetMap\'s Overpass service, sending the stop\'s location, not yours.',
-          '<b>Map tiles:</b> from OpenStreetMap, passed through this site\'s server (or fetched directly if that fails). OpenStreetMap sees which map area is shown.',
+          '<b>Map tiles:</b> from OpenStreetMap\'s tile servers, which see which map area you view.',
           '<b>Font:</b> IBM Plex Sans, from Google Fonts.',
           '<b>Links:</b> OpenTable, Resy, Google Maps and Venmo open only when you tap them. Venmo links include the room name as the payment note. Those sites have their own privacy policies.',
         ])) +
@@ -745,18 +745,12 @@
     var el = $('#map');
     if (!window.L || !el) return;
     var map = L.map(el, { zoomControl: false, attributionControl: true, scrollWheelZoom: false });
-    // OpenStreetMap's own tiles (keyless; CARTO's basemaps now ask for an API key).
-    // On the deployed site they come through our domain (/tiles, a Vercel rewrite)
-    // so phones that can reach the site always get a map; if that path fails we
-    // switch to OpenStreetMap directly.
-    var direct = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
-    var local = /^(localhost|127\.|0\.0\.0\.0)/.test(location.hostname) || location.protocol === 'file:';
-    var tileOpts = { maxZoom: 19, attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' };
-    var tiles = L.tileLayer(local ? direct : '/tiles/{z}/{x}/{y}.png', tileOpts).addTo(map);
-    var tileErrors = 0;
-    tiles.on('tileerror', function () {
-      if (++tileErrors === 3 && tiles._url !== direct) tiles.setUrl(direct);
-    });
+    // OpenStreetMap's own tiles, loaded directly by the browser (keyless; CARTO's
+    // basemaps now ask for an API key, and OSM blocks tiles relayed by a server).
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    }).addTo(map);
     L.control.zoom({ position: 'bottomright' }).addTo(map);
     var pts = [];
     people.forEach(function (p) {
