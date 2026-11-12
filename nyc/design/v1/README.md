@@ -13,6 +13,9 @@ Static markup with inline styles; the live app should match these visually.
 | Ledger.html | Trip ledger | `#/r/CODE/ledger` |
 | Spinner.html | Who pays · Spinner | `#/spin` |
 | Trips.html | My trips | `#/trips` |
+| — | Privacy (no mockup; v1 page style) | `#/privacy` |
+| — | Terms (no mockup; v1 page style) | `#/terms` |
+| — | Contact (no mockup; v1 page style) | `#/contact` |
 
 Tokens: paper #F6F3EA, raised #FFFDF6, line #DED8C6, ink #1B2A2E, ink-soft #4C5C5B,
 green #0F3D36 (deep #0A2B26), midpoint green #20584D / #E5EEE7,

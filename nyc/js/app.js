@@ -5,6 +5,8 @@
  *   #/r/CODE/food      Food blind box        #/r/CODE/room   Room code and members
  *   #/r/CODE/ledger    Trip ledger           #/ledger        Start a ledger
  *   #/spin             Who pays · Spinner    #/trips         My trips
+ *   #/privacy          Privacy               #/terms         Terms
+ *   #/contact          Contact
  */
 (function () {
   'use strict';
@@ -26,6 +28,7 @@
     route: null, code: null, data: null, me: null, unsub: null, dirty: false, tripFilter: 'all',
     map: null, optionsKey: '', options: [], optionsPeople: [], addingFriend: false, originHits: {},
     venueKind: 'food', venueRadius: 600, venues: {}, venueLoading: false, venueError: '', pickId: null, foodFilter: 'all',
+    whenOpen: false,
   };
 
   // ------------------------------------------------------------ icons (copied from the mockups)
@@ -161,6 +164,9 @@
     if (h === '/ledger') return { name: 'ledger_new' };
     if (h === '/spin') return { name: 'spin' };
     if (h === '/trips') return { name: 'trips' };
+    if (h === '/privacy') return { name: 'privacy' };
+    if (h === '/terms') return { name: 'terms' };
+    if (h === '/contact') return { name: 'contact' };
     return { name: 'home' };
   }
 
@@ -173,13 +179,16 @@
     if (r.name === 'meet') return renderMeet();
     if (r.name === 'ledger_new') return renderLedgerNew();
     if (r.name === 'spin') return renderSpin();
+    if (r.name === 'privacy') return renderPrivacy();
+    if (r.name === 'terms') return renderTerms();
+    if (r.name === 'contact') return renderContact();
     return routeRoom(r);
   }
 
   function leaveRoom() {
     if (S.unsub) S.unsub();
     if (S.map) { S.map.remove(); S.map = null; }
-    S.unsub = null; S.data = null; S.code = null; S.me = null; S.dirty = false;
+    S.unsub = null; S.data = null; S.code = null; S.me = null; S.dirty = false; S.whenOpen = false;
   }
 
   // ------------------------------------------------------------ shell
@@ -220,7 +229,7 @@
     show('<main class="screen has-tabs"><div class="content">' +
       '<div class="home-head"><h1>Pintu</h1>' +
         '<nav class="legal" aria-label="Pintu pages">' +
-          '<a href="#/">Privacy</a><a href="#/">Terms</a><a href="#/">Contact</a>' +
+          '<a href="#/privacy">Privacy</a><a href="#/terms">Terms</a><a href="#/contact">Contact</a>' +
           '<button type="button" data-act="backup">Backup &amp; restore</button>' +
         '</nav></div>' +
       '<form class="panel join-card" id="joinForm">' +
@@ -254,6 +263,130 @@
     if (!name) { toast('Add your name so the group knows who you are.'); return; }
     lsSet('pintu_name', name);
     location.hash = '#/r/' + code;
+  }
+
+  // ------------------------------------------------------------ info pages: privacy, terms, contact
+  // Plain text pages. Static copy only; nothing here reads or sends room data.
+  var LAST_UPDATED = 'November 12, 2026';
+  function infoScreen(title, body) {
+    document.title = title + ' · Pintu';
+    show('<main class="screen">' + topbar(title, '#/') +
+      '<div class="content info-page">' + body + '</div></main>');
+  }
+  function infoCard(heading, html) {
+    return '<section class="panel info-card"><h2 class="heading-md">' + heading + '</h2>' + html + '</section>';
+  }
+  function infoList(items) {
+    return '<ul class="info-list">' + items.map(function (x) { return '<li>' + x + '</li>'; }).join('') + '</ul>';
+  }
+  function updatedLine() { return '<p class="caption info-updated">Last updated: ' + LAST_UPDATED + '</p>'; }
+  function infoLinks() {
+    return '<div class="info-actions"><a class="btn btn-outline" href="#/privacy">Privacy</a>' +
+      '<a class="btn btn-outline" href="#/terms">Terms</a></div>';
+  }
+
+  function renderPrivacy() {
+    infoScreen('Privacy', updatedLine() +
+      infoCard('The short version',
+        '<p>Pintu has no accounts and no sign-in. It keeps what a group types into a meetup or ledger room, so the room works for everyone in it. Anyone with the room code can open that room.</p>') +
+      infoCard('What a room stores',
+        '<p>A room holds only what the group adds while planning:</p>' +
+        infoList([
+          'The room name, such as a trip name or "Mia\'s meetup".',
+          'Each person\'s name, as typed (usually a first name).',
+          'Starting points: the address or station label. From Locate, Pintu keeps coordinates rounded to about 1 metre, plus the nearest subway station\'s name.',
+          'An optional Venmo handle for each person.',
+          'The meetup time and the chosen meeting stop.',
+          'Food votes, with each place\'s name, cuisine, hours and website as they were when voted on.',
+          'Ledger expenses: title, amount, who paid, who shares it, tax and tip settings, and which payments are marked paid.',
+        ]) +
+        '<p>With real-time sharing on, rooms are stored in a Supabase database hosted in the US. Anyone with a room code can read and change that room. The database is not yet set up to limit reads to one room, so anyone with the app\'s public key could read other rooms too. Treat a room as something you share, not a private place.</p>' +
+        '<p>If this copy of Pintu runs in local mode, rooms exist only in this browser. Other phones can\'t see them, and clearing this site\'s data deletes them.</p>') +
+      infoCard('What stays on your phone',
+        '<p>These are saved in your browser\'s local storage and never leave the phone:</p>' +
+        infoList([
+          'Your name, so it fills in next time.',
+          'Which person you are in each room you have joined.',
+          'My trips: the rooms you have opened, with their names and when you last opened them.',
+          'Spinner: the names on the wheel and the question you typed.',
+        ]) +
+        '<p>Backup &amp; restore writes My trips to a file only when you download it.</p>') +
+      infoCard('Your location',
+        '<p>Pintu reads your location only when you tap Locate, and only once. It never tracks where you are or keeps a history. The position is saved as that person\'s starting point, so people in the room can see it on the map.</p>') +
+      infoCard('Services Pintu contacts',
+        infoList([
+          '<b>Address search:</b> the text you type goes to OpenStreetMap\'s Nominatim search service.',
+          '<b>Nearby places:</b> after you pick a meeting stop, Pintu asks OpenStreetMap\'s Overpass service for places near that stop. It sends the stop\'s location, not yours.',
+          '<b>Map tiles:</b> from CARTO.',
+          '<b>Font:</b> IBM Plex Sans, from Google Fonts.',
+          '<b>Links:</b> OpenTable, Resy, Google Maps and Venmo open only when you tap them. Venmo links include the room name as the payment note. Those sites have their own privacy policies.',
+        ])) +
+      infoCard('Ads, analytics and cookies',
+        '<p>Pintu has no ads, no analytics and no tracking scripts, and it sets no cookies. Like any website, your hosting provider may keep standard server logs, such as IP addresses.</p>') +
+      infoCard('Deleting your data',
+        infoList([
+          '<b>A person:</b> tap × next to their name. Their starting point and food votes go with them.',
+          '<b>An expense:</b> open it and tap Delete.',
+          '<b>My trips:</b> Pintu has no button to clear this list yet. Clearing this site\'s data in your browser settings removes My trips, your name and everything else saved on this phone.',
+          '<b>A whole room:</b> there is no button to delete a room yet. Ask through the Contact page and we will remove it.',
+        ])) +
+      infoCard('What not to put in a room',
+        '<p>Rooms are for planning meetups and splitting bills. Don\'t add passwords, bank details, health information or anything you wouldn\'t share in a group chat.</p>') +
+      infoCard('Changes',
+        '<p>We may update this page. The date at the top shows the latest version.</p>') +
+      infoLinks());
+  }
+
+  function renderTerms() {
+    infoScreen('Terms', updatedLine() +
+      infoCard('Using Pintu',
+        '<p>Pintu is a free tool for finding a fair meetup spot, choosing food and splitting bills. By using it you agree to these terms. If you don\'t agree, please don\'t use it.</p>') +
+      infoCard('The service as it is',
+        '<p>Pintu is provided free of charge and "as is", without warranties of any kind. We may change, pause or stop it at any time. To the extent the law allows, we are not responsible for losses from using it, including missed trains, wrong information or disagreements about money.</p>') +
+      infoCard('Subway times are estimates',
+        '<p>Travel times are based on MTA schedules, not live service, and don\'t reflect delays, closures or planned work. Always check the MTA before you go.</p>') +
+      infoCard('Restaurant information',
+        '<p>Hours, cuisine and website details come from OpenStreetMap and NYC Open Data. They may be out of date or wrong, so check with the place before you go.</p>') +
+      infoCard('Money',
+        '<p>Ledger totals and who-pays-whom are there to help you add things up. People settle up with each other themselves. Pintu never holds, moves or handles money. A Venmo link only opens Venmo with the amount and note filled in, and you confirm the payment there.</p>') +
+      infoCard('Rooms and what you add',
+        '<p>Anyone with a room code can view and edit that room, so share codes only with people you\'re planning with. Don\'t put sensitive or illegal content in a room. You are responsible for what you add.</p>') +
+      infoCard('Not affiliated',
+        '<p>Pintu is not affiliated with, endorsed by or sponsored by the MTA, the City of New York, OpenStreetMap, OpenTable, Resy or Venmo. Their names appear only to describe links and data sources.</p>') +
+      infoCard('Data credits',
+        infoList([
+          'Subway schedules: MTA GTFS.',
+          '© OpenStreetMap contributors (ODbL).',
+          'Map tiles: © CARTO.',
+          'Restaurant inspection data: NYC DOHMH, via NYC Open Data.',
+        ])) +
+      infoCard('Changes',
+        '<p>We may update these terms. The date at the top shows the latest version.</p>') +
+      infoLinks());
+  }
+
+  // A usable address only: anything else counts as not set.
+  function contactEmail() {
+    var e = String(CFG.CONTACT_EMAIL || '').trim();
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e) ? e : '';
+  }
+  function renderContact() {
+    var addr = contactEmail();
+    var reach = addr
+      ? '<a class="btn btn-primary btn-lg btn-block" href="mailto:' + esc(addr) + '?subject=' + encodeURIComponent('Pintu NYC feedback') + '">Email us</a>' +
+        '<p class="caption info-address num">' + esc(addr) + '</p>'
+      : '<p class="info-soon">Contact details coming soon.</p>';
+    infoScreen('Contact',
+      infoCard('Get in touch',
+        '<p>Questions, bugs or ideas are all welcome.</p>' + reach) +
+      infoCard('What\'s helpful to include',
+        infoList([
+          'What you were doing, and what you expected to happen.',
+          'The room code, if the problem is with a room.',
+          'Your phone and browser, such as iPhone with Safari.',
+        ])) +
+      infoCard('Privacy and terms',
+        '<p>How Pintu handles your data, and the rules for using it.</p>' + infoLinks()));
   }
 
   // ------------------------------------------------------------ trips
@@ -405,24 +538,37 @@
   // ------------------------------------------------------------ 1 where everyone starts
   function whenLabel(t) {
     if (t.isNow) return 'now';
-    var hm = t.time.split(':'), h = +hm[0], ap = h >= 12 ? 'PM' : 'AM';
-    return DAY_NAMES[t.dow] + ' ' + ((h % 12) || 12) + ':' + hm[1] + ' ' + ap;
+    return DAY_NAMES[t.dow] + ' ' + clock(t.time);
+  }
+  // "Sat, Nov 14 · 8:00 PM" for the Leaving pill.
+  function fullWhen(t) {
+    var d = new Date(t.date + 'T00:00:00Z');
+    return DAY_NAMES[t.dow] + ', ' + MONTHS[d.getUTCMonth()] + ' ' + d.getUTCDate() + ' · ' + clock(t.time);
+  }
+  function clock(hhmm) {
+    var hm = hhmm.split(':'), h = +hm[0], ap = h >= 12 ? 'PM' : 'AM';
+    return ((h % 12) || 12) + ':' + hm[1] + ' ' + ap;
   }
   var DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
   function renderWhere() {
     var t = hangoutTime(), people = peopleList(), me = S.me;
-    var addingFriend = S.addingFriend;
+    var addingFriend = S.addingFriend, whenOpen = !!S.whenOpen;
     var html = '<main class="screen">' + topbar('Find the middle', '#/meet', roomHeaderRight()) +
       '<div class="content">' +
       '<section class="panel where-panel" aria-labelledby="whereTitle">' +
         '<div class="intro"><h2 class="screen-title" id="whereTitle">Where\'s everyone coming from?</h2>' +
         '<p>We\'ll find the subway stop where nobody\'s trip is long.</p></div>' +
-        '<div class="when-bar" role="group" aria-label="When are you leaving?">' +
+        '<div class="when-bar when-row" role="group" aria-label="When are you leaving?">' +
           '<span class="lead">' + icon('clock', 'sm') + 'Leaving</span>' +
           '<button type="button" class="chip" data-act="when-now" aria-pressed="' + t.isNow + '">Now</button>' +
-          '<input type="date" class="input when-input num" id="whenDate" value="' + esc(t.date) + '" aria-label="Date">' +
-          '<input type="time" class="input when-input num" id="whenTime" value="' + esc(t.time) + '" step="900" aria-label="Time">' +
+          '<button type="button" class="when-pill num" data-act="when-pick" aria-expanded="' + whenOpen + '" aria-controls="whenFields">' +
+            esc(t.isNow ? 'Pick a time' : fullWhen(t)) + '</button>' +
+          '<div class="when-fields" id="whenFields"' + (whenOpen ? '' : ' hidden') + '>' +
+            '<input type="date" class="input when-input num" id="whenDate" value="' + esc(t.date) + '" aria-label="Date">' +
+            '<input type="time" class="input when-input num" id="whenTime" value="' + esc(t.time) + '" step="900" aria-label="Time">' +
+          '</div>' +
           '<span class="caption grow" style="flex-basis:100%">' + (subway ? 'Using ' + esc(periodLabel(currentPeriod())) + ' subway service' : '') + '</span>' +
         '</div>' +
         '<div class="section-label" style="display:flex;align-items:center;gap:8px;color:var(--ink-soft)">' + icon('people', 'sm') + 'Starting points</div>' +
@@ -1348,7 +1494,11 @@
   // ------------------------------------------------------------ actions
   var ACTIONS = {
     'trip-filter': function (t) { S.tripFilter = t.dataset.f; renderTrips(); },
-    'when-now': function () { setWhen(null); },
+    'when-now': function () { S.whenOpen = false; setWhen(null); },
+    'when-pick': function () {
+      S.whenOpen = !S.whenOpen; render();
+      if (S.whenOpen) { var d = $('#whenDate'); if (d) d.focus(); }
+    },
     'add-friend': function () { S.addingFriend = true; render(); },
     'remove-person': async function (t) {
       var p = peopleList()[personIndex(t.dataset.id)];
@@ -1438,7 +1588,8 @@
     }
     if (e.target.id !== 'whenDate' && e.target.id !== 'whenTime') return;
     var d = $('#whenDate').value, tm = $('#whenTime').value;
-    if (d && tm) setWhen({ date: d, time: tm });
+    // Leave the field first so the change redraws now (the pill shows the new time at once).
+    if (d && tm) { e.target.blur(); setWhen({ date: d, time: tm }); }
   });
   $app.addEventListener('submit', function (e) {
     var f = e.target;

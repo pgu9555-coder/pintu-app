@@ -13,4 +13,7 @@
 window.PINTU_CONFIG = {
   SUPABASE_URL: 'https://dgsyrzbdwqtmhisdoiyf.supabase.co',
   SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRnc3lyemJkd3F0bWhpc2RvaXlmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg4MDE0MzUsImV4cCI6MjEwNDM3NzQzNX0.VtKvZtA7p8uLx14cxDEvOod32_IQ-OO-YxrZiT2VZaU',
+  // Address for the Contact page. Leave empty until a support inbox exists:
+  // the page then shows "Contact details coming soon" instead of an email button.
+  CONTACT_EMAIL: '',
 };

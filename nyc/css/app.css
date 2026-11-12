@@ -416,6 +416,7 @@ h1, h2, h3, p { margin: 0; }
 .member .who .s { font-size: 12px; color: var(--ink-soft); overflow-wrap: anywhere; }
 .member .who .s.wait { color: var(--gold); }
 .member .tick { color: var(--green-mid); flex: none; }
+.member .tick .icon { width: 18px; height: 18px; stroke-width: 2.6; }
 .match-banner { background: var(--green-tint); border-radius: var(--r-lg); padding: 12px 14px; display: flex; align-items: center; gap: 10px; font-size: 13.5px; }
 .match-banner a { margin-left: auto; font-size: 12.5px; font-weight: 700; flex: none; }
 .match-banner svg { color: var(--coral); flex: none; }
@@ -513,12 +514,12 @@ dialog h3 { font-size: 18px; color: var(--green); }
 .winner a { font-size: 12.5px; font-weight: 700; flex: none; }
 .people-card { padding: 14px 12px; border-radius: var(--r-lg); gap: 10px; }
 .people-card .head { display: flex; align-items: center; justify-content: space-between; }
-.people-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.people-chips { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
 .person-chip {
-  height: 32px; padding: 0 4px 0 12px; border-radius: 999px; background: var(--field); border: 1px solid var(--line);
-  font-size: 13px; display: inline-flex; align-items: center; gap: 4px; max-width: 100%;
+  height: 32px; padding: 0 2px 0 10px; border-radius: 999px; background: var(--field); border: 1px solid var(--line);
+  font-size: 13px; display: inline-flex; align-items: center; gap: 2px; max-width: 100%;
 }
-.person-chip button { width: 28px; height: 28px; border: 0; background: none; color: var(--ink-soft); cursor: pointer; border-radius: 50%; font-size: 16px; }
+.person-chip button { width: 22px; height: 22px; border: 0; background: none; color: var(--ink-soft); cursor: pointer; border-radius: 50%; font-size: 16px; }
 .person-chip button:hover { color: var(--coral); background: var(--line-soft); }
 .add-chip { height: 32px; padding: 0 12px; border-radius: 999px; border: 1px dashed var(--dash); background: none; color: var(--ink-soft); font-size: 13px; cursor: pointer; }
 .add-chip-form { display: flex; gap: 6px; align-items: center; }
@@ -532,6 +533,29 @@ dialog h3 { font-size: 18px; color: var(--green); }
 .trip-card .s { font-size: 12px; color: var(--ink-soft); overflow-wrap: anywhere; }
 .trip-empty { text-align: center; padding: 36px 12px; color: var(--ink-soft); font-size: 14px; display: flex; flex-direction: column; gap: 14px; align-items: center; }
 .trip-empty p { max-width: 30ch; }
+
+/* Leaving: one pill shows the time; tapping it reveals the date and time fields. */
+.when-bar.when-row { gap: 6px; }
+.when-pill {
+  height: 34px; min-height: 34px; padding: 0 10px; border: 1px solid var(--line); border-radius: 999px;
+  background: var(--card); font-size: 12.5px; color: var(--ink); cursor: pointer; white-space: nowrap;
+}
+.when-pill[aria-expanded="true"] { border-color: var(--green); }
+.when-fields { display: flex; flex-wrap: wrap; gap: 8px; flex-basis: 100%; }
+.when-fields .when-input { flex: 1 1 auto; }
+
+/* ---------- info pages: privacy, terms, contact ---------- */
+.info-page { gap: 12px; }
+.info-card { padding: 16px; gap: 10px; }
+.info-card p { font-size: 13.5px; line-height: 1.55; color: var(--ink); }
+.info-card .heading-md { color: var(--ink); }
+.info-list { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: 13.5px; line-height: 1.5; }
+.info-list li::marker { color: var(--ink-soft); }
+.info-updated { text-align: center; }
+.info-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.info-actions .btn { flex: 1 1 140px; }
+.info-address { overflow-wrap: anywhere; }
+.info-soon { font-size: 14px; color: var(--ink-soft); text-align: center; padding: 6px 0; }
 
 /* ---------- dialog: backup ---------- */
 .backup-note { font-size: 13px; color: var(--ink-soft); }

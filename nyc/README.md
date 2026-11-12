@@ -16,7 +16,7 @@ Plain HTML/CSS/JS — no build step. Open it from any static web server.
 | `js/split.js` | Bill math in integer cents: the per-stop split (`compute`) and the trip ledger's `settle()` (who pays whom, always adds up exactly) |
 | `js/places.js` | Free address search (Nominatim) and nearby places (Overpass), both OpenStreetMap |
 | `js/store.js` | Supabase real-time rooms, or local mode when no keys are set |
-| `js/config.js` | Your Supabase URL and anon key |
+| `js/config.js` | Your Supabase URL and anon key, and `CONTACT_EMAIL` for the Contact page |
 | `data/subway.json` | Station graph built from MTA schedules (57 KB) |
 | `data/venues.json` | Places to eat within ~10 min of each station (NYC DOHMH data) |
 | `scripts/build_venues.py` | Rebuilds `data/venues.json` from NYC Open Data |
@@ -31,7 +31,7 @@ Each screen is a hash route in `js/app.js`. Back chevrons go to the parent route
 
 | Route | Screen | What it does |
 |---|---|---|
-| `#/` | Home | Join a room by code (saves your name), quick tools, Backup & restore |
+| `#/` | Home | Join a room by code (saves your name), quick tools, Privacy / Terms / Contact links, Backup & restore |
 | `#/meet` | Find the middle | Create a meetup room, or join one by code |
 | `#/r/CODE` | Where everyone's coming from | Leaving now or a date and time; each person's starting point (search or Locate); add a friend |
 | `#/r/CODE/spots` | Meetup spots | Map and the top three stops ranked by the longest trip; Meet here, then Pick food |
@@ -41,6 +41,9 @@ Each screen is a hash route in `js/app.js`. Back chevrons go to the parent route
 | `#/r/CODE/ledger` | Trip ledger | People (names, Venmo handles), Expenses (add or edit, split among, optional NYC tax + tip), Settle up (balances, copy summary); Venmo links and Paid toggles |
 | `#/spin` | Who pays · Spinner | A wheel with one slice per person; local only, remembers its people |
 | `#/trips` | My trips | Rooms this browser has opened, This week / Earlier, Meetups and Ledgers filters, Live pill, and what you get or owe on each ledger |
+| `#/privacy` | Privacy | Plain-English: what a room stores and where, what stays on the phone, location, outside services, deleting data. Dated "Last updated" |
+| `#/terms` | Terms | Short terms: free as-is service, estimates not live service, restaurant data may be wrong, money is settled by people (Pintu never handles it), not affiliated with the MTA, NYC, OpenStreetMap, OpenTable, Resy or Venmo, data credits |
+| `#/contact` | Contact | "Email us" (`mailto:`, subject "Pintu NYC feedback") when `CONTACT_EMAIL` is set, otherwise "Contact details coming soon"; what to include; links to Privacy and Terms |
 
 Trips are saved on this phone (`localStorage`, key `pintu_trips_v1`). Backup & restore
 downloads that list as JSON and restores it, merging by room code. The rooms themselves
@@ -60,6 +63,10 @@ python3 -m http.server 8000
 
 With `js/config.js` empty it runs in **local mode**: rooms live in that one
 browser, and tabs of it sync live — fine for a demo.
+
+The Privacy and Terms pages hold the copy shown to users; keep them in step with
+what the code does (they are checked against it, not against the mockups). Set
+`CONTACT_EMAIL` in `js/config.js` to turn on the Contact page's email button.
 
 ## Turn on real-time rooms (Supabase)
 
