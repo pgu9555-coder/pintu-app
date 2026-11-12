@@ -5,6 +5,7 @@ create table if not exists public.rooms (
   code        text primary key check (code ~ '^[A-Z0-9]{6}$'),
   name        text not null check (char_length(name) between 1 and 60),
   meet        jsonb,          -- chosen meeting station
+  meet_time   jsonb,          -- {date, time} in NYC time; null = leaving now
   bill        jsonb,          -- shared bill for splitting
   created_at  timestamptz not null default now()
 );
@@ -17,6 +18,9 @@ create table if not exists public.people (
   venmo       text check (venmo is null or char_length(venmo) <= 40),
   created_at  timestamptz not null default now()
 );
+-- Upgrading an earlier install:
+alter table public.rooms add column if not exists meet_time jsonb;
+
 create index if not exists people_room_idx on public.people(room_code);
 
 create table if not exists public.votes (

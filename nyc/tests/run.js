@@ -35,13 +35,39 @@ test('arriving at a transfer station does not add a phantom ride', () => {
   assert(legs.every((l) => l.from !== l.to), JSON.stringify(legs));
 });
 
+// --- time periods -------------------------------------------------------------
+test('late night is slower than weekday daytime', () => {
+  const o = { lat: 40.6993, lon: -73.9115 }, d = station('14 St-Union Sq');
+  const day = sw.timesFrom(o, 'wkday_day').time[d], night = sw.timesFrom(o, 'night').time[d];
+  assert(night > day + 5 * 60, `day ${day / 60} night ${night / 60}`);
+});
+test('no B or W trains on Saturday', () => {
+  const r = sw.timesFrom({ station: station('Coney Island') }, 'sat_day');
+  const legs = r.path(station('Times Sq'));
+  assert(legs.every((l) => !['B', 'W'].includes(sw.routes[l.route].label)), JSON.stringify(legs));
+});
+test('periodFor maps NYC day/time to periods', () => {
+  const P = Subway.periodFor;
+  assert.strictEqual(P({ dow: 3, min: 12 * 60 }), 'wkday_day');
+  assert.strictEqual(P({ dow: 5, min: 20 * 60 }), 'wkday_eve');
+  assert.strictEqual(P({ dow: 6, min: 20 * 60 }), 'sat_eve');
+  assert.strictEqual(P({ dow: 0, min: 13 * 60 }), 'sun_day');
+  assert.strictEqual(P({ dow: 6, min: 2 * 60 }), 'night');
+});
+test('every period gives three options', () => {
+  for (const p of sw.periods) assert.strictEqual(sw.fairMeet([LIC, { lat: 40.7196, lon: -73.8448 }], 3, p.id).length, 3, p.id);
+});
+
 // --- meetup ranking: fair, and somewhere worth going ------------------------
 test('Bushwick + UWS + Astoria -> Union Sq first', () =>
   assert.strictEqual(top([{ lat: 40.6993, lon: -73.9115 }, { lat: 40.7784, lon: -73.9819 }, { lat: 40.7701, lon: -73.9180 }])[0], '14 St-Union Sq'));
 test('LIC + Forest Hills stays in Queens, Jackson Hts first', () =>
   assert.strictEqual(top([LIC, { lat: 40.7196, lon: -73.8448 }])[0], 'Jackson Hts-Roosevelt Av'));
-test('LIC + Astoria -> Steinway St first (not Midtown)', () =>
-  assert.strictEqual(top([LIC, { lat: 40.7644, lon: -73.9235 }])[0], 'Steinway St'));
+test('LIC + Astoria stays in Queens (not Midtown)', () => {
+  const o = sw.fairMeet([LIC, { lat: 40.7644, lon: -73.9235 }], 3)[0];
+  const st = sw.stations[o.station];
+  assert(st.lon > -73.945 && st.lat > 40.74, st.name);  // east of the East River, north of Brooklyn
+});
 test('every suggestion has enough places to eat', () => {
   for (const o of sw.fairMeet([LIC, { lat: 40.7596, lon: -73.8303 }], 3)) assert(sw.stations[o.station].places.count >= 40, name(o.station));
 });

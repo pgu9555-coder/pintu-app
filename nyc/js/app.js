@@ -74,6 +74,32 @@
     return null;
   }
 
+  // ------------------------------------------------------------ hangout time
+  // When the group plans to go, in New York time. room.meet_time is
+  // {date: 'YYYY-MM-DD', time: 'HH:MM'}, or null for "leaving now".
+  function nyNow() {
+    var parts = {};
+    new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(new Date())
+      .forEach(function (x) { parts[x.type] = x.value; });
+    return { date: parts.year + '-' + parts.month + '-' + parts.day, time: parts.hour + ':' + parts.minute };
+  }
+  /** {date, time, dow (0=Sun), min (minutes after midnight), isNow} */
+  function hangoutTime() {
+    var w = S.data && S.data.room.meet_time;
+    var isNow = !(w && w.date && w.time);
+    var base = isNow ? nyNow() : w;
+    var hm = base.time.split(':');
+    return { date: base.date, time: base.time, dow: new Date(base.date + 'T00:00:00Z').getUTCDay(),
+      min: (+hm[0]) * 60 + (+hm[1]), isNow: isNow };
+  }
+  function currentPeriod() { return window.PintuSubway.Subway.periodFor(hangoutTime()); }
+  function periodLabel(id) {
+    var p = subway.periods.find(function (x) { return x.id === id; });
+    return p ? p.label.toLowerCase() : '';
+  }
+  window.PintuApp = { hangoutTime: hangoutTime, partySize: function () { return peopleList().length || 2; } };
+
   // ------------------------------------------------------------ routing
   function route() {
     var m = location.hash.match(/^#\/r\/([A-Za-z0-9]{6})/);
@@ -211,8 +237,9 @@
     renderPeople();
     // Votes and bill edits don't change the meetup options; skip redrawing the map for them.
     var meet = S.data.room.meet;
-    var whereKey = JSON.stringify([peopleList().map(function (p) { return [p.id, p.name, p.origin]; }), meet && meet.station]);
-    if (whereKey !== S.whereKey || !$('#secWhere').innerHTML) { S.whereKey = whereKey; renderWhere(); }
+    var whereKey = JSON.stringify([peopleList().map(function (p) { return [p.id, p.name, p.origin]; }), meet && meet.station,
+      S.data.room.meet_time, currentPeriod()]);
+    if (whereKey !== S.whereKey || !$('#secWhere').innerHTML) { S.whereKey = whereKey; renderWhere(); bindWhen(); }
     renderSpot();
     renderSplit(fromRemote);
   }
@@ -390,11 +417,12 @@
   // ------------------------------------------------------------ 1 where
   function computeOptions() {
     var people = peopleList().filter(function (p) { return toSubwayOrigin(p.origin); });
-    var key = JSON.stringify(people.map(function (p) { return [p.id, p.origin]; }));
+    var period = currentPeriod();
+    var key = JSON.stringify([period, people.map(function (p) { return [p.id, p.origin]; })]);
     if (key !== S.optionsKey) {
       S.optionsKey = key;
       S.optionsPeople = people;
-      S.options = people.length >= 2 ? subway.fairMeet(people.map(function (p) { return toSubwayOrigin(p.origin); }), 3) : [];
+      S.options = people.length >= 2 ? subway.fairMeet(people.map(function (p) { return toSubwayOrigin(p.origin); }), 3, period) : [];
     }
     return { people: S.optionsPeople, options: S.options };
   }
@@ -403,7 +431,7 @@
   function evaluateStation(people, idx) {
     var times = [], paths = [];
     people.forEach(function (p) {
-      var r = subway.timesFrom(toSubwayOrigin(p.origin));
+      var r = subway.timesFrom(toSubwayOrigin(p.origin), currentPeriod());
       times.push(r.time[idx]); paths.push(r.path(idx));
     });
     return { station: idx, times: times, paths: paths, max: Math.max.apply(null, times),
@@ -420,10 +448,12 @@
     }
 
     var head = '<div class="band"><span class="step">1</span><h2>Where to meet</h2>' +
-      (people.length >= 2 ? '<span class="hint">' + (subway.hasPlaces ? 'fair, with lots to eat' : 'fairest first') + '</span>' : '') + '</div>';
+      (people.length >= 2 ? '<span class="hint">' + (subway.hasPlaces ? 'fair, with lots to eat' : 'fairest first') + '</span>' : '') + '</div>' +
+      whenHTML();
     if (people.length < 2) {
       if (S.map) { S.map.remove(); S.map = null; }
       sec.innerHTML = head + '<div class="card"><div class="empty">Add at least two starting points and Pintu will find the stop where nobody\'s trip is long.</div></div>';
+      sec.onclick = function (e) { if (e.target.closest('[data-when-now]')) setWhen(null); };
       return;
     }
 
@@ -454,6 +484,7 @@
     html += '</div><div class="small muted">Times include walking to the station and the usual wait for a train. Check live service before you go.</div>';
     sec.innerHTML = html;
     sec.onclick = async function (e) {
+      if (e.target.closest('[data-when-now]')) { setWhen(null); return; }
       var b = e.target.closest('button[data-meet]');
       if (!b) return;
       var st = subway.stations[+b.dataset.meet];
@@ -465,6 +496,31 @@
       } catch (err) { fail(err); b.disabled = false; }
     };
     drawMap(people, options, chosenIdx);
+  }
+
+  function whenHTML() {
+    var t = hangoutTime();
+    return '<div class="when" role="group" aria-label="When are you leaving?">' +
+      '<span class="label">Leaving</span>' +
+      '<button type="button" class="chip" data-when-now aria-pressed="' + t.isNow + '">Now</button>' +
+      '<input type="date" class="input when-input num" id="whenDate" value="' + esc(t.date) + '" aria-label="Date">' +
+      '<input type="time" class="input when-input num" id="whenTime" value="' + esc(t.time) + '" step="900" aria-label="Time">' +
+      '<span class="small muted when-note">Using ' + esc(periodLabel(currentPeriod())) + ' subway service</span></div>';
+  }
+
+  function setWhen(value) {
+    S.data.room.meet_time = value;  // optimistic
+    S.whereKey = null; renderAll();
+    store.updateRoom(S.code, { meet_time: value }).catch(fail);
+  }
+
+  function bindWhen() {
+    var sec = $('#secWhere');
+    sec.onchange = function (e) {
+      if (e.target.id !== 'whenDate' && e.target.id !== 'whenTime') return;
+      var d = $('#whenDate').value, t = $('#whenTime').value;
+      if (d && t) setWhen({ date: d, time: t });
+    };
   }
 
   function drawMap(people, options, chosenIdx) {

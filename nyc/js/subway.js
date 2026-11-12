@@ -56,43 +56,78 @@
       return { idx: i, id: s[0], name: s[1], lat: s[2], lon: s[3], routes: [] };
     });
     this.routes = data.routes.map(function (r, i) {
-      return { idx: i, id: r[0], label: r[1], color: '#' + r[2], text: '#' + r[3], wait: r[4] };
+      return { idx: i, id: r[0], label: r[1], color: '#' + r[2], text: '#' + r[3] };
     });
     this.validTo = data.validTo;
+    this.periods = data.periods.map(function (p) { return { id: p.id, label: p.label }; });
+    this.defaultPeriod = data.defaultPeriod || data.periods[0].id;
+    this._data = data;
+    this._graphs = {};
 
-    var NR = this.routes.length, self = this;
-    var stateOf = {}, states = [];  // state = station*NR + route
-    function state(s, r) {
-      var k = s * NR + r;
-      if (stateOf[k] === undefined) {
-        stateOf[k] = states.length;
-        states.push({ s: s, r: r, adj: [] });
-        self.stations[s].routes.push(r);
-      }
-      return stateOf[k];
-    }
-    // adj entries: [toState, cost, kind, walkSec]; kind RIDE or TRANSFER.
+    // Lines serving each station in any period (for display).
+    var self = this, seen = {};
     data.edges.forEach(function (e) {
-      var a = state(e[0], e[2]), b = state(e[1], e[2]);
-      states[a].adj.push([b, e[3], RIDE, 0]);
-    });
-    data.transfers.forEach(function (t) {
-      var from = self.stations[t[0]].routes, to = self.stations[t[1]].routes;
-      from.forEach(function (r1) {
-        to.forEach(function (r2) {
-          if (t[0] === t[1] && r1 === r2) return;
-          states[stateOf[t[0] * NR + r1]].adj.push(
-            [stateOf[t[1] * NR + r2], t[2] + self.routes[r2].wait, TRANSFER, t[2]]);
-        });
+      [e[0], e[1]].forEach(function (s) {
+        var k = s + ':' + e[2];
+        if (!seen[k]) { seen[k] = 1; self.stations[s].routes.push(e[2]); }
       });
     });
     this.stations.forEach(function (st) {
       st.routes.sort(function (x, y) { return self.routes[x].label < self.routes[y].label ? -1 : 1; });
     });
-    this._states = states;
-    this._stateOf = stateOf;
-    this._NR = NR;
   }
+
+  /** Period id for a moment in New York time ({dow: 0=Sun..6, min: minutes after midnight}). */
+  Subway.periodFor = function (when) {
+    var dow = when.dow, m = when.min;
+    if (m < 5 * 60) return 'night';
+    var evening = m >= 19 * 60;
+    if (dow === 6) return evening ? 'sat_eve' : 'sat_day';
+    if (dow === 0) return evening ? 'sun_eve' : 'sun_day';
+    return evening ? 'wkday_eve' : 'wkday_day';
+  };
+
+  /** Lines running at a station in a period. */
+  Subway.prototype.routesAt = function (stationIdx, period) {
+    return this._graph(period).stationRoutes[stationIdx] || [];
+  };
+
+  // Graph for one period, built on first use. State = (station, line).
+  Subway.prototype._graph = function (period) {
+    period = period || this.defaultPeriod;
+    if (this._graphs[period]) return this._graphs[period];
+    var data = this._data, self = this;
+    var p = data.periods.find(function (x) { return x.id === period; }) || data.periods[0];
+    var NR = this.routes.length, stateOf = {}, states = [], stationRoutes = [];
+    function state(s, r) {
+      var k = s * NR + r;
+      if (stateOf[k] === undefined) {
+        stateOf[k] = states.length;
+        states.push({ s: s, r: r, adj: [] });
+        (stationRoutes[s] = stationRoutes[s] || []).push(r);
+      }
+      return stateOf[k];
+    }
+    // adj entries: [toState, cost, kind, walkSec]; kind RIDE or TRANSFER.
+    data.edges.forEach(function (e, i) {
+      var sec = p.sec[i];
+      if (!sec || !p.wait[e[2]]) return;  // no service on this hop in this period
+      states[state(e[0], e[2])].adj.push([state(e[1], e[2]), sec, RIDE, 0]);
+    });
+    data.transfers.forEach(function (t) {
+      var from = stationRoutes[t[0]] || [], to = stationRoutes[t[1]] || [];
+      from.forEach(function (r1) {
+        to.forEach(function (r2) {
+          if (t[0] === t[1] && r1 === r2) return;
+          states[stateOf[t[0] * NR + r1]].adj.push(
+            [stateOf[t[1] * NR + r2], t[2] + p.wait[r2], TRANSFER, t[2]]);
+        });
+      });
+    });
+    var g = { id: p.id, wait: p.wait, states: states, stateOf: stateOf, stationRoutes: stationRoutes, NR: NR };
+    this._graphs[period] = g;
+    return g;
+  };
 
   /** Stations within walking range of a point, nearest first (at least 3). */
   Subway.prototype.nearbyStations = function (lat, lon) {
@@ -107,10 +142,11 @@
   /**
    * Door-to-station times for one person.
    * origin: {lat, lon} (an address) or {station: idx} (a chosen station).
+   * period: a period id (see Subway.periodFor); defaults to weekday daytime.
    * Returns {time: Float64Array per station (sec), path: function(stationIdx)}.
    */
-  Subway.prototype.timesFrom = function (origin) {
-    var states = this._states, NR = this._NR, self = this;
+  Subway.prototype.timesFrom = function (origin, period) {
+    var g = this._graph(period), states = g.states, NR = g.NR, self = this;
     var nS = this.stations.length;
     var dist = new Float64Array(states.length).fill(Infinity);
     var prev = new Int32Array(states.length).fill(-1);
@@ -126,9 +162,9 @@
       : this.nearbyStations(origin.lat, origin.lon);
     starts.forEach(function (st) {
       if (st.walk < time[st.station]) time[st.station] = st.walk;
-      self.stations[st.station].routes.forEach(function (r) {
-        var id = self._stateOf[st.station * NR + r];
-        var c = st.walk + self.routes[r].wait;  // walk in, then wait for the train
+      (g.stationRoutes[st.station] || []).forEach(function (r) {
+        var id = g.stateOf[st.station * NR + r];
+        var c = st.walk + g.wait[r];  // walk in, then wait for the train
         if (c < dist[id]) { dist[id] = c; via[id] = START; heap.push(c, id); }
       });
     });
@@ -203,7 +239,7 @@
 
   /**
    * Meeting stops for a group: fair first, then good for a hangout.
-   * people: [{lat, lon} | {station}], at least 2.
+   * people: [{lat, lon} | {station}], at least 2. period: optional period id.
    * Returns up to `limit` options in different neighborhoods:
    *   [{station, times: [sec per person], max, total, extra, paths: [legs per person]}]
    * `max` is the longest trip in the group; `extra` is how much longer that
@@ -220,10 +256,10 @@
   var BANDS_MIN = [5, 10, 15, 25];
   var MIN_APART_M = 900;
 
-  Subway.prototype.fairMeet = function (people, limit) {
+  Subway.prototype.fairMeet = function (people, limit, period) {
     limit = limit || 3;
     var self = this;
-    var results = people.map(function (p) { return self.timesFrom(p); });
+    var results = people.map(function (p) { return self.timesFrom(p, period); });
     var scored = this.stations.map(function (st) {
       var times = results.map(function (r) { return r.time[st.idx]; });
       var max = Math.max.apply(null, times), total = times.reduce(function (a, b) { return a + b; }, 0);

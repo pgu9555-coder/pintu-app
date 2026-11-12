@@ -147,6 +147,12 @@ a { color: var(--accent); }
 .icon-btn { border: 0; background: transparent; color: var(--muted); cursor: pointer; padding: 8px; border-radius: 8px; min-width: 36px; min-height: 36px; }
 .icon-btn:hover { background: var(--surface-2); color: var(--ink); }
 
+/* ---------- when ---------- */
+.when { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.when .label { margin-right: 2px; }
+.when-input { width: auto; min-height: 36px; padding: 6px 10px; }
+.when-note { flex-basis: 100%; }
+
 /* ---------- map + options ---------- */
 #map { height: 260px; border-radius: var(--radius); border: 1px solid var(--line); overflow: hidden; z-index: 0; }
 .map-pin {
