@@ -10,9 +10,10 @@ Plain HTML/CSS/JS — no build step. Open it from any static web server.
 
 | Path | What it is |
 |---|---|
-| `index.html`, `css/app.css`, `js/app.js` | The app |
+| `index.html`, `css/app.css`, `js/app.js` | The app (screens and routes below) |
+| `design/v1/*.html` | Approved screen mockups (390px) the app is built to match; see `design/v1/README.md` |
 | `js/subway.js` | Travel-time engine: walk + wait + ride + transfers, fairest-stop ranking |
-| `js/split.js` | Bill math in integer cents (always adds up exactly) |
+| `js/split.js` | Bill math in integer cents: the per-stop split (`compute`) and the trip ledger's `settle()` (who pays whom, always adds up exactly) |
 | `js/places.js` | Free address search (Nominatim) and nearby places (Overpass), both OpenStreetMap |
 | `js/store.js` | Supabase real-time rooms, or local mode when no keys are set |
 | `js/config.js` | Your Supabase URL and anon key |
@@ -23,6 +24,31 @@ Plain HTML/CSS/JS — no build step. Open it from any static web server.
 | `scripts/build_subway.py` | Rebuilds `data/subway.json` from the MTA GTFS feed |
 | `supabase/schema.sql` | Tables, access policies and realtime setup |
 | `vendor/` | Leaflet 1.9.4 and supabase-js 2.45.4 (so nothing loads from a CDN) |
+
+## Screens
+
+Each screen is a hash route in `js/app.js`. Back chevrons go to the parent route.
+
+| Route | Screen | What it does |
+|---|---|---|
+| `#/` | Home | Join a room by code (saves your name), quick tools, Backup & restore |
+| `#/meet` | Find the middle | Create a meetup room, or join one by code |
+| `#/r/CODE` | Where everyone's coming from | Leaving now or a date and time; each person's starting point (search or Locate); add a friend |
+| `#/r/CODE/spots` | Meetup spots | Map and the top three stops ranked by the longest trip; Meet here, then Pick food |
+| `#/r/CODE/food` | Food blind box | Swipe or tap on nearby places (pass, random pick, like); filters for open-then and top cuisines; group picks |
+| `#/r/CODE/room` | Room code | Copy invite link or Share; who has given a starting point; a match banner when everyone likes a place |
+| `#/ledger` | Start a trip ledger | Trip name and your name, then a new room |
+| `#/r/CODE/ledger` | Trip ledger | People (names, Venmo handles), Expenses (add or edit, split among, optional NYC tax + tip), Settle up (balances, copy summary); Venmo links and Paid toggles |
+| `#/spin` | Who pays · Spinner | A wheel with one slice per person; local only, remembers its people |
+| `#/trips` | My trips | Rooms this browser has opened, This week / Earlier, Meetups and Ledgers filters, Live pill, and what you get or owe on each ledger |
+
+Trips are saved on this phone (`localStorage`, key `pintu_trips_v1`). Backup & restore
+downloads that list as JSON and restores it, merging by room code. The rooms themselves
+live in Supabase when it is configured, or only in this browser in local mode.
+
+Ledger data lives in each room's `bill` column as
+`{kind: 'ledger', expenses: [{id, title, cents, payerId, among, taxTip, tipPct}], paid: {'fromId>toId': true}}`,
+so no tables or columns were added.
 
 ## Run it locally
 

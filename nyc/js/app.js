@@ -48,8 +48,6 @@
     heart: '<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/>',
     x: '<path d="M6 6l12 12M18 6L6 18"/>',
     dice: '<rect x="4" y="4" width="16" height="16" rx="3"/><circle cx="9" cy="9" r="1.2"/><circle cx="15" cy="15" r="1.2"/><circle cx="15" cy="9" r="1.2"/><circle cx="9" cy="15" r="1.2"/>',
-    plus: '<path d="M12 5v14M5 12h14"/>',
-    trash: '<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>',
     food: '<path d="M3 12h18a9 9 0 0 1-18 0z"/><path d="M8 8c0-2 1-3 2-3M12 8c0-2 1-3 2-3M16 8c0-2 1-3 2-3"/>',
   };
   function icon(name, cls) {
@@ -174,7 +172,7 @@
     if (r.name === 'trips') return renderTrips();
     if (r.name === 'meet') return renderMeet();
     if (r.name === 'ledger_new') return renderLedgerNew();
-    if (r.name === 'spin') return renderPlaceholder(r);
+    if (r.name === 'spin') return renderSpin();
     return routeRoom(r);
   }
 
@@ -303,9 +301,6 @@
     });
   }
 
-  function renderPlaceholder(r) {
-    show('<main class="screen">' + topbar('Pintu', '#/') + '<div class="content"><p class="muted">Rebuilding this screen.</p></div></main>');
-  }
 
   // ------------------------------------------------------------ meetup room: create / join
   function renderMeet() {
@@ -1168,6 +1163,188 @@
     toast('Sharing isn\'t available here — use Copy invite link.');
   }
 
+  // ------------------------------------------------------------ spinner (local only, no store)
+  var WHEEL_TINTS = ['#F4DED3', '#E5EEE7', '#DCE7EC', '#EADFC5', '#F2DDE4'];
+  var WHEEL_INKS = ['#C05B3C', '#20584D', '#3E6E8E', '#8F6418', '#A8506E'];
+  var SPIN_KEY = 'pintu_spin_people', DECIDE_KEY = 'pintu_spin_decision';
+
+  function spinState() {
+    if (!S.spin) {
+      var people = [];
+      try { people = JSON.parse(lsGet(SPIN_KEY) || 'null') || []; } catch (e) { people = []; }
+      S.spin = { people: Array.isArray(people) ? people : [], decision: lsGet(DECIDE_KEY) || 'Who covers dinner tonight',
+        angle: 0, busy: false, winner: null, adding: false, seeded: !!people.length };
+      if (!S.spin.people.length) seedSpinPeople();
+    }
+    return S.spin;
+  }
+  // First visit with nothing saved: start from the people in the most recent trip.
+  function seedSpinPeople() {
+    var last = loadTrips()[0];
+    if (!last) return;
+    store.load(last.code).then(function (d) {
+      if (!d || S.spin.seeded || S.spin.people.length) return;
+      S.spin.people = d.people.map(function (p) { return p.name; });
+      S.spin.seeded = true;
+      saveSpinPeople();
+      if (S.route === 'spin' && !S.spin.busy) renderSpin();
+    }).catch(function () {});
+  }
+  function saveSpinPeople() { lsSet(SPIN_KEY, JSON.stringify(S.spin.people)); }
+
+  function wheelSVG(names) {
+    var n = names.length, R = 142, C = 150, html = '';
+    if (n === 1) {
+      html = '<circle cx="150" cy="150" r="' + R + '" fill="' + WHEEL_TINTS[0] + '"/>';
+    } else {
+      var A = 360 / n;
+      for (var i = 0; i < n; i++) {
+        var a0 = i * A * Math.PI / 180, a1 = (i + 1) * A * Math.PI / 180;
+        var x0 = C + R * Math.sin(a0), y0 = C - R * Math.cos(a0), x1 = C + R * Math.sin(a1), y1 = C - R * Math.cos(a1);
+        html += '<path d="M150 150 L' + x0.toFixed(2) + ' ' + y0.toFixed(2) + ' A' + R + ' ' + R + ' 0 ' + (A > 180 ? 1 : 0) + ' 1 ' +
+          x1.toFixed(2) + ' ' + y1.toFixed(2) + ' Z" fill="' + WHEEL_TINTS[i % WHEEL_TINTS.length] + '" stroke="#FFFDF6" stroke-width="3"/>';
+      }
+      for (var j = 0; j < n; j++) {
+        var mid = (j + 0.5) * A * Math.PI / 180, rr = R * 0.66;
+        var size = n > 5 ? 13 : n > 3 ? 15 : 17;
+        html += '<text x="' + (C + rr * Math.sin(mid)).toFixed(1) + '" y="' + (C - rr * Math.cos(mid) + 6).toFixed(1) +
+          '" text-anchor="middle" font-size="' + size + '" font-weight="700" fill="' + WHEEL_INKS[j % WHEEL_INKS.length] + '">' + esc(names[j]) + '</text>';
+      }
+    }
+    html += '<circle cx="150" cy="150" r="' + (R + 4) + '" fill="none" stroke="#DED8C6" stroke-width="2"/>';
+    return '<svg viewBox="0 0 300 300" role="img" aria-label="Wheel with ' + esc(names.join(', ')) + '">' + html + '</svg>';
+  }
+
+  function renderSpin() {
+    var st = spinState(), names = st.people;
+    var winnerHTML = st.winner && !st.busy
+      ? '<div class="winner" role="status"><span class="avatar sm ' + SLOT[Math.max(0, names.indexOf(st.winner)) % 4] + '">' + initial(st.winner) + '</span>' +
+        '<span class="txt">' + decisionSentence(st.winner, st.decision) + '</span>' +
+        '<a href="#/ledger">Log it</a></div>'
+      : '';
+    var chips = names.map(function (n, i) {
+      return '<span class="person-chip">' + esc(n) + '<button type="button" data-act="spin-remove" data-i="' + i + '" aria-label="Remove ' + esc(n) + '">×</button></span>';
+    }).join('');
+    chips += st.adding
+      ? '<form class="add-chip-form" id="spinAddForm"><label style="display:block"><span class="sr">Name</span>' +
+        '<input class="input" name="name" maxlength="30" placeholder="Name" autocomplete="off" required></label>' +
+        '<button class="btn btn-sm btn-primary" type="submit">Add</button></form>'
+      : '<button class="add-chip" type="button" data-act="spin-add">+ Add</button>';
+    show('<main class="screen">' + topbar('Who pays · Spinner', '#/') +
+      '<div class="content">' +
+      '<label class="decide"><b>Decide:</b><span class="sr">What are we deciding</span>' +
+        '<input name="decide" maxlength="80" value="' + esc(st.decision) + '" autocomplete="off"></label>' +
+      '<div class="wheel-wrap">' +
+        '<span class="wheel-pointer" aria-hidden="true"><svg viewBox="0 0 20 22"><path d="M10 22L1 4a2 2 0 0 1 2-3h14a2 2 0 0 1 2 3z" fill="currentColor"/></svg></span>' +
+        '<div class="wheel" id="wheel" style="transform:rotate(' + st.angle + 'deg)">' + (names.length ? wheelSVG(names) : '') + '</div>' +
+        '<button class="spin-btn" type="button" data-act="spin" ' + (names.length < 2 || st.busy ? 'disabled' : '') + '>Spin</button>' +
+      '</div>' +
+      (names.length < 2 ? '<p class="caption" style="text-align:center">Add at least two people to spin.</p>' : '') +
+      winnerHTML +
+      '<section class="panel people-card" aria-labelledby="spinPeople">' +
+        '<div class="head"><h2 class="heading-sm" id="spinPeople">People</h2><span class="caption num">' + names.length + ' on the wheel</span></div>' +
+        '<div class="people-chips">' + chips + '</div>' +
+      '</section>' +
+      '</div></main>');
+  }
+  function decisionSentence(name, decision) {
+    var rest = (decision || '').replace(/^who\s+/i, '');
+    return rest !== (decision || '') ? '<b>' + esc(name) + '</b> ' + esc(rest) : '<b>' + esc(name) + '</b> — ' + esc(decision || '');
+  }
+
+  function spin() {
+    var st = S.spin;
+    if (!st || st.busy || st.people.length < 2) return;
+    var n = st.people.length, w = Math.floor(Math.random() * n);
+    var slice = 360 / n, centre = (w + 0.5) * slice;
+    var current = ((st.angle % 360) + 360) % 360;
+    // Turn the wheel so the winner's slice centre lands under the pointer (top), after several full turns.
+    var extra = ((360 - centre - current) % 360 + 360) % 360;
+    st.angle = st.angle + 360 * 5 + extra;
+    st.busy = true; st.winner = null;
+    var wheel = document.getElementById('wheel'), btn = $app.querySelector('.spin-btn');
+    if (btn) btn.disabled = true;
+    if (!wheel) return;
+    var still = reducedMotion();
+    if (!still) wheel.classList.add('spinning');
+    wheel.style.transform = 'rotate(' + st.angle + 'deg)';
+    setTimeout(function () {
+      if (!S.spin) return;
+      S.spin.busy = false; S.spin.winner = st.people[w];
+      if (S.route === 'spin') renderSpin();
+    }, still ? 0 : 3050);
+  }
+
+  function openBackup() {
+    var dlg = document.getElementById('backupDlg');
+    if (!dlg) {
+      dlg = document.createElement('dialog');
+      dlg.id = 'backupDlg';
+      dlg.setAttribute('aria-labelledby', 'backupTitle');
+      document.body.appendChild(dlg);
+      dlg.addEventListener('click', function (e) {
+        var t = e.target.closest('[data-act]');
+        if (!t) return;
+        if (t.dataset.act === 'close-dialog') dlg.close();
+        if (t.dataset.act === 'backup-download') downloadBackup();
+        if (t.dataset.act === 'backup-restore') dlg.querySelector('input[type=file]').click();
+      });
+      dlg.addEventListener('change', function (e) {
+        if (e.target.type === 'file' && e.target.files[0]) restoreFromFile(e.target.files[0], dlg);
+      });
+    }
+    var count = loadTrips().length;
+    dlg.innerHTML = '<div class="dlg">' +
+      '<h3 id="backupTitle">Backup &amp; restore</h3>' +
+      '<p class="backup-note">Your trips list lives on this phone. Download it as a file to keep a copy or move to another phone, then restore it there.</p>' +
+      '<p class="backup-note small">Rooms are kept on the server when real-time sharing is on. In local demo mode they exist only in this browser.</p>' +
+      '<p class="caption num">' + count + ' trip' + (count === 1 ? '' : 's') + ' saved on this phone.</p>' +
+      '<button class="btn btn-primary btn-block" type="button" data-act="backup-download">Download backup</button>' +
+      '<button class="btn btn-outline btn-block" type="button" data-act="backup-restore">Restore from file…</button>' +
+      '<input type="file" accept="application/json,.json" hidden>' +
+      '<div class="dlg-actions"><button class="btn" type="button" data-act="close-dialog">Done</button></div></div>';
+    dlg.showModal ? dlg.showModal() : dlg.setAttribute('open', '');
+  }
+
+  function downloadBackup() {
+    var body = JSON.stringify({ app: 'pintu-nyc', version: 1, saved: new Date().toISOString(), trips: loadTrips() }, null, 2);
+    var url = URL.createObjectURL(new Blob([body], { type: 'application/json' }));
+    var a = document.createElement('a');
+    a.href = url; a.download = 'pintu-trips-' + nyNow().date + '.json';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+    toast('Backup downloaded');
+  }
+
+  function restoreFromFile(file, dlg) {
+    var reader = new FileReader();
+    reader.onload = function () {
+      try {
+        var data = JSON.parse(reader.result), incoming = Array.isArray(data) ? data : (data && data.trips);
+        if (!Array.isArray(incoming)) throw new Error('not a Pintu backup');
+        var byCode = {};
+        loadTrips().forEach(function (t) { byCode[t.code] = t; });
+        var added = 0;
+        incoming.forEach(function (t) {
+          if (!t || typeof t.code !== 'string' || !/^[A-Z0-9]{6}$/.test(t.code)) return;
+          var cur = byCode[t.code], last = typeof t.lastOpened === 'number' ? t.lastOpened : 0;
+          if (!cur) added++;
+          if (!cur || last > (cur.lastOpened || 0)) {
+            byCode[t.code] = { code: t.code, name: String(t.name || 'Trip').slice(0, 60),
+              kind: t.kind === 'ledger' ? 'ledger' : 'meetup', lastOpened: last };
+          }
+        });
+        var list = Object.keys(byCode).map(function (k) { return byCode[k]; })
+          .sort(function (a, b) { return b.lastOpened - a.lastOpened; }).slice(0, 200);
+        saveTrips(list);
+        toast(added ? 'Restored ' + added + ' trip' + (added === 1 ? '' : 's') : 'Nothing new in that backup');
+        if (dlg) dlg.close();
+        if (S.route === 'trips') renderTrips();
+      } catch (err) { toast('That file isn\'t a Pintu backup.'); }
+    };
+    reader.readAsText(file);
+  }
+
   // ------------------------------------------------------------ actions
   var ACTIONS = {
     'trip-filter': function (t) { S.tripFilter = t.dataset.f; renderTrips(); },
@@ -1234,7 +1411,12 @@
       saveLedger({ expenses: L.expenses, paid: paid });
     },
     'copy-summary': function () { copySummary(); },
-    'backup': function () { if (window.PintuBackup) window.PintuBackup.open(); },
+    'backup': function () { openBackup(); },
+    'spin': function () { spin(); },
+    'spin-add': function () { S.spin.adding = true; renderSpin(); },
+    'spin-remove': function (t) {
+      S.spin.people.splice(+t.dataset.i, 1); saveSpinPeople(); renderSpin();
+    },
   };
   $app.addEventListener('click', function (e) {
     var t = e.target.closest('[data-act]');
@@ -1242,6 +1424,11 @@
     ACTIONS[t.dataset.act](t, e);
   });
   $app.addEventListener('change', function (e) {
+    if (e.target.name === 'decide' && S.spin) {
+      S.spin.decision = e.target.value.trim() || 'Who covers dinner tonight';
+      lsSet(DECIDE_KEY, S.spin.decision);
+      return;
+    }
     if (e.target.hasAttribute('data-venmo')) {
       var pid = e.target.getAttribute('data-venmo'), handle = e.target.value.trim().replace(/^@/, '') || null;
       var pp = peopleList()[personIndex(pid)];
@@ -1276,6 +1463,12 @@
       return;
     }
     if (f.id === 'ledgerNewForm') return createLedgerFromForm(f);
+    if (f.id === 'spinAddForm') {
+      var sn = f.name.value.trim();
+      if (!sn) return;
+      S.spin.people.push(sn.slice(0, 30)); S.spin.adding = false; saveSpinPeople(); renderSpin();
+      return;
+    }
     if (f.id === 'ledgerPersonForm') {
       var lname = f.name.value.trim();
       if (!lname) return;
