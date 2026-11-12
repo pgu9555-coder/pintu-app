@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pintu — the fair place to meet in NYC</title>
+<meta name="description" content="Find the subway stop that's fair for everyone, pick a spot together, and split the bill. Made for friend groups spread across New York.">
+<meta property="og:title" content="Pintu — the fair place to meet in NYC">
+<meta property="og:description" content="Drop where you're coming from. Pintu finds the stop where nobody's trip is long, then helps you pick a spot and split the bill.">
+<meta property="og:type" content="website">
+<meta name="theme-color" content="#111315">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%23111315'/%3E%3Ctext x='32' y='44' font-family='Helvetica,Arial' font-weight='700' font-size='34' text-anchor='middle' fill='white'%3EP%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="vendor/leaflet/leaflet.css">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div id="app" aria-live="polite">
+  <div class="boot">Loading the subway map…</div>
+</div>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script src="js/config.js"></script>
+<script src="vendor/leaflet/leaflet.js"></script>
+<script src="vendor/supabase.js"></script>
+<script src="js/subway.js"></script>
+<script src="js/split.js"></script>
+<script src="js/places.js"></script>
+<script src="js/store.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
