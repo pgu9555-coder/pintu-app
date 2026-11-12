@@ -128,7 +128,7 @@ Needs network access to data.cityofnewyork.us.
 
 - Subway schedules: MTA GTFS (public).
 - Restaurant counts: NYC DOHMH Restaurant Inspection Results (NYC Open Data).
-- Map tiles: © OpenStreetMap contributors © CARTO.
+- Map tiles: © OpenStreetMap contributors (tile.openstreetmap.org).
 - Addresses and places: OpenStreetMap via Nominatim and Overpass. Both are
   free, rate-limited public services; switch to a paid provider (or your own
   instance) before heavy traffic.

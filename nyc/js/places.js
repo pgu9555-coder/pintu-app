@@ -10,7 +10,14 @@
   // Bounding box around the five boroughs.
   var NYC_VIEWBOX = '-74.2591,40.9176,-73.7004,40.4774';
   var NOMINATIM = 'https://nominatim.openstreetmap.org/search';
-  var OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter'];
+  // Public Overpass mirrors, tried in order. Each gets a short time limit so a
+  // stalled server falls through to the next instead of spinning forever.
+  var OVERPASS = [
+    'https://overpass-api.de/api/interpreter',
+    'https://overpass.private.coffee/api/interpreter',
+    'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
+  ];
+  var OVERPASS_WAIT_MS = 8000;
   var cache = {};
 
   async function geocode(query) {
@@ -54,15 +61,21 @@
     var key = ['v', lat.toFixed(4), lon.toFixed(4), kind, radius].join(':');
     if (cache[key]) return cache[key];
     var amen = (KINDS[kind] || KINDS.food).join('|');
-    var q = '[out:json][timeout:20];nwr["amenity"~"^(' + amen + ')$"]["name"](around:' + (radius || 600) + ',' +
+    var q = '[out:json][timeout:8];nwr["amenity"~"^(' + amen + ')$"]["name"](around:' + (radius || 600) + ',' +
       lat + ',' + lon + ');out center tags 80;';
     var lastErr;
     for (var i = 0; i < OVERPASS.length; i++) {
       try {
-        var res = await fetch(OVERPASS[i], { method: 'POST', body: 'data=' + encodeURIComponent(q),
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        var data = await res.json();
+        var ctrl = root.AbortController ? new AbortController() : null;
+        var timer = ctrl && setTimeout(function () { ctrl.abort(); }, OVERPASS_WAIT_MS);
+        var data;
+        try {
+          var res = await fetch(OVERPASS[i], { method: 'POST', body: 'data=' + encodeURIComponent(q),
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, signal: ctrl && ctrl.signal });
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          data = await res.json();
+        } finally { if (timer) clearTimeout(timer); }
+        if (!data || !data.elements) throw new Error('bad response');
         var list = data.elements.map(function (el) {
           var t = el.tags || {}, vlat = el.lat || (el.center && el.center.lat), vlon = el.lon || (el.center && el.center.lon);
           return {
@@ -79,7 +92,7 @@
           .sort(function (a, b) { return a.meters - b.meters; });
         cache[key] = list;
         return list;
-      } catch (e) { lastErr = e; }
+      } catch (e) { lastErr = e.name === 'AbortError' ? new Error('timed out') : e; }
     }
     throw new Error('Couldn\'t load places nearby (' + (lastErr && lastErr.message) + '). Try again in a moment.');
   }

@@ -210,7 +210,7 @@
     var valid = subway && subway.validTo ? ' (schedules valid through ' +
       subway.validTo.replace(/(\d{4})(\d{2})(\d{2})/, '$2/$3/$1') + ')' : '';
     return '<footer class="footer-note">Subway times estimated from MTA schedules' + valid + ', not live service.<br>' +
-      'Map © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors © CARTO. ' +
+      'Map © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors. ' +
       'Places from OpenStreetMap; restaurant counts from NYC DOHMH inspection data.</footer>';
   }
   function show(html) {
@@ -317,7 +317,7 @@
         infoList([
           '<b>Address search:</b> the text you type goes to OpenStreetMap\'s Nominatim search service.',
           '<b>Nearby places:</b> after you pick a meeting stop, Pintu asks OpenStreetMap\'s Overpass service for places near that stop. It sends the stop\'s location, not yours.',
-          '<b>Map tiles:</b> from CARTO.',
+          '<b>Map tiles:</b> from OpenStreetMap\'s tile servers, which see which map area you view.',
           '<b>Font:</b> IBM Plex Sans, from Google Fonts.',
           '<b>Links:</b> OpenTable, Resy, Google Maps and Venmo open only when you tap them. Venmo links include the room name as the payment note. Those sites have their own privacy policies.',
         ])) +
@@ -357,7 +357,7 @@
         infoList([
           'Subway schedules: MTA GTFS.',
           '© OpenStreetMap contributors (ODbL).',
-          'Map tiles: © CARTO.',
+          'Map tiles: © OpenStreetMap contributors.',
           'Restaurant inspection data: NYC DOHMH, via NYC Open Data.',
         ])) +
       infoCard('Changes',
@@ -745,9 +745,10 @@
     var el = $('#map');
     if (!window.L || !el) return;
     var map = L.map(el, { zoomControl: false, attributionControl: true, scrollWheelZoom: false });
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-      maxZoom: 18, subdomains: 'abcd',
-      attribution: '© <a href="https://www.openstreetmap.org/copyright">OSM</a> © <a href="https://carto.com/">CARTO</a>',
+    // OpenStreetMap's own tiles (keyless; CARTO's basemaps now ask for an API key).
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     }).addTo(map);
     L.control.zoom({ position: 'bottomright' }).addTo(map);
     var pts = [];
