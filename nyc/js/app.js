@@ -866,12 +866,40 @@
     return v.website ? '<a href="' + esc(v.website) + '" target="_blank" rel="noopener">Website</a>' : '';
   }
 
-  function cuisineList(list) {
-    var count = {};
-    list.forEach(function (v) {
-      (v.cuisine || '').split(' · ').forEach(function (c) { if (c) count[c] = (count[c] || 0) + 1; });
+  // Food filter: 'all' (meals only: no cafés/dessert), 'g:<group>' or 's:<asian sub-group>',
+  // plus an independent "Open then" toggle (S.foodOpen) when places have hours.
+  function matchesFood(v, filter, t) {
+    var leaf = v.group || Places.groupOf(v.cuisine, v.kind), top = Places.topGroup(leaf);
+    if (S.foodOpen && isClosedAt(v, t)) return false;
+    if (filter.indexOf('g:') === 0) return top === filter.slice(2);
+    if (filter.indexOf('s:') === 0) return leaf === filter.slice(2);
+    return !Places.NOT_MEALS[top];
+  }
+  function foodFiltersHTML(list, filter) {
+    var chip = function (key, label, pressed, n) {
+      return '<button class="chip" type="button" data-act="food-filter" data-f="' + esc(key) + '" aria-pressed="' + pressed + '">' +
+        esc(label) + (n ? ' <span class="chip-n num">' + n + '</span>' : '') + '</button>';
+    };
+    var leafN = {}, topN = {};
+    (list || []).forEach(function (v) {
+      var leaf = v.group || Places.groupOf(v.cuisine, v.kind), top = Places.topGroup(leaf);
+      leafN[leaf] = (leafN[leaf] || 0) + 1; topN[top] = (topN[top] || 0) + 1;
     });
-    return Object.keys(count).sort(function (a, b) { return count[b] - count[a] || (a < b ? -1 : 1); }).slice(0, 3);
+    var inAsian = filter === 'g:asian' || (filter.indexOf('s:') === 0);
+    var row = chip('all', 'All', filter === 'all') +
+      ((list || []).some(function (v) { return v.hours; }) ? chip('open', 'Open then', !!S.foodOpen) : '') +
+      Places.GROUPS.filter(function (g) { return (topN[g.id] || 0) >= 3; }).map(function (g) {
+        return chip('g:' + g.id, g.label, filter === 'g:' + g.id || (g.id === 'asian' && inAsian), topN[g.id]);
+      }).join('');
+    var sub = '';
+    if (inAsian) {
+      var asian = Places.GROUPS[0];
+      sub = '<div class="filters sub" role="group" aria-label="Asian food">' + chip('g:asian', 'All Asian', filter === 'g:asian') +
+        asian.subs.filter(function (k) { return leafN[k]; }).map(function (k) {
+          return chip('s:' + k, Places.SUB_LABEL[k], filter === 's:' + k, leafN[k]);
+        }).join('') + '</div>';
+    }
+    return '<div class="filters" role="group" aria-label="Filter places">' + row + '</div>' + sub;
   }
 
   // One place for every vote: buttons, swipes and arrow keys. Optimistic, so the
@@ -961,12 +989,7 @@
     var myVotes = {};
     (S.data.votes || []).forEach(function (v) { if (v.person_id === S.me) myVotes[v.venue_id] = v.vote; });
     var filter = S.foodFilter || 'all';
-    var cuisines = list ? cuisineList(list) : [];
-    var chip = function (key, label) {
-      return '<button class="chip" type="button" data-act="food-filter" data-f="' + esc(key) + '" aria-pressed="' + (filter === key) + '">' + esc(label) + '</button>';
-    };
-    var filters = '<div class="filters" role="group" aria-label="Filter places">' + chip('all', 'All') + (list && list.some(function (v) { return v.hours; }) ? chip('open', 'Open then') : '') +
-      cuisines.map(function (c) { return chip('c:' + c, c); }).join('') + '</div>';
+    var filters = foodFiltersHTML(list, filter);
 
     var body = '';
     var seen = 0, card = '';
@@ -978,9 +1001,7 @@
       body = '<div class="panel"><div class="empty">Join the meetup to vote on places.</div><a class="btn btn-outline btn-block" href="#/r/' + esc(S.code) + '">Join the meetup</a></div>';
     } else {
       seen = list.filter(function (v) { return myVotes[v.id] !== undefined; }).length;
-      var queue = list.filter(function (v) { return myVotes[v.id] === undefined; });
-      if (filter === 'open') queue = queue.filter(function (v) { return !isClosedAt(v, t); });
-      else if (filter.indexOf('c:') === 0) queue = queue.filter(function (v) { return (v.cuisine || '').split(' · ').indexOf(filter.slice(2)) >= 0; });
+      var queue = list.filter(function (v) { return myVotes[v.id] === undefined && matchesFood(v, filter, t); });
       // Places that are closed at the planned time go to the back; the rest keep their order.
       queue = queue.filter(function (v) { return !isClosedAt(v, t); }).concat(queue.filter(function (v) { return isClosedAt(v, t); }));
       var picked = S.pickId && queue.find(function (v) { return v.id === S.pickId; });
@@ -1015,9 +1036,9 @@
           '</div>' +
           '<p class="footer-note" style="margin-top:0">In a room, a place everyone likes becomes a match.</p>';
       } else {
-        body = '<div class="panel"><div class="empty">' + (filter === 'all' ? 'You\'ve seen all ' + list.length + ' places within ' + S.venueRadius + ' m.' : 'No more places match this filter.') +
-          '</div>' + (S.venueRadius < 1000 ? '<button class="btn btn-outline btn-block" type="button" data-act="wider">Show places a bit farther away</button>' : '') +
-          (filter !== 'all' ? '<button class="btn btn-outline btn-block" type="button" data-act="food-filter" data-f="all">Show all places</button>' : '') + '</div>';
+        body = '<div class="panel"><div class="empty">' + (filter === 'all' && !S.foodOpen ? 'You\'ve seen all the places near ' + esc(meet.name) + '.' : 'No more places match this filter.') +
+          '</div>' + (S.venueRadius < 1000 && !(list[0] && list[0].src === 'nyc') ? '<button class="btn btn-outline btn-block" type="button" data-act="wider">Show places a bit farther away</button>' : '') +
+          (filter !== 'all' || S.foodOpen ? '<button class="btn btn-outline btn-block" type="button" data-act="food-filter" data-f="reset">Show all places</button>' : '') + '</div>';
       }
     }
 
@@ -1050,7 +1071,7 @@
     S.venueLoading = true;
     try {
       var list = await Places.venues(meet.lat, meet.lon, S.venueKind || 'food', S.venueRadius, meet.station);
-      S.venues[key] = list.slice(0, 40);
+      S.venues[key] = list;
       S.venueError = '';
     } catch (err) {
       S.venueError = err.message;
@@ -1579,13 +1600,20 @@
         toast('Meeting at ' + st.name);
       } catch (err) { fail(err); refresh(); }
     },
-    'food-filter': function (t) { S.foodFilter = t.dataset.f; S.pickId = null; render(); },
+    'food-filter': function (t) {
+      var f = t.dataset.f;
+      if (f === 'open') S.foodOpen = !S.foodOpen;
+      else if (f === 'reset') { S.foodFilter = 'all'; S.foodOpen = false; }
+      else S.foodFilter = f;
+      S.pickId = null; render();
+    },
     'retry': function () { S.venueError = ''; render(); },
     'wider': function () { S.venueRadius = 1000; render(); },
     'dice': function () {
       var list = S.venues[spotKey()] || [], mine = {};
       (S.data.votes || []).forEach(function (v) { if (v.person_id === S.me) mine[v.venue_id] = true; });
-      var pool = list.filter(function (v) { return !mine[v.id]; });
+      var t = hangoutTime(), f = S.foodFilter || 'all';
+      var pool = list.filter(function (v) { return !mine[v.id] && matchesFood(v, f, t); });
       if (!pool.length) return toast('No places left to pick from.');
       S.pickId = pool[Math.floor(Math.random() * pool.length)].id;
       render();

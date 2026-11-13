@@ -331,8 +331,13 @@ h1, h2, h3, p { margin: 0; }
 .disclaimer { font-size: 11.5px; color: var(--ink-soft); text-align: center; }
 
 /* ---------- food (blind box) ---------- */
-.filters { display: flex; flex-wrap: wrap; gap: 8px; }
-.filters .chip { height: 32px; }
+.filters { display: flex; flex-wrap: nowrap; gap: 8px; overflow-x: auto; scrollbar-width: none;
+  margin: 0 -16px; padding: 2px 16px; -webkit-overflow-scrolling: touch; }
+.filters::-webkit-scrollbar { display: none; }
+.filters .chip { height: 32px; flex: none; white-space: nowrap; }
+.filters.sub { margin-top: -4px; }
+.filters.sub .chip { height: 28px; font-size: 12px; }
+.chip-n { opacity: 0.6; font-weight: 500; margin-left: 2px; }
 .deck { position: relative; flex: 1; display: flex; flex-direction: column; }
 .stack-wrap { position: relative; padding-bottom: 18px; }
 .stack-back {

@@ -225,7 +225,7 @@ test('every stop has a places file with sane rows', () => {
     const f = path.join(__dirname, '../data/places', st[0] + '.json');
     assert(fs.existsSync(f), 'missing ' + f);
     const d = JSON.parse(fs.readFileSync(f, 'utf8'));
-    assert(Array.isArray(d.p) && d.p.length <= 80, st[0]);
+    assert(Array.isArray(d.p) && d.p.length <= 400, st[0]);
     if (!d.p.length) empty++;
     for (const r of d.p) {
       assert((r.length === 8 || r.length === 12) && r[1] && r[7] <= 600 && /^[ABC]?$/.test(r[4]), JSON.stringify(r));
@@ -238,6 +238,32 @@ test('Union Sq has plenty of sit-down places and no chain coffee', () => {
   const d = require('../data/places/635.json');
   assert(d.p.length >= 50, d.p.length);
   assert(!d.p.some((r) => /starbucks|dunkin/i.test(r[1])));
+});
+
+// --- food groups -------------------------------------------------------------
+test('every cuisine in the places data maps to a food group (or is meant to be "other")', () => {
+  const fs = require('fs'), vm = require('vm');
+  const ctx = { window: { PintuSubway: {} } }; ctx.window.window = ctx.window;
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../js/places.js'), 'utf8'), ctx.window);
+  const P = ctx.window.PintuPlaces;
+  const meantOther = new Set(['African', 'Ethiopian', 'Jewish/Kosher', 'Other', 'Fusion']);
+  const missing = new Set();
+  for (const f of fs.readdirSync(path.join(__dirname, '../data/places'))) {
+    for (const r of require('../data/places/' + f).p) if (P.groupOf(r[2]) === 'other' && !meantOther.has(r[2])) missing.add(r[2]);
+  }
+  assert(!missing.size, 'unmapped: ' + [...missing].join(', '));
+  assert.strictEqual(P.groupOf('Korean'), 'korean');
+  assert.strictEqual(P.topGroup(P.groupOf('Thai')), 'asian');
+  assert.strictEqual(P.groupOf('ramen;japanese'), 'japanese');
+  assert.strictEqual(P.groupOf('', 'ice_cream'), 'dessert');
+});
+test('build_places.py and places.js agree on the food groups', () => {
+  const fs = require('fs');
+  const py = fs.readFileSync(path.join(__dirname, '../scripts/build_places.py'), 'utf8');
+  const js = fs.readFileSync(path.join(__dirname, '../js/places.js'), 'utf8');
+  const grab = (src, start, end) => src.slice(src.indexOf(start), src.indexOf(end, src.indexOf(start)));
+  const names = (block) => (block.match(/["']([A-Z][^"']+)["']/g) || []).map((x) => x.slice(1, -1)).sort();
+  assert.deepStrictEqual(names(grab(js, 'var GROUP_CUISINES', '};')), names(grab(py, 'GROUPS = {', '\n}')));
 });
 
 console.log(failed ? `\n${failed} failed` : '\nall passed');

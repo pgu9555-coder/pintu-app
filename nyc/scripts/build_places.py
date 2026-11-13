@@ -13,7 +13,7 @@ Usage:
 
 Each file: {"s": "<station id>", "g": "YYYY-MM-DD",
             "p": [[camis, name, cuisine, address, grade, lat, lon, meters], ...]}
-nearest first, at most MAX_PER_STOP places within RADIUS_M.
+nearest first: up to PER_GROUP places of each food group within RADIUS_M.
 Only the Python standard library is needed.
 """
 import datetime
@@ -30,14 +30,36 @@ from collections import defaultdict
 
 DATASET = "https://data.cityofnewyork.us/resource/43nn-pn8j.json"
 RADIUS_M = 600
-MAX_PER_STOP = 80
+PER_GROUP = 20          # nearest places kept per stop for each food group
 SINCE_YEARS = 2
 PAGE = 50000
-# The swipe deck is for sitting down together, so skip drink/snack counters,
-# big fast-food chains and venues whose kitchen isn't the point.
-SKIP_CUISINES = {"Bottled Beverages", "Not Listed/Not Applicable", "", "Coffee/Tea",
-                 "Juice, Smoothies, Fruit Salads", "Donuts", "Frozen Desserts", "Nuts/Confectionary",
-                 "Hotdogs/Pretzels", "Fruits/Vegetables"}
+SKIP_CUISINES = {"Bottled Beverages", "Not Listed/Not Applicable", "", "Fruits/Vegetables"}
+
+# DOHMH cuisine -> food group shown as a filter in the app. Keep in sync with
+# GROUP_OF in js/places.js (tests check both cover every cuisine in the data).
+GROUPS = {
+    "chinese": ["Chinese", "Chinese/Cuban"],
+    "japanese": ["Japanese", "Chinese/Japanese"],
+    "korean": ["Korean"],
+    "sea": ["Thai", "Southeast Asian", "Filipino", "Indonesian"],
+    "asianfusion": ["Asian/Asian Fusion"],
+    "pizza": ["Pizza", "Italian"],
+    "american": ["American", "New American", "Hamburgers", "Chicken", "Barbecue", "Steakhouse", "Soul Food",
+                 "Hotdogs", "Hotdogs/Pretzels", "Californian", "Southwestern", "Cajun", "Creole", "Creole/Cajun"],
+    "latin": ["Mexican", "Tex-Mex", "Latin American", "Caribbean", "Peruvian", "Brazilian", "Spanish", "Chilean",
+              "Chimichurri"],
+    "mideast": ["Middle Eastern", "Mediterranean", "Greek", "Turkish", "Lebanese", "Moroccan", "Egyptian", "Iranian",
+                "Afghan", "Armenian"],
+    "indian": ["Indian", "Bangladeshi", "Pakistani"],
+    "european": ["French", "New French", "Tapas", "Basque", "Irish", "German", "Eastern European", "Russian", "Polish",
+                 "Czech", "Portuguese", "English", "Scandinavian", "Continental", "Haute Cuisine", "Australian"],
+    "seafood": ["Seafood"],
+    "healthy": ["Salads", "Vegan", "Vegetarian", "Hawaiian", "Polynesian", "Juice, Smoothies, Fruit Salads",
+                "Soups/Salads/Sandwiches", "Sandwiches/Salads/Mixed Buffet", "Soups"],
+    "cafe": ["Coffee/Tea", "Bagels/Pretzels", "Sandwiches", "Pancakes/Waffles"],
+    "dessert": ["Bakery Products/Desserts", "Frozen Desserts", "Donuts", "Nuts/Confectionary"],
+}
+GROUP_OF = {c: g for g, cs in GROUPS.items() for c in cs}  # anything else -> "other"
 SKIP_NAME = re.compile(r"\b(starbucks|dunkin|mcdonald|subway|burger king|wendy'?s|popeyes|kfc|kentucky fried|"
                        r"domino'?s|papa john|pizza hut|taco bell|white castle|7-eleven|duane reade|cvs|"
                        r"theat(er|re)|cinema|stadium|regal|amc|hospital|school|university|college|"
@@ -153,9 +175,18 @@ def main(argv):
                     if m <= RADIUS_M:
                         near.append(p + [round(m)])
         near.sort(key=lambda p: p[7])
+        # Keep the nearest few of every food group, so picking a filter like
+        # Korean or Dessert still gives a full deck at a busy stop.
+        kept, per = [], {}
+        for p in near:
+            g = GROUP_OF.get(p[2], "other")
+            if per.get(g, 0) < (PER_GROUP if g != "other" else PER_GROUP // 2):
+                per[g] = per.get(g, 0) + 1
+                kept.append(p)
+        near = kept
         path = os.path.join(out_dir, f"{sid}.json")
         with open(path, "w", encoding="utf-8") as f:
-            json.dump({"s": sid, "g": today, "p": near[:MAX_PER_STOP]}, f, separators=(",", ":"), ensure_ascii=False)
+            json.dump({"s": sid, "g": today, "p": near}, f, separators=(",", ":"), ensure_ascii=False)
         sizes.append(len(near))
     sizes.sort()
     print(f"places={len(places)} stops={len(sizes)} median_nearby={sizes[len(sizes)//2]} -> {out_dir}")
