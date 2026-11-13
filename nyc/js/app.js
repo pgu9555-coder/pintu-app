@@ -1060,6 +1060,11 @@
     var keepFocus = $app.querySelector('.venue-card') && document.activeElement && document.activeElement.classList.contains('venue-card');
     show('<main class="screen">' + head + '<div class="content">' + filters + body +
       '<h3 class="section-label" style="margin-top:6px">Group picks</h3>' + picksHTML + '</div></main>');
+    // Redraws reset the scrollable chip rows; bring the selected chip back into view.
+    $app.querySelectorAll('.filters').forEach(function (row) {
+      var on = row.querySelector('[aria-pressed="true"]');
+      if (on && on.offsetLeft + on.offsetWidth > row.clientWidth) row.scrollLeft = on.offsetLeft - 16;
+    });
     var count = $('#foodCount');
     if (count && list && S.me) count.textContent = (seen + 1 > list.length ? list.length : seen + 1) + ' / ' + list.length;
     if (keepFocus) { var c = $app.querySelector('.venue-card'); if (c) c.focus({ preventScroll: true }); }
