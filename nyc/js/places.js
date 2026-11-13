@@ -63,7 +63,8 @@
   async function stopPlaces(stationId) {
     var key = 's:' + stationId;
     if (cache[key]) return cache[key];
-    var res = await fetch('data/places/' + encodeURIComponent(stationId) + '.json');
+    // ?v= skips copies phones cached under the old one-day cache rule.
+    var res = await fetch('data/places/' + encodeURIComponent(stationId) + '.json?v=3');
     if (!res.ok) throw new Error('HTTP ' + res.status);
     var d = await res.json();
     var list = (d.p || []).map(function (r) {
