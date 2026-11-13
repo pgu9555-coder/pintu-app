@@ -365,6 +365,9 @@ h1, h2, h3, p { margin: 0; }
 .venue-photo { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
 .venue-art.has-photo .art-word { visibility: hidden; }
 .venue-art .pill-tr, .venue-art .pill-tl { z-index: 1; }
+.photo-credit { position: absolute; left: 8px; bottom: 6px; z-index: 1; max-width: calc(100% - 16px); overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; font-size: 10.5px; color: #fff; background: rgba(0, 0, 0, 0.45);
+  padding: 2px 7px; border-radius: 6px; }
 .venue-art .pill-tr, .venue-art .pill-tl {
   position: absolute; top: 12px; height: 26px; padding: 0 10px; font-size: 12px; font-weight: 700; border-radius: 999px;
   display: inline-flex; align-items: center; white-space: nowrap; max-width: 60%;

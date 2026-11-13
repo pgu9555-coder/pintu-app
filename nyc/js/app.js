@@ -319,7 +319,7 @@
           '<b>Nearby places:</b> come from NYC health inspection data, with hours and websites from OpenStreetMap, built into Pintu, so nothing is sent. Only if that is missing for a stop does Pintu ask OpenStreetMap\'s Overpass service, sending the stop\'s location, not yours.',
           '<b>Map tiles:</b> from OpenStreetMap\'s tile servers, or Esri\'s if OpenStreetMap can\'t be reached. They see which map area you view.',
           '<b>Font:</b> IBM Plex Sans, from Google Fonts.',
-          '<b>Place photos:</b> some cards show the photo a restaurant publishes on its own website. Your phone loads it from that website, which can see your IP address.',
+          '<b>Place photos:</b> some cards show the photo a restaurant publishes on its own website; others show a photo from Google Maps, looked up by Pintu\'s server from the place\'s name and location (nothing about you is sent). Your phone loads the picture from that website or from Google, which can see your IP address.',
           '<b>Links:</b> booking sites, restaurant websites, Google Maps and Venmo open only when you tap them. Venmo links include the room name as the payment note. Those sites have their own privacy policies.',
         ])) +
       infoCard('Ads, analytics and cookies',
@@ -534,7 +534,12 @@
   $app.addEventListener('error', function (e) {
     var img = e.target;
     if (img && img.classList && img.classList.contains('venue-photo')) {
-      if (img.parentNode) img.parentNode.classList.remove('has-photo');
+      var art = img.parentNode;
+      if (art) {
+        art.classList.remove('has-photo');
+        var credit = art.querySelector('.photo-credit');
+        if (credit) credit.remove();
+      }
       img.remove();
     }
   }, true);
@@ -850,9 +855,41 @@
     var h = 0;
     for (var i = 0; i < label.length; i++) h = (h * 31 + label.charCodeAt(i)) >>> 0;
     var tint = ART_TINTS[h % ART_TINTS.length];
-    return '<div class="venue-art tint-' + tint + (v.image ? ' has-photo' : '') + '">' +
+    var g = !v.image && S.gphoto ? S.gphoto[v.id] : null;
+    var img = v.image || (g && g.uri) || '';
+    return '<div class="venue-art tint-' + tint + (img ? ' has-photo' : '') + '"' +
+      (!v.image && !g && v.lat ? ' data-gphoto="' + esc(v.id) + '"' : '') + '>' +
       '<span class="art-word" aria-hidden="true">' + esc(label) + '</span>' +
-      (v.image ? '<img class="venue-photo" src="' + esc(v.image) + '" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer">' : '');
+      (img ? '<img class="venue-photo" src="' + esc(img) + '" alt="" decoding="async" referrerpolicy="no-referrer">' : '') +
+      (g && g.uri ? '<span class="photo-credit">' + (g.author ? esc(g.author) + ' · ' : '') + 'Google Maps</span>' : '');
+  }
+
+  // Cards without their own photo ask our server (/api/photo, Google Places)
+  // for one, only when the card is on top. Each photo costs a little, so each
+  // place is asked once per visit and a visit asks at most 60 times.
+  var gphotoAsked = 0;
+  function fillGooglePhotos() {
+    var art = $app.querySelector('.venue-card .venue-art[data-gphoto]');
+    if (!art || gphotoAsked >= 60) return;
+    var id = art.getAttribute('data-gphoto');
+    S.gphoto = S.gphoto || {};
+    if (S.gphoto[id]) return;
+    var list = S.venues[spotKey()] || [], v = list.find(function (x) { return x.id === id; });
+    if (!v) return;
+    S.gphoto[id] = { pending: true };
+    gphotoAsked++;
+    fetch('api/photo?name=' + encodeURIComponent(v.name) + '&lat=' + v.lat + '&lon=' + v.lon)
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .catch(function () { return null; })
+      .then(function (d) {
+        S.gphoto[id] = d && d.uri ? d : { none: true };
+        var still = $app.querySelector('.venue-art[data-gphoto="' + id + '"]');
+        if (!still || !d || !d.uri) return;
+        still.removeAttribute('data-gphoto');
+        still.classList.add('has-photo');
+        still.insertAdjacentHTML('beforeend', '<img class="venue-photo" src="' + esc(d.uri) + '" alt="" decoding="async" referrerpolicy="no-referrer">' +
+          '<span class="photo-credit">' + (d.author ? esc(d.author) + ' · ' : '') + 'Google Maps</span>');
+      });
   }
   function venueSiteLinks(v) {
     if (v.book) {
@@ -1060,6 +1097,7 @@
     var keepFocus = $app.querySelector('.venue-card') && document.activeElement && document.activeElement.classList.contains('venue-card');
     show('<main class="screen">' + head + '<div class="content">' + filters + body +
       '<h3 class="section-label" style="margin-top:6px">Group picks</h3>' + picksHTML + '</div></main>');
+    fillGooglePhotos();
     // Redraws reset the scrollable chip rows; bring the selected chip back into view.
     $app.querySelectorAll('.filters').forEach(function (row) {
       var on = row.querySelector('[aria-pressed="true"]');
