@@ -885,17 +885,19 @@
       var leaf = v.group || Places.groupOf(v.cuisine, v.kind), top = Places.topGroup(leaf);
       leafN[leaf] = (leafN[leaf] || 0) + 1; topN[top] = (topN[top] || 0) + 1;
     });
-    var inAsian = filter === 'g:asian' || (filter.indexOf('s:') === 0);
+    // Which top group is open: 'g:asian' itself, or the parent of 's:korean'.
+    var openTop = filter.indexOf('g:') === 0 ? filter.slice(2) : filter.indexOf('s:') === 0 ? Places.topGroup(filter.slice(2)) : '';
     var row = chip('all', 'All', filter === 'all') +
       ((list || []).some(function (v) { return v.hours; }) ? chip('open', 'Open then', !!S.foodOpen) : '') +
       Places.GROUPS.filter(function (g) { return (topN[g.id] || 0) >= 3; }).map(function (g) {
-        return chip('g:' + g.id, g.label, filter === 'g:' + g.id || (g.id === 'asian' && inAsian), topN[g.id]);
+        return chip('g:' + g.id, g.label, openTop === g.id, topN[g.id]);
       }).join('');
     var sub = '';
-    if (inAsian) {
-      var asian = Places.GROUPS[0];
-      sub = '<div class="filters sub" role="group" aria-label="Asian food">' + chip('g:asian', 'All Asian', filter === 'g:asian') +
-        asian.subs.filter(function (k) { return leafN[k]; }).map(function (k) {
+    var group = Places.GROUPS.filter(function (g) { return g.id === openTop && g.subs; })[0];
+    if (group) {
+      sub = '<div class="filters sub" role="group" aria-label="' + esc(group.label) + '">' +
+        chip('g:' + group.id, 'All ' + group.label, filter === 'g:' + group.id) +
+        group.subs.filter(function (k) { return leafN[k]; }).map(function (k) {
           return chip('s:' + k, Places.SUB_LABEL[k], filter === 's:' + k, leafN[k]);
         }).join('') + '</div>';
     }
@@ -1020,7 +1022,8 @@
             '<div><div class="eyebrow-c">' + esc(v.cuisine || labelFor(v.kind)) + '</div>' +
             '<h2>' + esc(v.name) + '</h2>' +
             '<div class="sub">' + esc(v.address || labelFor(v.kind)) + ' · near ' + esc(meet.name) + (liked ? ' · ' + liked + ' liked it' : '') + '</div></div>' +
-            '<div class="venue-tags">' + (v.grade ? '<span style="background:var(--gold-tint);color:var(--gold-ink, #7A5A1C)">Grade ' + esc(v.grade) + '</span>' : '') +
+            '<div class="venue-tags">' + (v.adults ? '<span style="background:var(--pink-tint);color:var(--pink)">21+</span>' : '') +
+              (v.grade ? '<span style="background:var(--gold-tint);color:var(--gold-ink, #7A5A1C)">Grade ' + esc(v.grade) + '</span>' : '') +
               (reserve && v.src !== 'nyc' ? '<span style="background:var(--blue-tint);color:var(--blue)">Takes reservations</span>' : '') +
               (v.website && v.src !== 'nyc' ? '<span style="background:var(--line-soft);color:var(--ink-soft)">Has a website</span>' : '') + '</div>' +
             '<div class="venue-links">' +

@@ -266,5 +266,17 @@ test('build_places.py and places.js agree on the food groups', () => {
   assert.deepStrictEqual(names(grab(js, 'var GROUP_CUISINES', '};')), names(grab(py, 'GROUPS = {', '\n}')));
 });
 
+test('night-out files, when built, have sane rows', () => {
+  const fs = require('fs'), dir = path.join(__dirname, '../data/fun');
+  if (!fs.existsSync(dir)) return;
+  const types = new Set(['Bar', 'Karaoke', 'Bowling', 'Billiards', 'Arcade', 'Escape room', 'Mini golf', 'Comedy', 'Live music', 'Cinema', 'Club']);
+  for (const f of fs.readdirSync(dir)) {
+    for (const r of require(path.join(dir, f)).p) {
+      assert(r.length === 12 && r[1] && types.has(r[2]) && r[7] <= 800, JSON.stringify(r));
+      assert(r[10] === '' || /^https:\/\//.test(r[10]));
+    }
+  }
+});
+
 console.log(failed ? `\n${failed} failed` : '\nall passed');
 process.exit(failed ? 1 : 0);

@@ -64,9 +64,24 @@
     var key = 's:' + stationId;
     if (cache[key]) return cache[key];
     // ?v= skips copies phones cached under the old one-day cache rule.
-    var res = await fetch('data/places/' + encodeURIComponent(stationId) + '.json?v=3');
+    var id = encodeURIComponent(stationId);
+    var both = await Promise.all([
+      fetch('data/places/' + id + '.json?v=3'),
+      fetch('data/fun/' + id + '.json?v=1').catch(function () { return null; }),
+    ]);
+    var res = both[0];
     if (!res.ok) throw new Error('HTTP ' + res.status);
     var d = await res.json();
+    var fun = [];
+    if (both[1] && both[1].ok) {
+      try {
+        fun = ((await both[1].json()).p || []).map(function (r) {
+          return { id: 'f' + r[0], name: r[1], kind: 'fun', cuisine: r[2], address: r[3], grade: '',
+            lat: r[5], lon: r[6], meters: r[7], src: 'nyc', hours: r[8] || '', website: r[9] || '', image: r[10] || '',
+            book: r[11] || '', group: FUN_LEAF[r[2]] || 'bar', adults: !!ADULTS_ONLY[r[2]] };
+        });
+      } catch (e) { fun = []; }
+    }
     var list = (d.p || []).map(function (r) {
       return { id: 'n' + r[0], name: r[1], kind: 'restaurant', cuisine: r[2], address: r[3], grade: r[4],
         lat: r[5], lon: r[6], meters: r[7], src: 'nyc',
@@ -75,6 +90,7 @@
     });
     // Places with a photo, then with hours, come first so the deck opens on
     // the richest cards; distance order is kept within each group.
+    list = list.concat(fun);
     var rank = function (v) { return v.image ? 0 : v.hours ? 1 : 2; };
     list = list.map(function (v, i) { return [v, i]; })
       .sort(function (a, b) { return rank(a[0]) - rank(b[0]) || a[1] - b[1]; })
@@ -142,9 +158,17 @@
     { id: 'mideast', label: 'Middle Eastern' }, { id: 'indian', label: 'Indian' }, { id: 'european', label: 'European' },
     { id: 'seafood', label: 'Seafood' }, { id: 'healthy', label: 'Healthy & Veggie' },
     { id: 'cafe', label: 'Café & Brunch' }, { id: 'dessert', label: 'Dessert' },
+    { id: 'fun', label: 'Night out', subs: ['bar', 'karaoke', 'games', 'shows', 'club'] },
   ];
-  var SUB_LABEL = { chinese: 'Chinese', japanese: 'Japanese', korean: 'Korean', sea: 'Thai & SE Asian', asianfusion: 'Asian Fusion' };
-  var NOT_MEALS = { cafe: true, dessert: true };   // only shown when picked
+  var SUB_LABEL = { chinese: 'Chinese', japanese: 'Japanese', korean: 'Korean', sea: 'Thai & SE Asian', asianfusion: 'Asian Fusion',
+    bar: 'Bars', karaoke: 'Karaoke', games: 'Games', shows: 'Shows & music', club: 'Clubs' };
+  var PARENT = {};
+  GROUPS.forEach(function (g) { (g.subs || []).forEach(function (k) { PARENT[k] = g.id; }); });
+  var NOT_MEALS = { cafe: true, dessert: true, fun: true };   // only shown when picked
+  // Activity types written by scripts/build_fun.py -> Night out sub-group.
+  var FUN_LEAF = { 'Bar': 'bar', 'Karaoke': 'karaoke', 'Bowling': 'games', 'Billiards': 'games', 'Arcade': 'games',
+    'Escape room': 'games', 'Mini golf': 'games', 'Comedy': 'shows', 'Live music': 'shows', 'Cinema': 'shows', 'Club': 'club' };
+  var ADULTS_ONLY = { 'Bar': true, 'Club': true };
   var GROUP_CUISINES = {
     chinese: ['Chinese', 'Chinese/Cuban'], japanese: ['Japanese', 'Chinese/Japanese'], korean: ['Korean'],
     sea: ['Thai', 'Southeast Asian', 'Filipino', 'Indonesian'], asianfusion: ['Asian/Asian Fusion'],
@@ -181,7 +205,7 @@
     for (var i = 0; i < KEYWORDS.length; i++) if (KEYWORDS[i][0].test(cuisine || '')) return KEYWORDS[i][1];
     return 'other';
   }
-  function topGroup(leaf) { return SUB_LABEL[leaf] ? 'asian' : leaf; }
+  function topGroup(leaf) { return PARENT[leaf] || leaf; }
 
   function googleMapsLink(v) {
     return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(v.address ? v.name + ', ' + v.address + ', New York' : v.name + ' ' + v.lat + ',' + v.lon);
