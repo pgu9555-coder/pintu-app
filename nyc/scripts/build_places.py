@@ -103,7 +103,7 @@ def title(s):
         elif re.fullmatch(r"\d+(st|nd|rd|th)", w):
             words.append(w)
         else:
-            words.append(w.upper() if re.fullmatch(r"(ii|iii|iv|vi|vii|nyc|bbq|usa)", w) else "-".join(x[:1].upper() + x[1:] for x in w.split("-")))
+            words.append(w.upper() if re.fullmatch(r"(ii|iii|iv|vi|vii|nyc|bbq|usa|ktv|bk|ny)", w) else "-".join(x[:1].upper() + x[1:] for x in w.split("-")))
     out = " ".join(words)
     out = re.sub(r"'S\b", "'s", out)
     return re.sub(r"\bMc([a-z])", lambda m: "Mc" + m.group(1).upper(), out)

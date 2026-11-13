@@ -43,7 +43,7 @@ NYC_BBOX = "40.477,-74.259,40.917,-73.700"
 MATCH_M = 80
 UA = "Mozilla/5.0 (compatible; PintuNYC/1.0; +https://pintu-nyc.vercel.app)"
 BOOKING = re.compile(r"(resy\.com|opentable\.com|exploretock\.com|tock\.com|sevenrooms\.com|yelp\.com/reservations)", re.I)
-BAD_IMAGE = re.compile(r"(logo|favicon|icon|placeholder|default|blank|spacer|sprite|preview-background|\.svg|\.gif|\.ico)(\b|_|-|\.)", re.I)
+BAD_IMAGE = re.compile(r"(logos?|favicon|icon|placeholder|default|blank|spacer|sprite|preview-background|\.svg|\.gif|\.ico)(\b|_|-|\.)", re.I)
 STOP = {"the", "and", "restaurant", "restaurants", "nyc", "ny", "new", "york", "inc", "llc", "corp", "cafe", "bar",
         "grill", "kitchen", "of", "at", "co", "company", "house", "shop"}
 # Words too common to identify a place on their own ("Pizza" vs "Joe's Pizza").

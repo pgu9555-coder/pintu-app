@@ -90,6 +90,14 @@
     });
     // Places with a photo, then with hours, come first so the deck opens on
     // the richest cards; distance order is kept within each group.
+    // The city sometimes has two inspection records for one place; show it once.
+    var seenName = {};
+    list = list.filter(function (v) {
+      var k = v.name.toLowerCase().replace(/[^a-z0-9]+/g, '');
+      if (seenName[k]) return false;
+      seenName[k] = true;
+      return true;
+    });
     list = list.concat(fun);
     var rank = function (v) { return v.image ? 0 : v.hours ? 1 : 2; };
     list = list.map(function (v, i) { return [v, i]; })
